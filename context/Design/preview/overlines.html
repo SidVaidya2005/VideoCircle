@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Type" name="Overlines" subtitle="UPPERCASE + wide tracking" viewport="700x260" -->
+<html><head><meta charset="utf-8"><title>Overlines</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;padding:16px;background:var(--bg-1);color:var(--fg-1);font-family:var(--font-mono);display:flex;flex-direction:column;gap:18px;justify-content:center;height:calc(100vh - 32px)}
+  .ov{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-1)}
+  .ov span.dot{display:inline-block;width:6px;height:6px;background:var(--red-1);margin:0 10px;vertical-align:middle}
+  .ov.dim{color:var(--fg-3)}
+  .lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-3);margin-bottom:4px}
+</style></head><body>
+<div>
+  <div class="lbl">signature overline — terminal voice-over</div>
+  <div class="ov">AVAILABLE NOW AT ANIMEJS.COM</div>
+</div>
+<div>
+  <div class="lbl">section bumper — with dot separator</div>
+  <div class="ov">V4<span class="dot"></span>ANIMATION<span class="dot"></span>ENGINE</div>
+</div>
+<div>
+  <div class="lbl">muted label</div>
+  <div class="ov dim">[ currentTime 12:42:08.320 ]</div>
+</div>
+</body></html>

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Colors" name="Neutrals" subtitle="bg-1…bg-5 + fg-1…fg-5" viewport="700x220" -->
+<html><head><meta charset="utf-8"><title>Palette — Neutrals</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;padding:16px;background:var(--bg-1);color:var(--fg-1);font-family:var(--font-mono)}
+  .row{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:10px}
+  .sw{border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:8px 10px;height:58px;display:flex;flex-direction:column;justify-content:space-between}
+  .sw .hex{font-size:10px;opacity:.7;letter-spacing:.04em}
+  .sw .name{font-size:11px;font-weight:700;letter-spacing:.04em}
+  .lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-3);margin-bottom:6px}
+</style></head><body>
+<div class="lbl">bg · elevation ladder</div>
+<div class="row">
+  <div class="sw" style="background:var(--bg-1)"><span class="name">bg-1</span><span class="hex">#252423</span></div>
+  <div class="sw" style="background:var(--bg-2)"><span class="name">bg-2</span><span class="hex">#2a2928</span></div>
+  <div class="sw" style="background:var(--bg-3)"><span class="name">bg-3</span><span class="hex">#2f2e2d</span></div>
+  <div class="sw" style="background:var(--bg-4)"><span class="name">bg-4</span><span class="hex">#353433</span></div>
+  <div class="sw" style="background:var(--bg-5)"><span class="name">bg-5</span><span class="hex">#3a3938</span></div>
+  <div class="sw" style="background:#000"><span class="name">void</span><span class="hex">#000000</span></div>
+</div>
+<div class="lbl">fg · text + divider</div>
+<div class="row">
+  <div class="sw" style="background:var(--fg-1);color:var(--bg-1)"><span class="name">fg-1</span><span class="hex">#dddcda</span></div>
+  <div class="sw" style="background:var(--fg-2);color:var(--bg-1)"><span class="name">fg-2</span><span class="hex">#c6c3c1</span></div>
+  <div class="sw" style="background:var(--fg-3);color:var(--bg-1)"><span class="name">fg-3</span><span class="hex">#96918f</span></div>
+  <div class="sw" style="background:var(--fg-4)"><span class="name">fg-4</span><span class="hex">#65655e</span></div>
+  <div class="sw" style="background:var(--fg-5)"><span class="name">fg-5</span><span class="hex">#33332e</span></div>
+  <div class="sw" style="background:var(--white-1);color:var(--bg-1)"><span class="name">white-1</span><span class="hex">#f6f4f2</span></div>
+</div>
+</body></html>

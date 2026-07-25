@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Components" name="Form inputs" subtitle="Range sliders · readout" viewport="700x220" -->
+<html><head><meta charset="utf-8"><title>Form Inputs</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;padding:16px;background:var(--bg-1);color:var(--fg-1);font-family:var(--font-mono)}
+  .lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-3);margin:6px 0 8px}
+  fieldset{border:0;padding:0;display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  label{font-size:12px;color:var(--fg-2);width:110px}
+  input[type=text],input[type=number]{font-family:inherit;background:transparent;color:var(--fg-1);border:0;border-bottom:1px dashed rgba(255,255,255,.3);padding:4px 6px;font-size:13px;width:80px;text-align:right}
+  input[type=range]{-webkit-appearance:none;appearance:none;background:transparent;height:29px;flex:1;position:relative;color:var(--red-1)}
+  input[type=range]::-webkit-slider-runnable-track{height:1px;background:currentColor}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:22px;border-radius:4px;border:1px solid currentColor;background:var(--bg-1);margin-top:-11px;box-shadow:inset 0 0 0 4.5px rgba(0,0,0,.6),inset 0 0 0 4.5px currentColor}
+  .name{background:transparent;color:var(--red-1);font-size:20px;font-weight:700;border:0;width:100%}
+</style></head><body>
+<div class="lbl">inputs · labels right-aligned · dashed rules · 16×22 thumb</div>
+<input class="name" value="easeName" readonly>
+<fieldset><label>P1</label><input type="number" value="1.0"><input type="range" min="0" max="2" step=".1" value="1"></fieldset>
+<fieldset><label>currentTime</label><input type="text" value="12:42:08"><input type="range" min="0" max="86400000" value="43328000"></fieldset>
+<fieldset><label>speed</label><input type="number" value="1.0" step=".1"><input type="range" min=".01" max="2" step=".01" value="1"></fieldset>
+</body></html>

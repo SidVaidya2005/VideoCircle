@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Spacing" name="Spacing & radii" subtitle="4px base · softened radii" viewport="700x230" -->
+<html><head><meta charset="utf-8"><title>Spacing & Radii</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;padding:18px;background:var(--bg-1);color:var(--fg-1);font-family:var(--font-mono)}
+  .lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-3);margin-bottom:8px;margin-top:4px}
+  .row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+  .bar{background:var(--red-1);height:12px;position:relative}
+  .bar span{position:absolute;bottom:-18px;left:0;font-size:10px;color:var(--fg-3)}
+  .rcard{display:flex;gap:10px;align-items:flex-end}
+  .rchip{background:var(--bg-3);border:1px solid rgba(255,255,255,.08);width:54px;height:54px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--fg-2)}
+</style></head><body>
+<div class="lbl">spacing · base 4px · rem-driven</div>
+<div class="row">
+  <div class="bar" style="width:4px"><span>1·4</span></div>
+  <div class="bar" style="width:8px"><span>2·8</span></div>
+  <div class="bar" style="width:12px"><span>3·12</span></div>
+  <div class="bar" style="width:16px"><span>4·16</span></div>
+  <div class="bar" style="width:24px"><span>5·24</span></div>
+  <div class="bar" style="width:32px"><span>6·32</span></div>
+  <div class="bar" style="width:48px"><span>7·48</span></div>
+  <div class="bar" style="width:64px"><span>8·64</span></div>
+</div>
+<div style="height:28px"></div>
+<div class="lbl">radii · always softened, never razor</div>
+<div class="rcard">
+  <div class="rchip" style="border-radius:.25rem">.25</div>
+  <div class="rchip" style="border-radius:.4rem">.4</div>
+  <div class="rchip" style="border-radius:.6rem">.6</div>
+  <div class="rchip" style="border-radius:1rem">1.0</div>
+  <div class="rchip" style="border-radius:1.25rem">1.25</div>
+  <div class="rchip" style="border-radius:999px">pill</div>
+</div>
+</body></html>

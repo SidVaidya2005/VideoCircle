@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Colors" name="Signature accents" subtitle="Red · Cyan · Green" viewport="700x180" -->
+<html><head><meta charset="utf-8"><title>Brand Accents</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;padding:16px;background:var(--bg-1);color:var(--fg-1);font-family:var(--font-mono)}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .card{border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;display:flex;align-items:center;gap:12px}
+  .dot{width:44px;height:44px;border-radius:4px}
+  .meta{display:flex;flex-direction:column;gap:2px}
+  .name{font-weight:700;font-size:13px}
+  .hex{font-size:11px;color:var(--fg-3);letter-spacing:.06em}
+  .use{font-size:10px;color:var(--fg-3);letter-spacing:.08em;text-transform:uppercase}
+  .lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-3);margin-bottom:8px}
+</style></head><body>
+<div class="lbl">signature accents — one signal per screen</div>
+<div class="grid">
+  <div class="card"><div class="dot" style="background:#ff4b4b;box-shadow:var(--glow-red)"></div>
+    <div class="meta"><span class="name">signal red</span><span class="hex">#ff4b4b</span><span class="use">axes · active · dot on i</span></div></div>
+  <div class="card"><div class="dot" style="background:#4BFFFD;box-shadow:var(--glow-cyan)"></div>
+    <div class="meta"><span class="name">burst cyan</span><span class="hex">#4BFFFD</span><span class="use">logo rays · links</span></div></div>
+  <div class="card"><div class="dot" style="background:#00FF5D"></div>
+    <div class="meta"><span class="name">final green</span><span class="hex">#00FF5D</span><span class="use">success · completion state</span></div></div>
+</div>
+</body></html>

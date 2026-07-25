@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Components" name="Code block" subtitle="Syntax on near-black" viewport="700x280" -->
+<html><head><meta charset="utf-8"><title>Code block</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;padding:16px;background:var(--bg-1);color:var(--fg-1);font-family:var(--font-mono)}
+  .lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-3);margin-bottom:8px}
+  pre{background:var(--bg-2);border:1px solid rgba(255,255,255,.08);border-radius:1rem;padding:16px;font-size:13px;line-height:1.5;overflow:auto;margin:0}
+  .k{color:var(--magenta-1)}
+  .s{color:var(--lime-1)}
+  .n{color:var(--yellow-1)}
+  .f{color:var(--sky-1)}
+  .c{color:var(--fg-3)}
+  .p{color:var(--red-1)}
+</style></head><body>
+<div class="lbl">code block · mono · syntax uses brand accents</div>
+<pre><span class="k">import</span> { <span class="f">animate</span>, <span class="f">stagger</span> } <span class="k">from</span> <span class="s">'animejs'</span>;
+
+<span class="f">animate</span>(<span class="s">'.square'</span>, {
+  x: <span class="n">320</span>,
+  rotate: { from: <span class="n">-180</span> },
+  duration: <span class="n">1250</span>,
+  delay: <span class="f">stagger</span>(<span class="n">65</span>, { from: <span class="s">'center'</span> }),
+  ease: <span class="s">'inOutQuint'</span>,
+  loop: <span class="k">true</span>,
+  alternate: <span class="k">true</span>
+});</pre>
+</body></html>

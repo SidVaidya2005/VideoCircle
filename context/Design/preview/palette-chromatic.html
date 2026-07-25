@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Colors" name="Chromatic palette" subtitle="16 hues × 6 stops" viewport="700x560" -->
+<html><head><meta charset="utf-8"><title>Chromatic Palette</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;padding:14px;background:var(--bg-1);color:var(--fg-1);font-family:var(--font-mono)}
+  .row{display:grid;grid-template-columns:80px repeat(6,1fr);gap:4px;align-items:center;margin-bottom:4px}
+  .name{font-size:11px;color:var(--fg-2)}
+  .cell{height:28px;border-radius:4px;font-size:9px;display:flex;align-items:center;justify-content:center;color:rgba(0,0,0,.8);font-weight:700}
+  .cell.dark{color:rgba(255,255,255,.8)}
+  .lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-3);margin-bottom:6px}
+</style></head><body>
+<div class="lbl">16 hues × 6 stops — the chromatic terminal palette</div>
+<script>
+const palette = [
+  ['red',       '#ff4b4b','#bf3e3e','#9e3838','#532a29','#412726','#322523'],
+  ['corail',    '#ff8333','#bf672d','#9e582b','#533724','#412f23','#322922'],
+  ['orange',    '#ffa828','#bf8026','#9e6d25','#523e23','#413422','#322b21'],
+  ['yellow',    '#ffcc2a','#bf9a27','#9e8026','#524723','#413922','#322d21'],
+  ['citrus',    '#f9f640','#bab836','#9b9932','#515027','#403f24','#323022'],
+  ['lime',      '#b7ff54','#8bbe44','#759d3d','#42522b','#384027','#2d3123'],
+  ['green',     '#6aff65','#54be50','#4a9e45','#31522e','#2c4029','#273124'],
+  ['emerald',   '#57f695','#47b873','#409962','#2d5039','#293f30','#263128'],
+  ['turquoise', '#66ffbc','#52be8e','#479e77','#305242','#2b4035','#26312b'],
+  ['cyan',      '#26f2d5','#25b5a0','#259686','#244e48','#233f39','#23302d'],
+  ['sega',      '#05dbe9','#0fa4ae','#138990','#1e4a4c','#203b3c','#212f2f'],
+  ['sky',       '#33b3f1','#2e88b4','#2c7395','#26424e','#25363e','#242c2f'],
+  ['indigo',    '#717aff','#595fbe','#4d519e','#323351','#2c2c3f','#282630'],
+  ['lavender',  '#a369ff','#7d53be','#6a489e','#3e3051','#342a3f','#2b2530'],
+  ['purple',    '#c06ddf','#9356a8','#7b4a8c','#45314b','#392b3c','#2f262d'],
+  ['magenta',   '#e962bf','#af4e90','#93447a','#4e2e43','#3f2936','#31252b'],
+];
+document.body.innerHTML += palette.map(r=>{
+  const cells = r.slice(1).map((c,i)=>`<div class="cell ${i>=3?'dark':''}" style="background:${c}">${i+1}</div>`).join('');
+  return `<div class="row"><span class="name">${r[0]}</span>${cells}</div>`;
+}).join('');
+</script>
+</body></html>

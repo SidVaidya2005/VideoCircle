@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Components" name="Ease chips" subtitle="Selectable curve tiles" viewport="700x200" -->
+<html><head><meta charset="utf-8"><title>Ease Chips</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;padding:16px;background:var(--bg-1);color:var(--fg-1);font-family:var(--font-mono)}
+  .lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-3);margin-bottom:10px}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+  .chip{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 8px;border-radius:.6rem;background:rgba(255,255,255,.05);font-size:11px;cursor:pointer;transition:background .25s ease-in-out}
+  .chip:hover{background:rgba(255,255,255,.1);transition:background .05s ease-out}
+  .chip.active{background:var(--red-1);color:var(--bg-1)}
+  .chip svg{width:80%;height:30px;overflow:visible}
+  .chip svg polyline{stroke:var(--red-1);stroke-width:1.5;fill:none}
+  .chip.active svg polyline{stroke:var(--bg-1)}
+  .cfg{position:absolute;top:4px;right:6px;font-size:9px;opacity:.6}
+</style></head><body>
+<div class="lbl">ease-button chip · rest · hover · active (selected)</div>
+<div class="grid">
+  <div class="chip"><span class="cfg">•</span><svg viewBox="0 0 100 40"><polyline points="0,40 100,0"/></svg>linear</div>
+  <div class="chip"><span class="cfg">•</span><svg viewBox="0 0 100 40"><polyline points="0,40 20,38 50,20 80,5 100,0"/></svg>outQuad</div>
+  <div class="chip active"><span class="cfg">•</span><svg viewBox="0 0 100 40"><polyline points="0,40 25,38 50,20 75,2 100,0"/></svg>inOutQuint</div>
+  <div class="chip"><span class="cfg">•</span><svg viewBox="0 0 100 40"><polyline points="0,40 70,36 85,10 100,0"/></svg>outExpo</div>
+</div>
+</body></html>

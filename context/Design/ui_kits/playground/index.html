@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<!-- @dsCard group="UI Kit — Playground" name="Playground" subtitle="Easings visualizer + clock + scope" viewport="1280x720" -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anime.js — Playground Kit</title>
+<link rel="stylesheet" href="../../colors_and_type.css">
+<style>
+  html,body{margin:0;height:100%;background:var(--bg-1);color:var(--fg-1);font-family:var(--font-mono)}
+  *{box-sizing:border-box}
+  input[type="range"]::-webkit-slider-thumb{cursor:pointer}
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="EasingsVisualizer.jsx"></script>
+<script type="text/babel" src="ClockControls.jsx"></script>
+<script type="text/babel" src="ScopeCanvas.jsx"></script>
+<script type="text/babel">
+function App() {
+  const [mode, setMode] = React.useState('eases');
+  const tabs = [
+    { k:'eases', label:'EASINGS VISUALIZER' },
+    { k:'clock', label:'CLOCK CONTROLS' },
+    { k:'scope', label:'SCOPE CANVAS' },
+  ];
+  return (
+    <div data-screen-label="01 Playground" style={{display:'flex',flexDirection:'column',height:'100vh'}}>
+      <div style={{
+        display:'flex', alignItems:'center', justifyContent:'space-between',
+        padding:'12px 20px', borderBottom:'1px solid rgba(255,255,255,.08)',
+        background:'var(--bg-1)',
+      }}>
+        <div style={{ display:'flex', alignItems:'baseline', gap:2, fontWeight:700 }}>
+          <span>anime</span>
+          <span style={{width:5,height:5,background:'var(--red-1)',display:'inline-block',margin:'0 1px'}}/>
+          <span>js</span>
+          <span style={{marginLeft:12, fontSize:11, color:'var(--fg-3)', letterSpacing:'.08em', fontWeight:400}}>EXAMPLES</span>
+        </div>
+        <div style={{ display:'flex', gap:2 }}>
+          {tabs.map(t => (
+            <button key={t.k} onClick={()=>setMode(t.k)} style={{
+              padding:'8px 14px', fontFamily:'inherit', fontSize:11, letterSpacing:'.08em',
+              border:0, borderRadius:4, cursor:'pointer',
+              background: mode===t.k ? 'var(--red-1)' : 'rgba(255,255,255,.05)',
+              color: mode===t.k ? 'var(--bg-1)' : 'var(--fg-1)',
+            }}>{t.label}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{ flex:1, minHeight:0 }}>
+        {mode==='eases' && <EasingsVisualizer/>}
+        {mode==='clock' && <ClockControls/>}
+        {mode==='scope' && <ScopeCanvas/>}
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

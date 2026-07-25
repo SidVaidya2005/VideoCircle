@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Spacing" name="Scope grid backdrop" subtitle="Minor + major grid, red axis" viewport="700x260" -->
+<html><head><meta charset="utf-8"><title>Grid Backdrop</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;padding:0;background:var(--bg-1);height:100vh;font-family:var(--font-mono);color:var(--fg-1);overflow:hidden}
+  .scope{--one-cell:60px;position:relative;width:100%;height:100%;
+    background:
+      linear-gradient(-90deg, rgba(255,255,255,.05) 1px, transparent 1px),
+      linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px),
+      linear-gradient(-90deg, rgba(255,255,255,.08) 1px, transparent 1px),
+      linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px);
+    background-size:
+      calc(var(--one-cell)/10) calc(var(--one-cell)/10),
+      calc(var(--one-cell)/10) calc(var(--one-cell)/10),
+      var(--one-cell) var(--one-cell),
+      var(--one-cell) var(--one-cell);
+  }
+  .axisX{position:absolute;bottom:40%;left:0;right:0;height:1px;background:var(--red-1)}
+  .axisX::after{content:"";position:absolute;right:0;top:-6px;width:13px;height:13px;background:var(--red-1)}
+  .lbl{position:absolute;top:10px;left:12px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-3)}
+  .curve{position:absolute;inset:0}
+</style></head><body>
+<div class="scope">
+  <div class="lbl">scope grid · 10 unit minor + major · red axis</div>
+  <div class="axisX"></div>
+  <svg class="curve" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline fill="none" stroke="#ff4b4b" stroke-width=".5" vector-effect="non-scaling-stroke" points="0,100 10,98 20,92 30,80 40,64 50,50 60,36 70,20 80,8 90,2 100,0"/></svg>
+</div>
+</body></html>

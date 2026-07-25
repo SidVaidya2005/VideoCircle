@@ -1,0 +1,259 @@
+/* ============================================================
+   Anime.js Design System — Colors & Type Foundations
+   Source: examples/assets/css/styles.css from animejs repo
+   ============================================================ */
+
+/* -------- Fonts -------- */
+
+@font-face {
+  font-family: 'IoskeleyMono';
+  src: url('fonts/IoskeleyMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'IoskeleyMono';
+  src: url('fonts/IoskeleyMono-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ============================================================
+   CSS VARIABLES
+   ============================================================ */
+
+:root {
+  /* --- Neutrals: near-black backgrounds + warm off-white fg ----- */
+  --black-1: #252423;  /* the canonical terminal bg */
+  --black-2: #262422;
+  --black-3: #262422;
+  --black-4: #262422;
+  --black-5: #272421;
+  --black-6: #272421;
+
+  --white-1: #f6f4f2;  /* bright warm off-white */
+  --white-2: #b8b6b3;
+  --white-3: #9a9593;
+  --white-4: #524f49;
+  --white-5: #413d39;
+  --white-6: #312e2b;
+
+  /* --- Brand accents (-1 is the vivid stop; -2..-6 darken) --- */
+  --red-1: #ff4b4b;       --red-2: #bf3e3e;    --red-3: #9e3838;    --red-4: #532a29;    --red-5: #412726;    --red-6: #322523;
+  --corail-1: #ff8333;    --corail-2: #bf672d; --corail-3: #9e582b; --corail-4: #533724; --corail-5: #412f23; --corail-6: #322922;
+  --orange-1: #ffa828;    --orange-2: #bf8026; --orange-3: #9e6d25; --orange-4: #523e23; --orange-5: #413422; --orange-6: #322b21;
+  --yellow-1: #ffcc2a;    --yellow-2: #bf9a27; --yellow-3: #9e8026; --yellow-4: #524723; --yellow-5: #413922; --yellow-6: #322d21;
+  --citrus-1: #f9f640;    --citrus-2: #bab836; --citrus-3: #9b9932; --citrus-4: #515027; --citrus-5: #403f24; --citrus-6: #323022;
+  --lime-1: #b7ff54;      --lime-2: #8bbe44;   --lime-3: #759d3d;   --lime-4: #42522b;   --lime-5: #384027;   --lime-6: #2d3123;
+  --green-1: #6aff65;     --green-2: #54be50;  --green-3: #4a9e45;  --green-4: #31522e;  --green-5: #2c4029;  --green-6: #273124;
+  --emerald-1: #57f695;   --emerald-2: #47b873;--emerald-3: #409962;--emerald-4: #2d5039;--emerald-5: #293f30;--emerald-6: #263128;
+  --turquoise-1: #66ffbc; --turquoise-2: #52be8e;--turquoise-3: #479e77;--turquoise-4: #305242;--turquoise-5: #2b4035;--turquoise-6: #26312b;
+  --cyan-1: #26f2d5;      --cyan-2: #25b5a0;   --cyan-3: #259686;   --cyan-4: #244e48;   --cyan-5: #233f39;   --cyan-6: #23302d;
+  --sega-1: #05dbe9;      --sega-2: #0fa4ae;   --sega-3: #138990;   --sega-4: #1e4a4c;   --sega-5: #203b3c;   --sega-6: #212f2f;
+  --sky-1: #33b3f1;       --sky-2: #2e88b4;    --sky-3: #2c7395;    --sky-4: #26424e;    --sky-5: #25363e;    --sky-6: #242c2f;
+  --indigo-1: #717aff;    --indigo-2: #595fbe;  --indigo-3: #4d519e; --indigo-4: #323351;  --indigo-5: #2c2c3f; --indigo-6: #282630;
+  --lavender-1: #a369ff;  --lavender-2: #7d53be;--lavender-3: #6a489e;--lavender-4: #3e3051;--lavender-5: #342a3f;--lavender-6: #2b2530;
+  --purple-1: #c06ddf;    --purple-2: #9356a8; --purple-3: #7b4a8c; --purple-4: #45314b;  --purple-5: #392b3c; --purple-6: #2f262d;
+  --magenta-1: #e962bf;   --magenta-2: #af4e90;--magenta-3: #93447a;--magenta-4: #4e2e43; --magenta-5: #3f2936; --magenta-6: #31252b;
+  --pink-1: #ff86a7;      --pink-2: #bf687f;   --pink-3: #9f586b;   --pink-4: #53363c;   --pink-5: #412e32;   --pink-6: #322729;
+
+  /* --- Semantic backgrounds (ascending elevation) --- */
+  --bg-1: #252423;   /* page */
+  --bg-2: #2a2928;   /* card */
+  --bg-3: #2f2e2d;   /* raised */
+  --bg-4: #353433;   /* overlay */
+  --bg-5: #3a3938;   /* higher overlay */
+
+  /* --- Semantic foregrounds (descending emphasis) --- */
+  --fg-1: #dddcda;   /* primary text */
+  --fg-2: #c6c3c1;   /* secondary text */
+  --fg-3: #96918f;   /* tertiary / labels */
+  --fg-4: #65655e;   /* muted / disabled */
+  --fg-5: #33332e;   /* divider / border */
+
+  /* --- Signature accents (the most-used brand expressions) --- */
+  --accent-red: var(--red-1);      /* the signature dot + highlight */
+  --accent-cyan: #4BFFFD;          /* used in the logo's burst lines */
+  --accent-green: #00FF5D;         /* the 'final' logo green */
+
+  /* --- Shape + spacing --- */
+  --radius-xs: 0.25rem;             /* inputs, small chips */
+  --radius-sm: 0.4rem;              /* buttons */
+  --radius-md: 0.6rem;              /* ease buttons */
+  --radius-lg: 1rem;                /* cards / panels */
+  --radius-xl: 1.25rem;             /* large cards */
+  --radius-pill: 999px;
+
+  --input-border-radius: 0.25rem;
+  --br: 1rem;
+  --padding: 1rem;
+  --border-width: 1px;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  /* --- Type families (mono-only brand) --- */
+  --font-mono: 'IoskeleyMono', 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace;
+  --font-system: 'IoskeleyMono', ui-monospace, monospace, sans-serif;
+
+  /* --- Type scale: terminal-feel; tight line-height --- */
+  --text-xs:   0.75rem;   /* 12 — parameter legends, fine print */
+  --text-sm:   0.875rem;  /* 14 — secondary labels */
+  --text-base: 1rem;      /* 16 — body */
+  --text-md:   1.125rem;  /* 18 — emphasis */
+  --text-lg:   1.25rem;   /* 20 — small heads */
+  --text-xl:   1.5rem;    /* 24 — h3 */
+  --text-2xl:  2rem;      /* 32 — h2, ease names */
+  --text-3xl:  2.5rem;    /* 40 — h1 */
+  --text-4xl:  3.5rem;    /* 56 — hero */
+  --text-5xl:  5rem;      /* 80 — monumental */
+
+  --leading-tight: 1.1;
+  --leading-snug: 1.25;
+  --leading-normal: 1.5;
+
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.06em;   /* terminal caps like AVAILABLE NOW AT ANIMEJS.COM */
+  --tracking-wider: 0.12em;
+
+  /* --- Borders + strokes used throughout --- */
+  --border-subtle: 1px solid rgba(255, 255, 255, 0.08);
+  --border-soft:   1px solid rgba(255, 255, 255, 0.15);
+  --border-dashed: 1px dashed rgba(255, 255, 255, 0.5);
+  --border-dotted: 1px dotted rgba(255, 255, 255, 0.5);
+
+  /* --- Grid lines (the signature "scope on grid" backdrop) --- */
+  --grid-line-major: rgba(255, 255, 255, 0.05);
+  --grid-line-minor: rgba(255, 255, 255, 0.04);
+
+  /* --- Shadows (used sparingly; lib mostly relies on flat + glow) --- */
+  --shadow-soft: 0 10px 10px 0 var(--black-1);
+  --shadow-ring: 0 0 0 1px rgba(255, 255, 255, 0.1);
+  --glow-red: 0 0 24px rgba(255, 75, 75, 0.5);
+  --glow-cyan: 0 0 24px rgba(75, 255, 253, 0.4);
+
+  /* --- Motion easings (the brand's own signature curves) --- */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-quint: cubic-bezier(0.83, 0, 0.17, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 600ms;
+}
+
+/* ============================================================
+   SEMANTIC TYPE ROLES
+   ============================================================ */
+
+html, body {
+  background-color: var(--bg-1);
+  color: var(--fg-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.h1, h1 {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--text-3xl);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--fg-1);
+}
+
+.h2, h2 {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--text-2xl);
+  line-height: var(--leading-tight);
+  color: var(--fg-1);
+}
+
+.h3, h3 {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: var(--text-xl);
+  line-height: var(--leading-snug);
+  color: var(--fg-1);
+}
+
+.p, p {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--fg-2);
+}
+
+.small, small {
+  font-size: var(--text-sm);
+  color: var(--fg-3);
+}
+
+.caption {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+
+/* terminal marquee — the signature brand voice-over style */
+.overline {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--fg-1);
+}
+
+.code, code {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  background: var(--bg-3);
+  color: var(--fg-1);
+  padding: 0.1em 0.4em;
+  border-radius: var(--radius-xs);
+  border: var(--border-subtle);
+}
+
+pre.code-block {
+  font-family: var(--font-mono);
+  background: var(--bg-2);
+  color: var(--fg-1);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: var(--border-subtle);
+  overflow: auto;
+  line-height: var(--leading-snug);
+}
+
+/* accent color tokens used frequently in examples */
+.color-red { color: var(--red-1); }
+.color-cyan { color: var(--accent-cyan); }
+.color-green { color: var(--green-1); }
+.color-yellow { color: var(--yellow-1); }
+.color-white { color: var(--fg-1); }
+
+/* ------------ Scoped accent palette (preserved from source) ------------ */
+[data-color="fg"] { --color-1: var(--fg-1); --color-2: var(--fg-2); --color-3: var(--fg-3); --color-4: var(--fg-4); --color-5: var(--fg-5);}
+[data-color="bg"] { --color-1: var(--bg-1); --color-2: var(--bg-2); --color-3: var(--bg-3); --color-4: var(--bg-4); --color-5: var(--bg-5);}
+[data-color="red"]       { --color-1: var(--red-1); --color-2: var(--red-2); --color-3: var(--red-3); --color-4: var(--red-4); --color-5: var(--red-5); }
+[data-color="cyan"]      { --color-1: var(--cyan-1); --color-2: var(--cyan-2); --color-3: var(--cyan-3); --color-4: var(--cyan-4); --color-5: var(--cyan-5); }
+[data-color="green"]     { --color-1: var(--green-1); --color-2: var(--green-2); --color-3: var(--green-3); --color-4: var(--green-4); --color-5: var(--green-5); }
+[data-color="yellow"]    { --color-1: var(--yellow-1); --color-2: var(--yellow-2); --color-3: var(--yellow-3); --color-4: var(--yellow-4); --color-5: var(--yellow-5); }
+[data-color="lavender"]  { --color-1: var(--lavender-1); --color-2: var(--lavender-2); --color-3: var(--lavender-3); --color-4: var(--lavender-4); --color-5: var(--lavender-5); }
