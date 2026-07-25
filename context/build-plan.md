@@ -1,0 +1,484 @@
+# Build Plan
+
+> **Role:** The ordered plan — phases and numbered features to build, in sequence.
+> **Read before starting a feature**; build one feature fully before the next.
+> **Relates to:** features come from `project-overview.md`; status tracked in `progress-tracker.md`.
+
+## Core Principle
+
+Build the visible surface first against mock data, then wire the real logic behind
+it, and verify every step in a browser before moving on. A feature is not done when
+the code compiles — it is done when you have opened it, exercised it, and watched it
+work, including at a 360px viewport.
+
+Two consequences specific to this project. First, media and encryption are hostile
+to "wire it up and see": permission denials, absent devices, dropped connections, and
+missing keys are ordinary states, so each one gets deliberate UI in the same feature
+that introduces the happy path, never in a cleanup pass afterwards. Second, anything
+involving two participants must be verified with two participants — two browser
+profiles, or a phone and a laptop. A call that works when you are alone in it has not
+been tested.
+
+---
+
+## Phase 0 — Foundation
+
+### 01 Project scaffold and tooling
+
+Stand up the Next.js application with every quality gate wired before any feature
+code exists.
+
+**Logic:**
+
+- `create-next-app` with TypeScript, App Router, Tailwind 4, `src/` directory, and the `@/*` alias
+- `tsconfig.json` with `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`
+- ESLint and Prettier with `prettier-plugin-tailwindcss`
+- Vitest configured with a `tests/unit` root; Playwright configured with fake media device flags
+- `src/lib/env.ts` with the Zod env schema, and a matching `.env.example`
+- `src/lib/api.ts` (`apiOk`, `apiError`), `src/lib/constants.ts`, `src/lib/utils.ts` (`cn`)
+- A placeholder Home route that renders, builds, and passes lint
+
+**Verify:** `npm run dev`, `build`, `lint`, `test`, and `test:e2e` all succeed on a clean checkout.
+
+### 02 Design tokens and UI primitives
+
+Port the Anime.js brand kit into the app so no later feature has an excuse to
+hardcode a value. Read `context/Design/README.md` in full before starting.
+
+**UI:**
+
+- App shell on warm near-black: header with the VideoCircle wordmark, sign-in slot, content region
+- The signature grid backdrop as a reusable `.grid-backdrop` surface, bleeding past its container
+- A tokens preview route (development only) showing every surface step, text step, radius, easing, and interaction state side by side with `context/Design/preview/*.html`
+
+**Logic:**
+
+- `globals.css`: `:root` mirroring `context/Design/colors_and_type.css`, plus the `@theme inline` mapping to utility names and the shadcn token aliases
+- JetBrains Mono wired through `next/font/google` with the `--font-jetbrains-mono` variable
+- `prefers-reduced-motion` reset block
+- Copy brand assets from `context/Design/assets/images/` into `public/brand/`
+- Install the shadcn primitives needed downstream — button, dialog, sheet, dropdown-menu, tooltip, input, avatar, sonner — then restyle them to the kit: whisper borders, kit radii, drop shadows stripped
+- Adopt the kit's interaction states verbatim: white fill at rest for primary, `rgba(255,255,255,.05)` → `.1` for chips, inverted fill for active, asymmetric 50ms-in / 250ms-out hover transitions
+
+**Verify:** The preview route matches the kit's specimens; grepping `src/` for a hex
+literal outside `globals.css` returns nothing.
+
+### 03 Supabase project and schema
+
+**Logic:**
+
+- Create the Supabase project; enable the Google OAuth provider
+- Migration: `profiles`, `meetings`, `meeting_participants` exactly as specified in `architecture.md` → Data Model, including `meetings.expires_at` and `meeting_participants.is_guest` as a generated column
+- Migration: indexes, including the partial unique index on `(meeting_id, identity) where left_at is null`
+- Migration: the `is_meeting_participant(uuid)` `security definer` function, then RLS enabled on all three tables with the documented `select`/`update` policies. **Verify the co-participant policy does not recurse before moving on** — a self-referential policy on `meeting_participants` errors outright
+- Migration: the nightly `pg_cron` sweep closing meetings past `expires_at` and any participation rows still open
+- Trigger inserting a `profiles` row on `auth.users` insert
+- `src/lib/supabase/{client,server,admin,middleware}.ts` and `src/middleware.ts`
+- Generate `src/types/database.ts`
+
+**Verify:** No outstanding RLS or security findings — via `get_advisors` if the
+Supabase MCP server is available, otherwise by reviewing each policy directly. Then
+confirm empirically: a query as user A returns nothing belonging to user B, and
+selecting from `meeting_participants` as an authenticated user does not error with
+infinite recursion.
+
+---
+
+## Phase 1 — Identity and entry
+
+### 04 Google sign-in and session
+
+**UI:**
+
+- Sign-in button in the header, opening Google's consent flow
+- Signed-in state: avatar, display name, dropdown with "Call history" and "Sign out"
+- Auth failure returns to Home with a readable message, not a blank page
+
+**Logic:**
+
+- `signInWithOAuth({ provider: 'google' })` with a `redirectTo` carrying the return path
+- `/auth/callback` route handler exchanging the PKCE code, with same-origin validation on `next`
+- `/auth/signout` route handler
+- Middleware session refresh confirmed working across a full page reload
+
+**Verify:** Sign in, reload, close and reopen the tab — the session survives. Sign out clears it.
+
+### 05 Home page
+
+**UI:**
+
+- Hero explaining what VideoCircle is, with "New meeting" as the primary action
+- "Join with a code" input accepting either a bare code or a full pasted link
+- Inline validation for a malformed code
+- Signed-out and signed-in variants of the header
+- Responsive from 360px up
+
+**Logic:**
+
+- Parse a pasted link down to its code, preserving the `#k=` fragment if present
+- Client-side validation via `isValidRoomCode`
+- Navigate to `/room/[code]`, carrying the fragment through unchanged
+
+### 06 Create meeting and share link
+
+**UI:**
+
+- Post-create confirmation showing the full share link with a copy button and a "link includes the chat key" note
+- Copy confirmation toast
+
+**Logic:**
+
+- `src/lib/room-code.ts` — `generateRoomCode`, `isValidRoomCode`, `ROOM_CODE_PATTERN`
+- `src/lib/crypto/base64url.ts` and `chat-key.ts` — generate, export, import, read-from-hash
+- `POST /api/meetings` inserting the meeting row via `supabaseAdmin`, recording `created_by` when signed in and setting `expires_at`
+- On a unique-violation (`23505`) on `code`, regenerate server-side and retry once, then return `409`
+- Navigate to `/room/[code]#k=<key>`
+
+**Verify:** Unit tests for room-code shape, alphabet, and collision-freeness over a large sample; the created code appears in Postgres; the fragment appears in no server log or request.
+
+---
+
+## Phase 2 — Lobby
+
+### 07 Media permissions and self-preview
+
+**UI:**
+
+- Live self-preview video, mirrored, with a graceful letterbox at any aspect ratio
+- Pre-permission state explaining why camera and microphone are being requested
+- Permission-denied state with per-browser instructions to re-enable, and a path to join anyway
+- No-camera-found and no-microphone-found states
+
+**Logic:**
+
+- `createLocalTracks` for the preview, attached to a video element
+- Track cleanup on unmount and before join
+- Discriminated-union state: `idle | requesting | ready | denied | no-device`
+
+**Verify:** Deny permission in the browser and confirm the denied state renders and joining audio-off/video-off still works.
+
+### 08 Lobby controls
+
+**UI:**
+
+- Mic and camera toggles with unmistakable on/off states and `aria-pressed`
+- Camera, microphone, and speaker dropdowns listing real device labels
+- Display-name field — prefilled and read-only-ish for signed-in users, required for guests
+- "Join" primary action; copy-link secondary action
+- Full-height layout using `dvh`, control row reachable one-handed on a phone
+
+**Logic:**
+
+- `enumerateDevices` after permission is granted so labels are populated
+- Switching a device replaces the preview track without tearing down the page
+- Persist device and mic/camera preferences to `localStorage`, keyed by device id
+- Name validation against `MAX_DISPLAY_NAME_LENGTH`
+
+### 09 Join handoff
+
+**UI:**
+
+- Distinct lobby states for "meeting does not exist", "meeting has ended", and "link expired" — each explaining what happened and offering to start a new meeting
+- Token-failure state that returns the user to the lobby with a retry, never a blank screen
+
+**Logic:**
+
+- `POST /api/token` — Zod validation, then **meeting-state check before minting**: 404 unknown code, 410 ended, 410 expired
+- `getUser()`, identity resolution (`user:<uuid>` / `guest:<uuid>`), `mintAccessToken`
+- `src/lib/livekit/token.ts` with the four-hour TTL and single-room grant
+- Lobby transitions to the connected state, passing the chosen mic/camera state into `<LiveKitRoom>`
+
+**Verify:** Decode the returned JWT and confirm the grant names exactly one room and
+carries no admin claims. Then POST a well-formed code that was never created and
+confirm a 404 with no token in the response — a valid-looking code must not be
+enough to get into a room.
+
+---
+
+## Phase 3 — The call
+
+### 10 Room connection and video grid
+
+**UI:**
+
+- Participant tiles with video, display name, and a muted indicator
+- Camera-off tiles showing an avatar or initials rather than disappearing
+- Grid reflowing by headcount from 1 to `MAX_VISIBLE_TILES`
+- Connecting, reconnecting, and disconnected states
+- Single-column stack on phones, grid from `sm:` up
+
+**Logic:**
+
+- `<LiveKitRoom>` shell with `<RoomAudioRenderer />`
+- `useTracks` with `withPlaceholder: true` on the camera source
+- `RoomEvent` handling for `Reconnecting`, `Reconnected`, and `Disconnected`
+
+**Verify:** Two browser profiles in the same room see and hear each other; killing wifi on one shows the reconnecting state and recovers.
+
+### 11 In-call control bar
+
+**UI:**
+
+- Mic, camera, screen share, chat, participants, reactions, and leave controls
+- Active/inactive styling, tooltips on desktop, 44px minimum targets on touch
+- Bar pinned above the safe-area inset on mobile
+- Leave confirmation
+
+**Logic:**
+
+- `useLocalParticipant` toggles for microphone and camera
+- Keyboard shortcuts: `d` mic, `e` camera, suppressed while the chat composer has focus
+- Controls remain interactive during a reconnect
+
+### 12 Screen sharing
+
+**UI:**
+
+- Screen-share control, absent entirely on browsers without `getDisplayMedia`
+- "You are sharing your screen" banner with a stop action
+- Screen-share tiles labelled with the sharer's name
+
+**Logic:**
+
+- `setScreenShareEnabled` on the local participant
+- Capability detection driving whether the control renders
+- Handle the user cancelling the browser's own share picker without leaving stale UI state
+- Detect share-ended-from-browser-UI and sync our state
+
+**Verify:** Share from desktop and confirm the tile appears for a mobile participant, and that the mobile participant has no share button at all.
+
+### 13 Speaker and spotlight view
+
+**UI:**
+
+- Layout switches to a large focused tile with a filmstrip when a screen share starts
+- Manual pin/unpin on any participant
+- Filmstrip scrolls horizontally on mobile, vertically on desktop
+- Return to grid when the share ends and nothing is pinned
+
+**Logic:**
+
+- Focus resolution order: manual pin, then active screen share, then active speaker
+- Active-speaker detection from LiveKit
+
+### 14 Participant list panel
+
+**UI:**
+
+- Panel listing every participant with name, mic state, camera state, and a "you" marker
+- Live headcount in the control bar
+- `Sheet` on mobile, inline side panel on desktop
+
+**Logic:**
+
+- Derive from LiveKit participant state; no separate data source
+- Sort: local participant first, then join order
+
+### 15 Reactions and raise hand
+
+Brand-native reactions, not emoji — the kit forbids emoji outright. Reactions are
+wide-tracked CAPS chips plus the signature red-dot burst, built on the exact button
+row from `context/Design/ui_kits/playground/ClockControls.jsx`.
+
+**UI:**
+
+- A fixed reaction set as CAPS chips: `NICE`, `+1`, `LOL`, `WOW`, `BRB`
+- Chip row styled as the kit's ease-buttons — `rgba(255,255,255,.05)` at rest, `.1` on hover, inverted fill while sending
+- A fired reaction rises over the sender's tile as its CAPS label with a red-dot burst behind it, easing on `ease-out-expo`, fading after `REACTION_TTL_MS`
+- Raised hand shows a persistent badge on the tile and in the participant list, using the red dot as the mark
+
+**Logic:**
+
+- Reaction payloads carry a label from the fixed set; unknown labels are dropped rather than rendered, so a malformed peer cannot inject arbitrary text over a tile
+- Publish over `DATA_TOPIC.REACTION` and `DATA_TOPIC.HAND` with `{ reliable: false }`
+- Raise-hand is toggle state and clears on leave
+- Rate-limit reactions per participant so the channel cannot be flooded
+- CSS-only animation — this renders inside the call, where `animejs` is not permitted
+
+### 16 Copy invite link in call
+
+**UI:**
+
+- Invite control in the control bar opening a dialog with the full link
+- Copy button with confirmation
+- Explicit note that the link carries the chat key
+
+**Logic:**
+
+- Reconstruct the link from `NEXT_PUBLIC_SITE_URL`, the code, and the current fragment
+- Clipboard fallback (select-and-copy) for browsers that block `navigator.clipboard`
+
+---
+
+## Phase 4 — Encrypted chat
+
+### 17 Chat key handling
+
+**UI:**
+
+- Key-missing state on the chat panel: composer disabled, plain explanation that this link cannot read chat
+
+**Logic:**
+
+- `useChatKey` hook reading the fragment, importing the key non-extractable, exposing `loading | ready | missing`
+- Reject a malformed key the same way as a missing one
+
+**Verify:** Open `/room/[code]` with no fragment and confirm the explanatory state, not a crash or an empty transcript.
+
+### 18 Message encryption
+
+**Logic:**
+
+- `src/lib/crypto/chat-message.ts` — `encryptChatMessage` and `decryptChatMessage` with a fresh 12-byte IV and sender identity as additional authenticated data
+- `useEncryptedChat` hook wrapping `useDataChannel(DATA_TOPIC.CHAT)` with `{ reliable: true }`
+- Decryption failure yields an "unreadable message" entry rather than a throw
+- Enforce `MAX_CHAT_MESSAGE_LENGTH` before encrypting
+
+**Verify:** Vitest covers round trip, wrong key, tampered ciphertext, and mismatched sender identity. With devtools recording, confirm no plaintext appears on the wire and the key appears in no request.
+
+### 19 Chat panel
+
+**UI:**
+
+- Message list with sender name, relative timestamp, and own-message alignment
+- Composer with Enter to send and Shift+Enter for a newline
+- Unread badge on the chat control while the panel is closed
+- Empty state noting that messages are end-to-end encrypted and not stored
+- Auto-scroll that does not yank the view when the user has scrolled up
+- `Sheet` on mobile, inline panel on desktop, sharing the participants-panel shell
+
+**Logic:**
+
+- Transcript held in component state only; never written to storage
+- Messages from participants who have since left still render with their captured name
+
+---
+
+## Phase 5 — Call history
+
+### 20 Participation recording
+
+**Logic:**
+
+- `src/lib/livekit/webhook.ts` with `WebhookReceiver`
+- `POST /api/livekit/webhook` reading the raw body and verifying the signature before anything else
+- `participant_joined` → insert a participation row, resolving `user_id` from the `user:` identity prefix
+- `participant_left` → set `left_at` on the open row for that `(meeting_id, identity)`
+- `room_finished` → set `meetings.ended_at`, and close every still-open participation row for that meeting (`left_at = coalesce(left_at, now())`) as reconciliation for a dropped `participant_left`
+- Idempotent handling; `500` on transient failure so LiveKit retries, `200` on events deliberately ignored
+- Confirm the nightly sweep from feature 03 closes meetings whose `room_finished` never arrived
+- Configure the webhook URL in the LiveKit Cloud dashboard
+
+**Verify:** Join and leave from two accounts and confirm exactly one row per join
+with correct timestamps; redeliver an event and confirm no duplicate; kill a browser
+tab without leaving cleanly and confirm `room_finished` still closes that row rather
+than leaving `left_at` null.
+
+### 21 Call history page
+
+**UI:**
+
+- Reverse-chronological list: date and time, duration, participant names, and the meeting code
+- "Rejoin" action where the meeting has not ended — with the caveat that a rejoin link has no chat key, stated plainly
+- Empty state for users with no history
+- Card layout on mobile, table on desktop
+
+**Logic:**
+
+- Server Component query scoped with `.eq('user_id', user.id)`, ordered and limited
+- Redirect to `/` when unauthenticated
+- Duration derived from `joined_at`/`left_at`, falling back to the meeting's own timestamps
+- Query failure logs and renders the empty state
+
+**Verify:** A second account's history contains none of the first account's meetings.
+
+---
+
+## Phase 6 — Mobile and resilience
+
+### 22 Mobile pass
+
+**UI:**
+
+- Every route audited at 360px, 390px, and 768px
+- Call layout using `dvh` with safe-area insets honoured top and bottom
+- All touch targets at least 44px, panels as full-height sheets
+- Landscape orientation on phones handled without clipping the control bar
+
+**Logic:**
+
+- Confirm the screen-share control is absent on iOS Safari and Android Chrome
+- Verify audio starts correctly after the Join gesture on iOS Safari
+- Confirm device pickers show real labels on mobile after permission
+
+**Verify:** Run the full guest-join flow on a real iOS device and a real Android device, not only in devtools emulation.
+
+### 23 Connection quality and recovery
+
+**UI:**
+
+- Per-tile connection-quality indicator
+- Room-level banner while reconnecting
+- Terminal disconnect state offering rejoin or return Home
+
+**Logic:**
+
+- Subscribe to LiveKit connection-quality and connection-state changes
+- Preserve mic/camera intent across a reconnect so a muted user does not come back unmuted
+
+### 24 Error and edge states
+
+**UI:**
+
+- `not-found.tsx` for a malformed or unknown room code
+- Root `error.tsx` with a recovery action
+- Loading skeletons for the history page and the room shell
+- Consistent toast styling for transient failures
+
+**Logic:**
+
+- Room-code validation on the server before rendering the room
+- Friendly copy for token failure, room-full, and permission-denied
+- Confirm no user-facing message leaks an error code, provider name, or stack trace
+
+---
+
+## Phase 7 — Ship
+
+### 25 Render deployment
+
+**Logic:**
+
+- `render.yaml` defining the Node web service, build and start commands, and every env var with `sync: false` for secrets
+- Set `NEXT_PUBLIC_SITE_URL` to the deployed origin
+- Add the deployed origin to Supabase's allowed redirect URLs and to the Google OAuth client
+- Point the LiveKit webhook at the deployed `/api/livekit/webhook`
+- Health check and a documented first-deploy checklist in the README
+
+**Verify:** Sign in, create a meeting, and complete a two-device call end to end on the deployed URL.
+
+### 26 End-to-end test suite
+
+**Logic:**
+
+- Playwright specs: guest joins via link; lobby toggles carry into the call; two contexts see each other; chat round-trips between two contexts; a link without `#k=` disables chat
+- Two-participant tests use separate browser contexts
+- Wire `npm run test:e2e` into the documented pre-deploy checklist
+
+**Verify:** The full suite passes locally against a running dev server.
+
+---
+
+## Feature Count
+
+| Phase | Features |
+| ----- | -------- |
+| Phase 0 — Foundation | 3 |
+| Phase 1 — Identity and entry | 3 |
+| Phase 2 — Lobby | 3 |
+| Phase 3 — The call | 7 |
+| Phase 4 — Encrypted chat | 3 |
+| Phase 5 — Call history | 2 |
+| Phase 6 — Mobile and resilience | 3 |
+| Phase 7 — Ship | 2 |
+| **Total** | **26** |
