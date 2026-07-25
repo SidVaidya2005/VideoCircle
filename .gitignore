@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# Next.js
+.next/
+out/
+build/
+next-env.d.ts
+
+# Environment — never commit real values; .env.example is the tracked template
+.env
+.env.local
+.env.*.local
+
+# Testing
+coverage/
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# Supabase local stack
+.branches
+.temp
+
+# Editors and OS
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# --- Licensed fonts -----------------------------------------------------------
+# IoskeleyMono ships with the vendored Anime.js design kit for reference only.
+# The app loads JetBrains Mono instead (see context/library-docs.md → Tailwind),
+# so these files are never needed to build or run. Committing them would be
+# redistribution of a licensed typeface if this repo is ever made public.
+# Delete these two lines only if you have confirmed redistribution rights.
+context/Design/fonts/
