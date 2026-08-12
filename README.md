@@ -40,11 +40,11 @@ working in this repo.
 
 ## Running it
 
-> **Nothing in this section works yet.** Everything from here to the end of the
-> file — prerequisites, environment, local development, testing, deployment —
-> describes the intended setup once the build reaches it. `package.json` does not
-> exist until feature 01, so every command below will fail today. Live status is
-> `context/progress-tracker.md`.
+> **Partly working.** The app builds, runs, and is styled; the database, its RLS
+> policies and the Supabase clients are in place. There is no sign-in and no call
+> yet — Google OAuth arrives in feature 04 and LiveKit in feature 09, so the
+> LiveKit variables below are placeholders for now and the two buttons on Home do
+> nothing. Live status is `context/progress-tracker.md`.
 
 ### Prerequisites
 
@@ -71,9 +71,13 @@ Copy `.env.example` to `.env.local` and fill it in. Never commit `.env.local`.
 
 ```bash
 npm install
-npx supabase db push     # apply migrations
-npm run dev              # http://localhost:3000
+npx supabase link --project-ref <your-project-ref>   # prompts for the DB password
+npx supabase db push                                 # apply migrations
+npm run dev                                          # http://localhost:3000
 ```
+
+`db push` needs the project linked first; the link prompts for your database
+password, which is why it is a step you run rather than one a script runs for you.
 
 `localhost` counts as a secure context, so the Web Crypto APIs behind encrypted chat
 work in development without HTTPS.
@@ -81,9 +85,15 @@ work in development without HTTPS.
 ### Testing
 
 ```bash
+npx playwright install chromium   # once per machine
 npm run test       # Vitest — crypto, room codes, formatting
 npm run test:e2e   # Playwright — lobby, join, two-party chat
+npm run typecheck  # tsc --noEmit
+npm run lint       # ESLint, then the design-system and context-drift checks
 ```
+
+The end-to-end server runs on port 3100, not 3000, so a dev server you already
+have open is never reused by mistake.
 
 Playwright launches Chromium with fake media devices, so call flows run without a
 real camera.

@@ -44,11 +44,16 @@ Render runs the Next.js app; all media traverses LiveKit's infrastructure.
 
 ## Folder Structure
 
-**Partly built.** Feature 01 created the configs, `src/app/`, `src/lib/` (`env`,
-`env.server`, `api`, `constants`, `utils`), and `tests/`. Feature 02 added
-`globals.css`'s token mirror, the `(shell)` route group, `src/components/shell/`,
-`src/components/ui/button.tsx`, `public/brand/`, and the dev-only `/tokens` route.
-Everything else below is the target shape, filled in by the feature that needs it.
+**Phase 0 built the foundation; everything else below is the target shape,**
+filled in by the feature that needs it. As of the Phase 0 checkpoint:
+
+- **F01** — root configs, `src/app/`, `src/lib/` (`env`, `env.server`, `api`, `constants`, `utils`), `tests/`
+- **F02** — the `globals.css` token mirror, the `(shell)` route group, `src/components/{shell,home,ui}/`, `public/brand/`, the dev-only `/tokens` route
+- **F03** — `supabase/` with seven migrations, `src/lib/supabase/`, `src/middleware.ts`, `src/types/database.ts`
+
+Not yet built: everything under `auth/`, `room/`, `api/`, `hooks/`,
+`lib/{livekit,crypto}`, `lib/room-code.ts`, `types/meeting.ts`, the `history`
+page, and `render.yaml`.
 
 ```
 VideoCircle/
@@ -57,6 +62,10 @@ VideoCircle/
 │   └── Design/                        → VideoCircle design system (spec, tokens, specimens, mark)
 ├── render.yaml                        → Render service + env definition
 ├── components.json                    → shadcn/ui config (aliases, target stylesheet)
+├── (root configs)                     → package.json, tsconfig.json, next.config.ts,
+│                                        eslint.config.mjs, postcss.config.mjs,
+│                                        vitest.config.mts, playwright.config.ts,
+│                                        .prettierrc.json, .env.example
 ├── public/
 │   └── brand/                         → mark.svg + wordmark.svg, copied out of context/Design/assets/
 ├── supabase/

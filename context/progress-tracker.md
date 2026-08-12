@@ -17,9 +17,9 @@ progress, and what is next.
 
 ## Current Status
 
-**Phase:** Phase 0 — Foundation
-**Last completed:** 03 Supabase project and schema — RLS verified against a live database, zero security advisories
-**Next:** Phase checkpoint — verify Phase 0 is stable, then compact `build-journal.md`
+**Phase:** Phase 1 — Identity and entry
+**Last completed:** Phase 0 checkpoint — all gates green from a clean install, invariants checked mechanically, journal compacted
+**Next:** 04 Google sign-in and session — **blocked on two inputs, see Follow-ups**
 
 ---
 
@@ -30,7 +30,7 @@ progress, and what is next.
 - [x] 01 Project scaffold and tooling
 - [x] 02 Design tokens and UI primitives
 - [x] 03 Supabase project and schema
-- [ ] Phase checkpoint — verify Phase 0 — Foundation is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
+- [x] Phase checkpoint — verify Phase 0 — Foundation is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
 
 ### Phase 1 — Identity and entry
 
@@ -84,6 +84,16 @@ progress, and what is next.
 - [ ] Phase checkpoint — verify Phase 7 — Ship is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
 
 ---
+
+## Follow-ups
+
+Open work carried out of Phase 0. Cleared as the feature that needs each arrives.
+
+- **`SUPABASE_SERVICE_ROLE_KEY` is blank in `.env.local`** — paste it from Project Settings → API Keys → service_role. Nothing imports it until F06, so the app builds and runs without it. **Blocks F06.**
+- **Google OAuth provider is not enabled**, and needs a Google Cloud OAuth 2.0 client whose redirect URI points at Supabase. **Blocks F04.**
+- **LiveKit variables are placeholders** in `.env.local`. **Blocks F09.**
+- **The wordmark's tittle sits ~3.5px off during the `next/font` swap window**, because the generated fallback matches advance and ascent but not glyph shapes. First paint only, on a cold load. Accepted at F02 rather than trading it for a flash of invisible text; revisit only if it looks wrong on the deployed instance.
+- **`/tokens` still ships its markup in the production bundle** even though it returns 404 there. A few kB of static swatches; revisit at F22 if the Home budget is tight.
 
 ## Key Decisions
 
