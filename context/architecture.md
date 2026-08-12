@@ -45,13 +45,14 @@ Render runs the Next.js app; all media traverses LiveKit's infrastructure.
 ## Folder Structure
 
 **Phase 0 built the foundation; everything else below is the target shape,**
-filled in by the feature that needs it. As of the Phase 0 checkpoint:
+filled in by the feature that needs it. Built so far:
 
 - **F01** — root configs, `src/app/`, `src/lib/` (`env`, `env.server`, `api`, `constants`, `utils`), `tests/`
 - **F02** — the `globals.css` token mirror, the `(shell)` route group, `src/components/{shell,home,ui}/`, `public/brand/`, the dev-only `/tokens` route
 - **F03** — `supabase/` with seven migrations, `src/lib/supabase/`, `src/middleware.ts`, `src/types/database.ts`
+- **F04** — `src/app/auth/{callback,signout}/`, `src/lib/auth/`, the header auth menu, and the `dropdown-menu` primitive
 
-Not yet built: everything under `auth/`, `room/`, `api/`, `hooks/`,
+Not yet built: everything under `room/`, `api/`, `hooks/`,
 `lib/{livekit,crypto}`, `lib/room-code.ts`, `types/meeting.ts`, the `history`
 page, and `render.yaml`.
 
@@ -96,15 +97,18 @@ VideoCircle/
     │       ├── token/route.ts         → POST: mint a LiveKit AccessToken
     │       └── livekit/webhook/route.ts → POST: LiveKit participant/room events
     ├── components/
-    │   ├── ui/                        → shadcn primitives (button; others added per feature)
-    │   ├── shell/                     → wordmark, site header, site footer
-    │   ├── home/                      → hero, call preview, how-it-works, feature grid, join-by-code form
+    │   ├── ui/                        → shadcn primitives (button, dropdown-menu; others added per feature)
+    │   ├── shell/                     → wordmark, site header, site footer, auth menu
+    │   ├── home/                      → hero, call preview, how-it-works, feature grid, join-by-code form, auth-error notice
     │   ├── lobby/                     → self-preview, device pickers, pre-join controls
     │   ├── room/                      → grid, tiles, control bar, panels, reactions
     │   ├── chat/                      → encrypted chat panel, composer, message list
     │   └── history/                   → history table, empty state
     ├── hooks/                         → use-media-devices, use-chat-key, use-encrypted-chat, …
     ├── lib/
+    │   ├── auth/
+    │   │   ├── sign-in.ts             → signInWithGoogle + the chat-key fragment stash
+    │   │   └── safe-next.ts           → origin-compared validation of the callback's `next`
     │   ├── supabase/
     │   │   ├── client.ts              → createBrowserClient (browser only)
     │   │   ├── server.ts              → createServerClient over next/headers cookies
@@ -141,6 +145,7 @@ VideoCircle/
 | `src/components/shell` | The header/footer chrome rendered by the `(shell)` route group, plus the wordmark. Knows nothing about auth — the header takes a sign-in slot as a prop. |
 | `src/hooks` | Reusable client-side stateful logic bridging LiveKit/Web Crypto to React. No JSX. |
 | `src/lib` | Framework-agnostic logic and third-party client construction. Imports nothing from `src/components` or `src/app`. |
+| `src/lib/auth` | Sign-in entry points and the redirect validation the callback depends on. `sign-in.ts` is `'use client'` — it is the only module that touches the chat-key stash. |
 | `src/lib/crypto` | All Web Crypto usage. No other folder may call `crypto.subtle` directly. |
 | `src/lib/env.server.ts` | The only place secrets are read out of `process.env`. `import 'server-only'` on line one. |
 | `src/lib/supabase/admin.ts` | The only consumer of `serverEnv.SUPABASE_SERVICE_ROLE_KEY`. `import 'server-only'` on line one. |
@@ -392,6 +397,9 @@ read would be storage without purpose.
 - `src/middleware.ts` runs on every non-static request and refreshes the Supabase session cookie so pages never render against a stale token.
 - Session reads on the server always use `supabase.auth.getUser()`, never `getSession()` — `getUser()` revalidates against the auth server, `getSession()` trusts the cookie.
 - Sign-in never blocks a call. Every public route works with a null user, and the auth callback returns the user to the path they came from.
+- `/auth/signout` accepts `POST` only. A GET signout is fetched by link prefetch, by speculative loading, and by any third-party `<img>`, all of which would end a session without the user acting. It answers `303` so the browser follows with `GET` rather than re-POSTing to Home.
+- The callback's `next` parameter is resolved against `NEXT_PUBLIC_SITE_URL` and origin-compared, never prefix-matched. Both auth redirects resolve against that env value rather than the request's own origin, which is not reliable behind Render's TLS-terminating proxy.
+- The session is read server-side in `src/app/(shell)/layout.tsx`, which is what makes the shell routes dynamic. The header itself knows nothing about auth — it takes a rendered node as its `actions` prop.
 - `/api/livekit/webhook` is not user-authenticated; it authenticates the *sender* by verifying LiveKit's signature over the raw request body.
 
 ---
@@ -688,6 +696,7 @@ export function apiError(code: string, message: string, status: number) {
 - RLS is enabled on every table in the `public` schema, and every table has an explicit `select` policy scoped through `auth.uid()`.
 - Every history query is scoped to the current user's `auth.uid()` in the query itself, not only by RLS.
 - Server-side session reads use `supabase.auth.getUser()`; `supabase.auth.getSession()` is never used to authorize anything.
+- A display name comes from `profiles`, never from `user_metadata`. Supabase's `raw_user_meta_data` is user-editable and surfaces in `auth.jwt()`, so it is unsafe for any authorization decision, and using it for a name would put a second derivation next to the `auth.users` trigger's, free to drift from what call history shows.
 - Database schema changes are made only by adding a file to `supabase/migrations/`, never by application code at runtime.
 
 **Media**
@@ -717,6 +726,6 @@ export function apiError(code: string, message: string, status: number) {
 
 - Nothing under `src/lib/` imports from `src/components/` or `src/app/`.
 - Nothing under `src/components/ui/` references a product concept such as a meeting, participant, or room.
-- Route handlers validate their request body with a Zod schema before touching any other code.
-- Route handlers return either `apiOk(data)` or `apiError(code, message, status)` and never a bare `Response` or an unshaped object.
+- Route handlers under `src/app/api/` validate their request body with a Zod schema before touching any other code.
+- Route handlers under `src/app/api/` return either `apiOk(data)` or `apiError(code, message, status)` and never a bare `Response` or an unshaped object. The `/auth/*` handlers are the deliberate exception and the only one: they are navigated to by the browser rather than fetched, so they answer with a redirect — a JSON body would render to the user as text.
 - Every page and panel is usable at a 360px viewport width with no horizontal scroll.

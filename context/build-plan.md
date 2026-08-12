@@ -104,7 +104,29 @@ infinite recursion.
 - `/auth/signout` route handler
 - Middleware session refresh confirmed working across a full page reload
 
-**Verify:** Sign in, reload, close and reopen the tab — the session survives. Sign out clears it.
+**Prerequisites, outside the codebase.** Nothing here can be verified until all three
+exist: a Google Cloud OAuth 2.0 *Web application* client whose authorized redirect URI
+is `https://<project-ref>.supabase.co/auth/v1/callback` — Supabase's callback, not
+ours; the Google provider enabled in Supabase with that client's ID and secret; and
+`http://localhost:3000/auth/callback` added to Supabase's Redirect URLs, joined by the
+Render URL at F25.
+
+**Decisions, agreed before building:**
+
+- **Auth state is read server-side in `(shell)/layout.tsx`** and passed into the header's existing `actions` slot, so the header stays auth-ignorant and there is no flash of a signed-out header. This makes Home dynamic rather than static — already true of the app generally, since session cookies are read on every request.
+- **The display name comes from `profiles`, never `user_metadata`.** One derivation of a display name — the trigger's `coalesce` chain — so the header cannot disagree with call history. `user_metadata` is also user-editable and must never reach an authorization decision.
+- **The avatar is a typographic initial, not the Google photo.** The brand is type and geometry, and it avoids a `remotePatterns` entry, a per-render request from the visitor to googleusercontent.com, and a dead-URL fallback. `profiles.avatar_url` is still stored.
+- **Both halves of the chat-key `sessionStorage` stash ship here**, in `src/lib/auth/sign-in.ts`, even though no URL carries a `#k=` fragment until F06. The restore *call site* is F17's; the helper exists now because a lost fragment fails silently and reopening the sign-in path later is how it gets forgotten.
+- **`/auth/signout` is POST-only**, submitted from a form and answered with a 303. A GET signout is reachable by `next/link` prefetch and by any third-party image tag.
+- **Redirects resolve against `NEXT_PUBLIC_SITE_URL`, not the request origin.** Render terminates TLS at a proxy, so `new URL(request.url).origin` is not reliably the public origin, and `X-Forwarded-Host` is caller-controlled. The env value is already the canonical origin for exactly this purpose.
+- **`safeNext` is its own module** so Vitest can cover it — the config is `environment: 'node'` over `tests/unit/**`, so only pure functions are unit-testable.
+- **These two route handlers redirect rather than returning `apiOk`/`apiError`**, which is correct for a browser-navigated OAuth endpoint. The invariant is about the JSON API surface and is scoped to `src/app/api/` in `architecture.md`.
+
+**Verify:** Sign in, reload, close and reopen the tab — the session survives. Sign out
+clears it. `/auth/callback?code=bogus` lands on Home with a readable notice. `curl -i`
+on `/auth/signout` is not a 303. `profiles.display_name` after a real sign-in holds a
+real name, confirming the trigger's `coalesce` against Google's actual payload — which
+F03 deferred to here.
 
 ### 05 Home page
 

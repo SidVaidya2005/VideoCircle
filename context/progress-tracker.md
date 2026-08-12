@@ -18,8 +18,8 @@ progress, and what is next.
 ## Current Status
 
 **Phase:** Phase 1 — Identity and entry
-**Last completed:** Phase 0 checkpoint — all gates green from a clean install, invariants checked mechanically, journal compacted
-**Next:** 04 Google sign-in and session — **blocked on two inputs, see Follow-ups**
+**Last completed:** 04 Google sign-in and session — code complete and every gate green; the round trip through Google is **unverified, blocked on the OAuth provider, see Follow-ups**
+**Next:** 05 Home page — the join-by-code form and wiring the two inert hero controls
 
 ---
 
@@ -34,7 +34,7 @@ progress, and what is next.
 
 ### Phase 1 — Identity and entry
 
-- [ ] 04 Google sign-in and session
+- [x] 04 Google sign-in and session
 - [ ] 05 Home page
 - [ ] 06 Create meeting and share link
 - [ ] Phase checkpoint — verify Phase 1 — Identity and entry is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
@@ -90,13 +90,15 @@ progress, and what is next.
 Open work carried out of Phase 0. Cleared as the feature that needs each arrives.
 
 - **`SUPABASE_SERVICE_ROLE_KEY` is blank in `.env.local`** — paste it from Project Settings → API Keys → service_role. Nothing imports it until F06, so the app builds and runs without it. **Blocks F06.**
-- **Google OAuth provider is not enabled**, and needs a Google Cloud OAuth 2.0 client whose redirect URI points at Supabase. **Blocks F04.**
+- **Google OAuth provider is not enabled.** Needs a Google Cloud OAuth 2.0 *Web application* client whose authorized redirect URI is `https://<project-ref>.supabase.co/auth/v1/callback`, that client's ID and secret pasted into Supabase → Authentication → Providers → Google, and `http://localhost:3000/auth/callback` added to Supabase's Redirect URLs. **F04 is built against this but unverified without it** — the whole round trip, the surviving session, and the trigger's `coalesce` against Google's real payload all need it. F25 adds the Render URL to the same list.
 - **LiveKit variables are placeholders** in `.env.local`. **Blocks F09.**
+- **Next 16 deprecated the `middleware` file convention in favour of `proxy`**, and every build prints the notice. Per `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md` it is a pure rename — `src/middleware.ts` → `src/proxy.ts`, `export function middleware` → `proxy`, all behaviour unchanged, codemod `npx @next/codemod@canary middleware-to-proxy .`. Left out of F04 as out of scope; it touches `architecture.md`, `code-standards.md` → Environment Variables, and `library-docs.md`, so it wants its own `1.00.x` chore commit.
 - **The wordmark's tittle sits ~3.5px off during the `next/font` swap window**, because the generated fallback matches advance and ascent but not glyph shapes. First paint only, on a cold load. Accepted at F02 rather than trading it for a flash of invisible text; revisit only if it looks wrong on the deployed instance.
 - **`/tokens` still ships its markup in the production bundle** even though it returns 404 there. A few kB of static swatches; revisit at F22 if the Home budget is tight.
 
 ## Key Decisions
 
+- **The session is read server-side in the `(shell)` layout**, which makes Home and Call History dynamic. A client-side read would keep Home static at the cost of showing a signed-out header on every load before correcting — worst on exactly the cold free-tier load this project already fights. (F04)
 - **RLS helpers live in `private` and keep `EXECUTE` for `authenticated`** — the schema is what hides them; revoking the grant breaks every policy read. (F03)
 - **The expiry sweep has a 2-hour grace period**, resolving a contradiction in `architecture.md` between "closes open rows" and "skips meetings with open rows". (F03)
 - **One participation policy, not two** — "read own" was a strict subset of "read co-participants", and Postgres evaluates every permissive policy per row. (F03)
@@ -106,4 +108,3 @@ Open work carried out of Phase 0. Cleared as the feature that needs each arrives
 - **shadcn primitives arrive per feature, not up front** — only `button` exists, restyled to the kit. (F02)
 - **TypeScript 6, not 7** — `typescript-eslint` hard-refuses TS 7 and takes all of `eslint-config-next` down with it. Three workarounds tested and rejected. Full reasoning in `constraints.md` → Tooling. (F01)
 - **Environment splits into `env.ts` (public) and `env.server.ts` (secrets)** — a single schema throws in the browser, because Next replaces non-public `process.env` reads with `undefined`. (F01)
-- **`_verify.mjs` runs inside `npm run lint` from feature 01**, not 02 — it already passed, so context-drift guarding starts immediately. (F01)
