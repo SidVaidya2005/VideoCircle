@@ -76,7 +76,7 @@ literal outside `globals.css` returns nothing.
 - Migration: the `is_meeting_participant(uuid)` `security definer` function, then RLS enabled on all three tables with the documented `select`/`update` policies. **Verify the co-participant policy does not recurse before moving on** — a self-referential policy on `meeting_participants` errors outright
 - Migration: the nightly `pg_cron` sweep closing meetings past `expires_at` and any participation rows still open
 - Trigger inserting a `profiles` row on `auth.users` insert
-- `src/lib/supabase/{client,server,admin,middleware}.ts` and `src/middleware.ts`
+- `src/lib/supabase/{client,server,admin,proxy}.ts` and `src/proxy.ts` (both named `middleware` until the Next 16 rename in the Phase 1 checkpoint)
 - Generate `src/types/database.ts`
 
 **Verify:** No outstanding RLS or security findings — via `get_advisors` if the
@@ -102,7 +102,7 @@ infinite recursion.
 - `signInWithOAuth({ provider: 'google' })` with a `redirectTo` carrying the return path
 - `/auth/callback` route handler exchanging the PKCE code, with same-origin validation on `next`
 - `/auth/signout` route handler
-- Middleware session refresh confirmed working across a full page reload
+- Proxy session refresh confirmed working across a full page reload
 
 **Prerequisites, outside the codebase.** Nothing here can be verified until all three
 exist: a Google Cloud OAuth 2.0 *Web application* client whose authorized redirect URI

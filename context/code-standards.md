@@ -35,7 +35,7 @@ The AI agent on this project operates as a senior engineer. This means:
 - All exported functions declare an explicit return type. Local helpers may infer.
 - Async code uses `async`/`await`; no raw `.then()` chains. Every `await` that can reject is inside a `try` or has its rejection deliberately propagated to a boundary that handles it.
 - Data is immutable by default: build new arrays and objects rather than mutating parameters. Mutation is acceptable inside a single function on a value it created.
-- No default exports anywhere except Next.js files that require them (`page.tsx`, `layout.tsx`, `error.tsx`, `not-found.tsx`, `middleware.ts`).
+- No default exports anywhere except Next.js files that require them (`page.tsx`, `layout.tsx`, `error.tsx`, `not-found.tsx`). `proxy.ts` exports a named `proxy` function, not a default.
 - No enums — use `as const` objects with a derived union type.
 
 ---
@@ -185,7 +185,7 @@ quietly lowering it.
 - Hooks: `use-<thing>.ts` exporting `use<Thing>` (`use-chat-key.ts` → `useChatKey`).
 - Utility and library modules: `kebab-case.ts` exporting named `camelCase` functions.
 - Type-only modules: `kebab-case.ts` under `src/types/`, exporting `PascalCase` types.
-- Next.js special files keep their framework names exactly: `page.tsx`, `layout.tsx`, `route.ts`, `error.tsx`, `not-found.tsx`, `loading.tsx`, `middleware.ts`.
+- Next.js special files keep their framework names exactly: `page.tsx`, `layout.tsx`, `route.ts`, `error.tsx`, `not-found.tsx`, `loading.tsx`, `proxy.ts`.
 - SQL migrations: `supabase/migrations/<YYYYMMDDHHMMSS>_<snake_case_description>.sql`.
 - Tests mirror their subject: `tests/unit/lib/crypto/chat-message.test.ts`, `tests/e2e/guest-join.spec.ts`.
 - One exported component per file. A file may contain small private sub-components used only by its main export.
@@ -321,7 +321,7 @@ export async function POST(request: NextRequest) {
 
 - Validate the body with Zod before any other work; return `400` with `invalid_request` on failure.
 - **Authorize against state, not shape.** A well-formed identifier is never sufficient — check that the underlying row exists and is in a joinable state before acting on it.
-- Read every environment value through `env` from `src/lib/env.ts`. `process.env` is never read outside that file, except in `src/middleware.ts` — see Environment Variables for why that one exception exists.
+- Read every environment value through `env` from `src/lib/env.ts`. `process.env` is never read outside that file, except in `src/proxy.ts` — see Environment Variables for why that one exception exists.
 - Resolve the session with `supabase.auth.getUser()`. A null user is a guest, not an error, except on routes documented as protected.
 - Wrap the work in `try`/`catch`. Log the real error server-side with a `[route]` prefix; return a generic user-facing message.
 - Return `apiOk(data)` or `apiError(code, message, status)` — never a bare `Response`, never an unshaped object.
@@ -512,7 +512,7 @@ LiveKit keys were blank, and in production it would take meeting creation down
 during a LiveKit key rotation.
 
 - A `NEXT_PUBLIC_` prefix means the value is compiled into the client bundle and is visible to anyone. Never add that prefix to a secret.
-- `src/middleware.ts` is the single exception to reading env through `env`: it runs in the Edge runtime under a bundle-size budget, and importing the Zod-parsed module would pull Zod in with it. It may read the two `NEXT_PUBLIC_` Supabase values from `process.env` directly, and nothing else.
+- `src/proxy.ts` is the single exception to reading env through `env`: it runs in the Edge runtime under a bundle-size budget, and importing the Zod-parsed module would pull Zod in with it. It may read the two `NEXT_PUBLIC_` Supabase values from `process.env` directly, and nothing else.
 - Secrets are configured in the Render dashboard and listed in `render.yaml` with `sync: false`. They are never committed, and `.env.local` is git-ignored.
 - `.env.example` lists every variable with a placeholder value and must be updated in the same commit that introduces a new variable.
 
@@ -597,7 +597,7 @@ Approved dependencies for this project:
 - `@livekit/components-react` — React hooks and layout primitives for LiveKit
 - `livekit-server-sdk` — server-side `AccessToken` and `WebhookReceiver`
 - `@supabase/supabase-js` — Postgres queries and the service-role admin client
-- `@supabase/ssr` — cookie-based Supabase clients for App Router and middleware
+- `@supabase/ssr` — cookie-based Supabase clients for App Router and the proxy
 - `zod` — runtime validation at every server boundary and for env parsing
 - `tailwindcss`, `@tailwindcss/postcss` — styling
 - `class-variance-authority`, `clsx`, `tailwind-merge` — shadcn/ui class composition, used by `cn()`

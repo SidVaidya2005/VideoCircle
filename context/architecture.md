@@ -15,7 +15,7 @@
 | Media client | `livekit-client` 2.21 + `@livekit/components-react` 2.9 | Room connection, track publication, React hooks and layout primitives |
 | Token minting | `livekit-server-sdk` 2.17 | Server-side `AccessToken` JWTs and webhook signature verification |
 | Auth | Supabase Auth (Google OAuth, PKCE) | Sign-in, session cookies, user identity |
-| Auth glue | `@supabase/ssr` 0.12 | Cookie-based Supabase clients for Server Components, route handlers, middleware |
+| Auth glue | `@supabase/ssr` 0.12 | Cookie-based Supabase clients for Server Components, route handlers, the proxy |
 | Database | Supabase Postgres | `profiles`, `meetings`, `meeting_participants` |
 | DB client | `@supabase/supabase-js` 2.112 | Queries, and the service-role admin client |
 | Encryption | Web Crypto API (`SubtleCrypto`, AES-GCM 256) | End-to-end encryption of chat messages in the browser |
@@ -49,9 +49,10 @@ filled in by the feature that needs it. Built so far:
 
 - **F01** — root configs, `src/app/`, `src/lib/` (`env`, `env.server`, `api`, `constants`, `utils`), `tests/`
 - **F02** — the `globals.css` token mirror, the `(shell)` route group, `src/components/{shell,home,ui}/`, `public/brand/`, the dev-only `/tokens` route
-- **F03** — `supabase/` with seven migrations, `src/lib/supabase/`, `src/middleware.ts`, `src/types/database.ts`
+- **F03** — `supabase/` with seven migrations, `src/lib/supabase/`, `src/proxy.ts`, `src/types/database.ts`
 - **F04** — `src/app/auth/{callback,signout}/`, `src/lib/auth/`, the header auth menu, and the `dropdown-menu` primitive
 - **F05** — `src/lib/room-code.ts`, `src/lib/parse-room-code.ts`, the hero's join-by-code form, and the `input` primitive
+- **F06** — `src/lib/crypto/{base64url,chat-key}.ts`, `src/app/api/meetings/`, and the hero's share panel. `src/middleware.ts` became `src/proxy.ts` at the Phase 1 checkpoint, per Next 16's rename
 
 Not yet built: everything under `room/`, `api/`, `hooks/`,
 `lib/{livekit,crypto}`, `types/meeting.ts`, the `history` page, and
@@ -77,7 +78,7 @@ VideoCircle/
 │   ├── unit/                          → Vitest specs
 │   └── e2e/                           → Playwright specs
 └── src/
-    ├── middleware.ts                  → Supabase session refresh on every request
+    ├── proxy.ts                       → Supabase session refresh on every request
     ├── app/
     │   ├── layout.tsx                 → root layout: html/body, JetBrains Mono, metadata
     │   ├── globals.css                → Tailwind import + :root token mirror + @theme inline
@@ -100,7 +101,8 @@ VideoCircle/
     ├── components/
     │   ├── ui/                        → shadcn primitives (button, dropdown-menu, input; others added per feature)
     │   ├── shell/                     → wordmark, site header, site footer, auth menu
-    │   ├── home/                      → hero, call preview, how-it-works, feature grid, join-by-code form, auth-error notice
+    │   ├── home/                      → hero, call preview, how-it-works, feature grid, join-by-code
+    │   │                                form, start-meeting + share panel, auth-error notice
     │   ├── lobby/                     → self-preview, device pickers, pre-join controls
     │   ├── room/                      → grid, tiles, control bar, panels, reactions
     │   ├── chat/                      → encrypted chat panel, composer, message list
@@ -113,7 +115,7 @@ VideoCircle/
     │   ├── supabase/
     │   │   ├── client.ts              → createBrowserClient (browser only)
     │   │   ├── server.ts              → createServerClient over next/headers cookies
-    │   │   ├── middleware.ts          → session-refresh helper used by src/middleware.ts
+    │   │   ├── proxy.ts               → session-refresh helper used by src/proxy.ts
     │   │   └── admin.ts               → service-role client, server-only
     │   ├── livekit/
     │   │   ├── token.ts               → AccessToken construction
@@ -403,7 +405,7 @@ read would be storage without purpose.
 - Methods: Google OAuth (PKCE flow) — the only sign-in method. Guests are unauthenticated and have no Supabase session at all.
 - Protected: `/history` (redirects to `/` when there is no session)
 - Public: `/`, `/room/[code]`, `/auth/callback`, `/auth/signout`, `/api/token`, `/api/meetings`, `/api/livekit/webhook`
-- `src/middleware.ts` runs on every non-static request and refreshes the Supabase session cookie so pages never render against a stale token.
+- `src/proxy.ts` runs on every non-static request and refreshes the Supabase session cookie so pages never render against a stale token. Next 16 renamed this file convention from `middleware`; it is a pure rename, and the old name printed a deprecation notice on every build.
 - Session reads on the server always use `supabase.auth.getUser()`, never `getSession()` — `getUser()` revalidates against the auth server, `getSession()` trusts the cookie.
 - Sign-in never blocks a call. Every public route works with a null user, and the auth callback returns the user to the path they came from.
 - `/auth/signout` accepts `POST` only. A GET signout is fetched by link prefetch, by speculative loading, and by any third-party `<img>`, all of which would end a session without the user acting. It answers `303` so the browser follows with `GET` rather than re-POSTing to Home.
@@ -438,7 +440,7 @@ export async function createClient() {
             cookieStore.set(name, value, options);
           }
         } catch {
-          // Server Components cannot set cookies; middleware already refreshed the session.
+          // Server Components cannot set cookies; the proxy already refreshed the session.
         }
       },
     },

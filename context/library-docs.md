@@ -299,19 +299,19 @@ security mistake in this codebase.
 The canonical bodies for all three live in `architecture.md` → Key Patterns. Copy
 them from there rather than writing new ones.
 
-### Middleware session refresh
+### Proxy session refresh
 
 ```ts
-// src/middleware.ts
+// src/proxy.ts
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const response = NextResponse.next();
 
   const supabase = createServerClient(
     // The one sanctioned exception to reading env through `src/lib/env.ts`:
-    // middleware runs in the Edge runtime under a bundle-size budget, and importing
+    // the proxy runs in the Edge runtime under a bundle-size budget, and importing
     // the Zod-parsed env module pulls Zod in with it. Both values are NEXT_PUBLIC_
     // and inlined at build time, so nothing is lost but the parse.
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -432,7 +432,7 @@ export async function GET(request: NextRequest) {
 **Rules:**
 
 - Use `supabase.auth.getUser()` for anything that authorizes. `getSession()` reads the cookie without revalidating it and must never gate access to data.
-- The `setAll` callback in middleware must apply the `headers` argument as well as the cookies. Skipping it lets a proxy cache an authenticated response.
+- The `setAll` callback in the proxy must apply the `headers` argument as well as the cookies. Skipping it lets a CDN cache an authenticated response and serve one user's session token to another.
 - In Server Components, `cookieStore.set()` throws; the `try`/`catch` in `src/lib/supabase/server.ts` swallowing that is deliberate and must not be "fixed".
 - `supabaseAdmin` bypasses RLS entirely. Import it only in route handlers, never in a page, component, or hook, and always scope its queries explicitly.
 - Guests have no Supabase session. Any code path reachable by a guest must work with `user === null` — that is the normal case, not an error.

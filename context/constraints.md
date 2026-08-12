@@ -44,6 +44,21 @@ feature. The feature refs below point at where each one will be applied.*
 - **The expiry sweep waits 2 hours past `expires_at`.** Long enough that no call is plausibly still draining, short enough to still be a nightly backstop. It closes open participation rows, which a sweep without a grace period could not do safely. (F03)
 - **`meetings.code` is CHECK-constrained to the room-code alphabet**, which excludes `i`, `l`, `0` and `1`. `abc-defg-hij` — used as the example code in the docs until F03 — is *invalid* and the database rejects it. Use `abc-defg-hjk`. (F03)
 
+## Auth and secrets
+
+- **Secrets are parsed per service, never in one shared schema.** Each env module parses at import so a misconfigured deploy fails at boot, which means a single schema makes every consumer fail on every *other* service's missing credential. `/api/meetings` could not build at all while the LiveKit keys were blank; in production the same coupling would take meeting creation down during a LiveKit key rotation. LiveKit's own module arrives with its first consumer in F09. (F06)
+- **A display name comes from `profiles`, never `user_metadata`.** Supabase's `raw_user_meta_data` is user-editable and surfaces in `auth.jwt()`, so it is unsafe for any authorization decision — and using it for a name would put a second derivation beside the `auth.users` trigger's, free to drift from what call history shows. (F04)
+- **`/auth/signout` is POST-only, answered with 303.** A GET signout is fetched by `next/link` prefetch, by speculative loading, and by any third-party `<img>` — all of which would end a session with no user action. 307 would preserve the method and re-issue it as `POST /`. (F04)
+- **Auth redirects resolve against `NEXT_PUBLIC_SITE_URL`, never `request.url`.** Render terminates TLS at a proxy, so the request's own origin is not reliably the public one, and `X-Forwarded-Host` is caller-controlled. It also means exactly one redirect URL to allow-list in the Supabase dashboard. (F04)
+- **The callback's `next` is origin-compared, never prefix-matched.** `//evil.com` and `/\evil.com` both start with `/` and both resolve off-origin — WHATWG URL treats `\` as `/` in special schemes. See `safeNext`. (F04)
+- **The session is read server-side in `(shell)/layout.tsx`**, which makes the shell routes dynamic. The header stays auth-ignorant, taking a rendered node as its `actions` prop. (F04)
+
+## Encryption
+
+- **A fragment is never case-normalised.** The chat key is base64url and case-sensitive, so any code that lowercases a string must split the fragment off first — see `parseRoomCodeInput`, which normalises the room code and leaves the fragment untouched. The failure is silent: the call still connects and only chat is unreadable. (F05)
+- **The room code is generated server-side only.** The collision path regenerates in the route handler, so a client navigating to the code *it* sent would land in a room it does not own — a bug visible only on a collision, which at 50 bits means never in testing and eventually in production. (F06)
+- **Keys imported from a link are non-extractable.** Only the key generated in-browser is extractable, and only long enough to put it in the URL. (F06)
+
 ## Design system
 
 - **`src/components/ui/button.tsx` is restyled and a plain `shadcn add button` will revert it.** The generated source ships six things this project forbids: `dark:` variants, `shadow-xs` on `outline`, `rounded-md` (0.4rem is the button radius), `font-medium` (only 400 and 700 are loaded, so 500 synthesizes), `ring-[3px]` (an arbitrary value), and 36px hit areas. The `xs` and `icon-xs` sizes were removed outright — at 24px they cannot clear the 44px floor. Re-apply all of this after any regeneration. (F02)
