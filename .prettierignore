@@ -1,0 +1,10 @@
+.next/
+out/
+build/
+coverage/
+playwright-report/
+test-results/
+node_modules/
+
+# Documentation and upstream design reference — formatted by their own sources.
+context/

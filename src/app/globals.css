@@ -1,0 +1,10 @@
+@import 'tailwindcss';
+
+/* The VideoCircle token mirror — :root and @theme inline — lands whole in feature
+   02, copied from context/Design/colors_and_type.css. It is deliberately absent
+   here: a half-copied mirror is exactly the drift the mirror rule exists to
+   prevent, and no feature before 02 renders a branded surface. */
+
+html {
+  color-scheme: dark; /* native form controls and scrollbars render dark */
+}
