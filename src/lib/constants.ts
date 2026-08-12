@@ -14,6 +14,9 @@ export const REACTION_TTL_MS = 4_000;
 export const MAX_DISPLAY_NAME_LENGTH = 48;
 export const MAX_CHAT_MESSAGE_LENGTH = 2_000;
 
+/** How long a copy control shows its confirmation before reverting. */
+export const COPIED_RESET_MS = 2_000;
+
 /** Footer links. Rendered on Home and Call History, so they live here, not inline. */
 export const AUTHOR_LINKS = [
   { label: 'Source', href: 'https://github.com/SidVaidya2005/VideoCircle' },

@@ -1,0 +1,114 @@
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+
+import { SectionOverline } from '@/components/home/section-overline';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { COPIED_RESET_MS } from '@/lib/constants';
+import { env } from '@/lib/env';
+
+interface SharePanelProps {
+  code: string;
+  /** The exported chat key. Client state only — it never crosses a server boundary. */
+  chatKey: string;
+}
+
+const COPY_FAILED = 'Could not reach the clipboard. The link is selected — copy it by hand.';
+
+/**
+ * `navigator.clipboard.writeText` can hang instead of rejecting — observed on a
+ * trusted click in a secure context with permission already granted, where the
+ * promise simply never settles. Awaiting it forever leaves the button showing
+ * neither success nor failure, which is the one outcome a copy control must never
+ * produce. A slow clipboard is indistinguishable from a broken one, so treat both
+ * the same and fall back to manual copy.
+ */
+const COPY_TIMEOUT_MS = 1_500;
+
+export function SharePanel({ code, chatKey }: SharePanelProps) {
+  const router = useRouter();
+  const linkRef = useRef<HTMLInputElement>(null);
+  const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
+
+  // Both derived here so the link that gets copied and the one that gets navigated
+  // to cannot drift apart. Built from NEXT_PUBLIC_SITE_URL rather than
+  // window.location.origin, so the link handed to someone else names the canonical
+  // origin even if the creator reached the app on another host.
+  const roomPath = `/room/${code}#k=${chatKey}`;
+  const shareLink = `${env.NEXT_PUBLIC_SITE_URL}${roomPath}`;
+
+  useEffect(() => {
+    if (!copied) return;
+
+    const timer = setTimeout(() => setCopied(false), COPIED_RESET_MS);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  async function copyLink() {
+    setCopyFailed(false);
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      const timeout = new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error('Clipboard write timed out')), COPY_TIMEOUT_MS);
+      });
+
+      await Promise.race([navigator.clipboard.writeText(shareLink), timeout]);
+      setCopied(true);
+    } catch {
+      // Refused, unavailable, or hung — a control that says COPIED when nothing
+      // was copied is worse than one that admits it. Select the text so the
+      // manual path is one keystroke.
+      setCopyFailed(true);
+      linkRef.current?.select();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return (
+    <div className="border-line/60 bg-card flex w-full max-w-md flex-col gap-4 rounded-lg border p-5 text-left">
+      <SectionOverline>Meeting ready</SectionOverline>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          ref={linkRef}
+          readOnly
+          value={shareLink}
+          aria-label="Meeting share link"
+          onFocus={(event) => event.currentTarget.select()}
+          className="sm:flex-1"
+        />
+        <Button type="button" onClick={copyLink} className="sm:flex-none">
+          {copied ? 'COPIED' : 'COPY'}
+        </Button>
+      </div>
+
+      {/* Announced rather than merely shown: the button's own label change is easy
+          to miss, and the failure path needs to reach a screen reader too. */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {copied ? 'Link copied to the clipboard.' : ''}
+      </p>
+
+      {copyFailed ? <p className="text-ink-2 text-xs leading-normal">{COPY_FAILED}</p> : null}
+
+      <p className="text-ink-2 text-xs leading-normal">
+        This link carries the chat key after the <code className="text-ink">#</code>. Send it as
+        plain text — a shortener rewrites the link and drops that part, and chat silently stops
+        working for whoever opens it.
+      </p>
+
+      <p className="text-faint text-xs leading-normal">
+        A first visit after an idle spell can take about a minute to load.
+      </p>
+
+      <Button type="button" onClick={() => router.push(roomPath)}>
+        JOIN NOW
+      </Button>
+    </div>
+  );
+}
