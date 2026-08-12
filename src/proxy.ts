@@ -1,8 +1,13 @@
 import type { NextRequest } from 'next/server';
 
-import { updateSession } from '@/lib/supabase/middleware';
+import { updateSession } from '@/lib/supabase/proxy';
 
-export async function middleware(request: NextRequest) {
+/**
+ * Next 16 renamed the `middleware` file convention to `proxy`. A pure rename —
+ * the file name and the exported function name changed, nothing else — but the
+ * old name printed a deprecation notice on every build.
+ */
+export async function proxy(request: NextRequest) {
   return updateSession(request);
 }
 

@@ -32,7 +32,7 @@ export async function createClient() {
             }
           } catch {
             // A Server Component cannot set cookies. Ignoring this is safe
-            // because middleware already refreshed the session on this request.
+            // because the proxy already refreshed the session on this request.
           }
         },
       },

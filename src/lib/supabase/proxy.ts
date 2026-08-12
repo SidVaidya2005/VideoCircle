@@ -2,8 +2,8 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 /**
- * Session refresh, called from `src/middleware.ts` on every non-static request,
- * so a page never renders against an expired token.
+ * Session refresh, called from `src/proxy.ts` on every non-static request, so a
+ * page never renders against an expired token.
  *
  * NOT marked `server-only`, and it does not import `@/lib/env`. This runs in the
  * Edge runtime under a bundle-size budget, and importing the Zod-parsed env
