@@ -91,7 +91,9 @@ export default function TokensPage() {
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-12 px-4 py-10 sm:px-6">
       <header className="flex flex-col gap-2">
-        <p className="text-muted text-xs tracking-wide uppercase">Design system · development only</p>
+        <p className="text-muted text-xs tracking-wide uppercase">
+          Design system · development only
+        </p>
         <h1 className="text-2xl leading-tight">
           <Wordmark /> tokens
         </h1>
@@ -119,7 +121,9 @@ export default function TokensPage() {
         <div className="bg-card border-line/60 flex flex-col gap-2 rounded-lg border p-4">
           {TEXT_STEPS.map((step) => (
             <div key={step.name} className="flex items-baseline justify-between gap-4">
-              <span className={`${step.className} text-base`}>The quick brown fox — 0123456789</span>
+              <span className={`${step.className} text-base`}>
+                The quick brown fox — 0123456789
+              </span>
               <span className="text-muted shrink-0 text-xs tracking-wide uppercase">
                 {step.name}
               </span>
@@ -206,8 +210,8 @@ export default function TokensPage() {
           <Button disabled>Disabled</Button>
         </div>
         <p className="text-faint text-xs leading-normal">
-          Engaged is a white fill, never red. Red is the Leave control and your own muted state.
-          Tab through these — focus reuses the inverted fill.
+          Engaged is a white fill, never red. Red is the Leave control and your own muted state. Tab
+          through these — focus reuses the inverted fill.
         </p>
       </Section>
 

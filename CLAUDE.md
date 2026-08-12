@@ -51,8 +51,8 @@ copied into `public/brand/`, tokens are mirrored into `src/app/globals.css`.
 - **Update `progress-tracker.md`** after every completed feature — tick the box, **overwrite** Current Status (never append to it; it holds only the latest state), and add the single most important decision to the top of "Key Decisions". That section holds the 10 most recent decisions, newest first — when adding an 11th, file the oldest under its topic in `context/constraints.md`.
 - **Read `context/constraints.md`** before any decision that might conflict with past work. It is grouped by topic and holds only what still binds, so it stays short and cheap to read.
 - **`context/` must stand on its own.** Someone with no access to `src/` should be able to read `context/` and understand what this product is, how it is built, why it is built that way, and what the rules are. **Length is not a defect** — `architecture.md` and `code-standards.md` are long because invariants, the data model, and the canonical patterns earn their space. Never delete an explanation because "the code makes it obvious": the reader may not have the code.
-- **Cut redundancy, never coverage.** The thing to remove from a reference doc is a *restatement* of something that already has a home elsewhere, not the only account of how something works. When adding, prefer tightening or replacing an existing passage over appending a near-duplicate. Detail needed by exactly one feature belongs in that feature's `build-plan.md` entry.
-- **State a rule once, and name its home.** A principle may be repeated across files, but a *specific* — a path, a filename, a tool name, a literal value — is written in exactly one place and referenced from everywhere else. Duplicated specifics drift silently; duplicated principles do not.
+- **Cut redundancy, never coverage.** The thing to remove from a reference doc is a _restatement_ of something that already has a home elsewhere, not the only account of how something works. When adding, prefer tightening or replacing an existing passage over appending a near-duplicate. Detail needed by exactly one feature belongs in that feature's `build-plan.md` entry.
+- **State a rule once, and name its home.** A principle may be repeated across files, but a _specific_ — a path, a filename, a tool name, a literal value — is written in exactly one place and referenced from everywhere else. Duplicated specifics drift silently; duplicated principles do not.
 - **Append to `context/build-journal.md`** after each completed feature — a dated entry with the decisions made, gotchas hit, and verification results. **Never read this file at session start**; it grows for the life of the project. Open it only to reconstruct one specific feature's history.
 - **Compact `build-journal.md` at phase checkpoints**, never continuously: promote that phase's still-binding decisions into `constraints.md` under their topic, collapse its per-feature entries into a few summary bullets, and drop the `Verified:` lines. Never remove a constraint that still binds. `git` history holds anything removed, so compact confidently.
 
@@ -72,7 +72,8 @@ copied into `public/brand/`, tokens are mirrored into `src/app/globals.css`.
 - `npm run dev` — start the Next.js dev server on `localhost:3000`
 - `npm run build` — production build
 - `npm run start` — serve the production build (what Render runs)
-- `npm run lint` — ESLint, then `context/Design/_verify.mjs` for design and context drift
+- `npm run lint` — ESLint, then Prettier `--check`, then `context/Design/_verify.mjs` for design and context drift
+- `npm run format` — Prettier `--write`. Run this rather than formatting a file by hand; `src/app/globals.css` is deliberately ignored, being a mirror of the kit
 - `npm run typecheck` — `tsc --noEmit`; faster feedback than a full build
 - `npm run test` — Vitest unit tests
 - `npm run test:e2e` — Playwright end-to-end tests (run `npx playwright install chromium` once)
@@ -83,7 +84,7 @@ copied into `public/brand/`, tokens are mirrored into `src/app/globals.css`.
 ## Tooling available in this project
 
 - **Context7 MCP** — `resolve-library-id` then `query-docs` for current docs on Next.js, LiveKit, Supabase, Tailwind, Zod, and everything else in the stack. Use it before writing any API call from memory.
-- **Supabase MCP** *(may not be present)* — `list_tables`, `execute_sql`, `generate_typescript_types`, `get_advisors`, `get_logs`. The tools are deferred: fetch them by name with `ToolSearch` and confirm they resolve before relying on them, and note they need a Supabase project to exist first (feature 03). The `supabase` CLI does everything they do, so treat the server as a convenience, never a requirement. Schema changes are always files in `supabase/migrations/` — see `library-docs.md` for why `apply_migration` is the wrong tool mid-iteration. Check for RLS findings after every migration.
+- **Supabase MCP** _(may not be present)_ — `list_tables`, `execute_sql`, `generate_typescript_types`, `get_advisors`, `get_logs`. The tools are deferred: fetch them by name with `ToolSearch` and confirm they resolve before relying on them, and note they need a Supabase project to exist first (feature 03). The `supabase` CLI does everything they do, so treat the server as a convenience, never a requirement. Schema changes are always files in `supabase/migrations/` — see `library-docs.md` for why `apply_migration` is the wrong tool mid-iteration. Check for RLS findings after every migration.
 - **`supabase:supabase` skill** — Supabase auth, RLS, and SSR patterns. Load it before any task touching Supabase Auth or row-level security.
 - **Playwright MCP / `claude-in-chrome`** — driving a real browser to verify call flows, which is the only way to test most of this product.
 

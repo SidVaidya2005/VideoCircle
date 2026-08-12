@@ -52,7 +52,7 @@ export function FeatureGrid() {
               // Border only — a red fill would compete with the Leave control.
               className="bg-card border-line/60 hover:border-signal/50 ease-out-quint flex flex-col gap-3 rounded-lg border p-5 transition-colors duration-(--duration-base) hover:duration-[50ms]"
             >
-              <h3 className="flex items-center gap-2 text-md leading-snug">
+              <h3 className="text-md flex items-center gap-2 leading-snug">
                 <span aria-hidden="true" className="bg-signal inline-block size-1 shrink-0" />
                 {feature.title}
               </h3>

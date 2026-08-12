@@ -27,16 +27,16 @@ Postgres) · Tailwind CSS 4 · shadcn/ui · Vitest · Playwright · deployed on 
 `context/` is the source of truth, and `CLAUDE.md` is the entry point for AI agents
 working in this repo.
 
-| File | Contents |
-| ---- | -------- |
+| File                          | Contents                                                |
+| ----------------------------- | ------------------------------------------------------- |
 | `context/project-overview.md` | What the product is, scope in and out, success criteria |
-| `context/architecture.md` | Stack, structure, data model, and the invariants |
-| `context/code-standards.md` | Rules every change follows |
-| `context/library-docs.md` | Per-library usage patterns |
-| `context/build-plan.md` | 8 phases, 26 ordered features |
-| `context/progress-tracker.md` | Live build status |
-| `context/build-journal.md` | Decisions and gotchas, per feature |
-| `context/Design/` | The Anime.js brand kit this project is designed against |
+| `context/architecture.md`     | Stack, structure, data model, and the invariants        |
+| `context/code-standards.md`   | Rules every change follows                              |
+| `context/library-docs.md`     | Per-library usage patterns                              |
+| `context/build-plan.md`       | 8 phases, 26 ordered features                           |
+| `context/progress-tracker.md` | Live build status                                       |
+| `context/build-journal.md`    | Decisions and gotchas, per feature                      |
+| `context/Design/`             | The Anime.js brand kit this project is designed against |
 
 ## Running it
 
@@ -57,15 +57,15 @@ working in this repo.
 
 Copy `.env.example` to `.env.local` and fill it in. Never commit `.env.local`.
 
-| Variable | Secret? | Notes |
-| -------- | ------- | ----- |
-| `NEXT_PUBLIC_SITE_URL` | No | Origin used for OAuth redirects and share links |
-| `NEXT_PUBLIC_SUPABASE_URL` | No | |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | No | |
-| `SUPABASE_SERVICE_ROLE_KEY` | **Yes** | Bypasses RLS — server only |
-| `NEXT_PUBLIC_LIVEKIT_URL` | No | The `wss://` SFU URL |
-| `LIVEKIT_API_KEY` | **Yes** | |
-| `LIVEKIT_API_SECRET` | **Yes** | Also verifies webhook signatures |
+| Variable                        | Secret? | Notes                                           |
+| ------------------------------- | ------- | ----------------------------------------------- |
+| `NEXT_PUBLIC_SITE_URL`          | No      | Origin used for OAuth redirects and share links |
+| `NEXT_PUBLIC_SUPABASE_URL`      | No      |                                                 |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | No      |                                                 |
+| `SUPABASE_SERVICE_ROLE_KEY`     | **Yes** | Bypasses RLS — server only                      |
+| `NEXT_PUBLIC_LIVEKIT_URL`       | No      | The `wss://` SFU URL                            |
+| `LIVEKIT_API_KEY`               | **Yes** |                                                 |
+| `LIVEKIT_API_SECRET`            | **Yes** | Also verifies webhook signatures                |
 
 ### Local development
 

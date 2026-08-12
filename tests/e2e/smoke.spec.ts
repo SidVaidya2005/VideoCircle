@@ -75,7 +75,10 @@ for (const route of ROUTES) {
 
     const undersized = await page.evaluate((min) => {
       return [...document.querySelectorAll('a, button')]
-        .map((el) => ({ label: el.textContent?.trim().slice(0, 24) ?? '', box: el.getBoundingClientRect() }))
+        .map((el) => ({
+          label: el.textContent?.trim().slice(0, 24) ?? '',
+          box: el.getBoundingClientRect(),
+        }))
         .filter(({ box }) => box.width > 0 && (box.height < min || box.width < min))
         .map(({ label, box }) => `${label} ${Math.round(box.width)}x${Math.round(box.height)}`);
     }, MIN_HIT_AREA);

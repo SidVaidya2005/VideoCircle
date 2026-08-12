@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint && node context/Design/_verify.mjs",
+    "lint": "eslint && prettier --check . && node context/Design/_verify.mjs",
+    "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test"

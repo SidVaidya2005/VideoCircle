@@ -33,10 +33,7 @@ export function CallPreview({ className, participants = DEFAULT_PARTICIPANTS }: 
     <div
       role="img"
       aria-label={`A VideoCircle call in progress with ${participants.length} participants, one screen sharing, chat open.`}
-      className={cn(
-        'bg-card border-line/60 relative overflow-hidden rounded-lg border',
-        className,
-      )}
+      className={cn('bg-card border-line/60 relative overflow-hidden rounded-lg border', className)}
     >
       {/* status strip — pinned top, the kit's fixed-strip layout */}
       <div className="border-line/60 flex items-center justify-between border-b px-3 py-2">

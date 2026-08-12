@@ -11,7 +11,12 @@ interface SectionOverlineProps {
  */
 export function SectionOverline({ children, className }: SectionOverlineProps) {
   return (
-    <p className={cn('text-muted flex items-center gap-2 text-xs tracking-wider uppercase', className)}>
+    <p
+      className={cn(
+        'text-muted flex items-center gap-2 text-xs tracking-wider uppercase',
+        className,
+      )}
+    >
       <span aria-hidden="true" className="bg-signal inline-block size-1 shrink-0" />
       {children}
     </p>

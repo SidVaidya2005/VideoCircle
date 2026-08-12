@@ -24,9 +24,9 @@ export function Hero() {
             <Wordmark />
           </h1>
 
-          <p className="text-ink-2 text-base leading-normal sm:text-md">
-            Start a meeting, share the link, talk. Whoever opens it joins straight from the browser —
-            no download, no meeting ID, no account.
+          <p className="text-ink-2 sm:text-md text-base leading-normal">
+            Start a meeting, share the link, talk. Whoever opens it joins straight from the browser
+            — no download, no meeting ID, no account.
           </p>
 
           <div className="flex w-full flex-col items-center gap-5">
