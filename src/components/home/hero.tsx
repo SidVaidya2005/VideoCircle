@@ -1,19 +1,22 @@
 import { CallPreview } from '@/components/home/call-preview';
+import { JoinForm } from '@/components/home/join-form';
 import { SectionOverline } from '@/components/home/section-overline';
 import { Wordmark } from '@/components/shell/wordmark';
 import { Button } from '@/components/ui/button';
 
 /**
- * The landing hero.
+ * The landing hero, and the page's two entry points.
  *
- * The two controls are deliberately inert for now — "New meeting" needs
- * `/api/meetings` (feature 06) and "Join with a code" needs feature 05.
+ * Joining is live as of feature 05 and sits inline rather than behind a button:
+ * a control whose only job is to reveal a form is a click toward something that
+ * could already be on screen. Signing in lives in the header, as of feature 04.
+ *
+ * START A MEETING is still inert. It needs a generated room code, a Web Crypto
+ * chat key, and `POST /api/meetings` — all three are feature 06 — and
  * build-plan.md's Core Principle is to build the visible surface first and wire
- * the logic behind it, so they are styled and placed but do nothing yet.
- * Sign-in is live as of feature 04, and lives in the header rather than here.
+ * the logic behind it.
  *
- * TODO: wire "New meeting" to POST /api/meetings in feature 06.
- * TODO: wire "Join with a code" to the join-by-code form in feature 05.
+ * TODO: wire "START A MEETING" to POST /api/meetings in feature 06.
  */
 export function Hero() {
   return (
@@ -31,9 +34,9 @@ export function Hero() {
             no download, no meeting ID, no account.
           </p>
 
-          <div className="flex flex-wrap items-center justify-center gap-2">
+          <div className="flex w-full flex-col items-center gap-5">
             <Button>START A MEETING</Button>
-            <Button variant="secondary">JOIN AS GUEST</Button>
+            <JoinForm />
           </div>
 
           <p className="text-faint text-xs leading-normal">
