@@ -18,7 +18,7 @@ progress, and what is next.
 ## Current Status
 
 **Phase:** Phase 1 — Identity and entry
-**Last completed:** 04 Google sign-in and session — code complete and every gate green; the round trip through Google is **unverified, blocked on the OAuth provider, see Follow-ups**
+**Last completed:** 04 Google sign-in and session — verified end to end against a real Google account: sign in, session surviving reload and a tab close, sign out, and `profiles.display_name` holding a real name
 **Next:** 05 Home page — the join-by-code form and wiring the two inert hero controls
 
 ---
@@ -90,7 +90,8 @@ progress, and what is next.
 Open work carried out of Phase 0. Cleared as the feature that needs each arrives.
 
 - **`SUPABASE_SERVICE_ROLE_KEY` is blank in `.env.local`** — paste it from Project Settings → API Keys → service_role. Nothing imports it until F06, so the app builds and runs without it. **Blocks F06.**
-- **Google OAuth provider is not enabled.** Needs a Google Cloud OAuth 2.0 *Web application* client whose authorized redirect URI is `https://<project-ref>.supabase.co/auth/v1/callback`, that client's ID and secret pasted into Supabase → Authentication → Providers → Google, and `http://localhost:3000/auth/callback` added to Supabase's Redirect URLs. **F04 is built against this but unverified without it** — the whole round trip, the surviving session, and the trigger's `coalesce` against Google's real payload all need it. F25 adds the Render URL to the same list.
+- **Add the Render URL to Supabase's Redirect URLs at F25.** The localhost callback is configured and the Google round trip works; the deployed origin needs the same entry, plus `NEXT_PUBLIC_SITE_URL` pointed at it. **Blocks F25.**
+- **Check whether the email/password provider is enabled on the Supabase project, and disable it if so.** `architecture.md` says Google OAuth is *the only* sign-in method, but nothing in the code enforces that — an enabled email provider is a live account-creation surface reachable straight from the Auth API, outside every route handler here. The security advisor's one finding (`auth_leaked_password_protection`) is about password auth and is moot either way once email is off.
 - **LiveKit variables are placeholders** in `.env.local`. **Blocks F09.**
 - **Next 16 deprecated the `middleware` file convention in favour of `proxy`**, and every build prints the notice. Per `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md` it is a pure rename — `src/middleware.ts` → `src/proxy.ts`, `export function middleware` → `proxy`, all behaviour unchanged, codemod `npx @next/codemod@canary middleware-to-proxy .`. Left out of F04 as out of scope; it touches `architecture.md`, `code-standards.md` → Environment Variables, and `library-docs.md`, so it wants its own `1.00.x` chore commit.
 - **The wordmark's tittle sits ~3.5px off during the `next/font` swap window**, because the generated fallback matches advance and ascent but not glyph shapes. First paint only, on a cold load. Accepted at F02 rather than trading it for a flash of invisible text; revisit only if it looks wrong on the deployed instance.
