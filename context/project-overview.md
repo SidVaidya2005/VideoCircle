@@ -58,7 +58,7 @@ callback returns the user to the page they started from.
 
 The user presses "New meeting" on Home. The browser generates a random room code
 and a fresh 256-bit AES-GCM chat key, then navigates to
-`/room/abc-defg-hij#k=<key>`. The server records the meeting row; the key never
+`/room/abc-defg-hjk#k=<key>`. The server records the meeting row; the key never
 leaves the browser because it sits in the URL fragment.
 
 ### Sharing the link

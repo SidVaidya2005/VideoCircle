@@ -4,14 +4,14 @@ import { apiError, apiOk } from '@/lib/api';
 
 describe('apiOk', () => {
   it('defaults to 200 and echoes the payload', async () => {
-    const response = apiOk({ code: 'abc-defg-hij' });
+    const response = apiOk({ code: 'abc-defg-hjk' });
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ code: 'abc-defg-hij' });
+    await expect(response.json()).resolves.toEqual({ code: 'abc-defg-hjk' });
   });
 
   it('honours an explicit status', () => {
-    expect(apiOk({ code: 'abc-defg-hij' }, 201).status).toBe(201);
+    expect(apiOk({ code: 'abc-defg-hjk' }, 201).status).toBe(201);
   });
 });
 
