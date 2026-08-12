@@ -593,7 +593,7 @@ Approved dependencies for this project:
 - `zod` — runtime validation at every server boundary and for env parsing
 - `tailwindcss`, `@tailwindcss/postcss` — styling
 - `class-variance-authority`, `clsx`, `tailwind-merge` — shadcn/ui class composition, used by `cn()`
-- `@radix-ui/*` — accessible primitives pulled in per shadcn component; only add the ones actually used
+- `radix-ui` — accessible primitives. Current shadcn generates imports from this single package rather than the per-primitive `@radix-ui/*` scope, so there is one dependency, not one per component
 - `lucide-react` — icon set. The kit has no icon set of its own and names Lucide as the sanctioned substitution: 2px stroke, stroked never filled, and used sparingly since the brand is typographic
 - `animejs` — motion on Home, the lobby, and sign-in surfaces only; never imported into the call tree
 - `server-only` — build-time guard that keeps server modules out of client bundles

@@ -45,8 +45,10 @@ Render runs the Next.js app; all media traverses LiveKit's infrastructure.
 ## Folder Structure
 
 **Partly built.** Feature 01 created the configs, `src/app/`, `src/lib/` (`env`,
-`env.server`, `api`, `constants`, `utils`), and `tests/`. Everything else below is
-the target shape, filled in by the feature that needs it.
+`env.server`, `api`, `constants`, `utils`), and `tests/`. Feature 02 added
+`globals.css`'s token mirror, the `(shell)` route group, `src/components/shell/`,
+`src/components/ui/button.tsx`, `public/brand/`, and the dev-only `/tokens` route.
+Everything else below is the target shape, filled in by the feature that needs it.
 
 ```
 VideoCircle/
@@ -54,8 +56,9 @@ VideoCircle/
 ├── context/                           → this documentation set
 │   └── Design/                        → VideoCircle design system (spec, tokens, specimens, mark)
 ├── render.yaml                        → Render service + env definition
+├── components.json                    → shadcn/ui config (aliases, target stylesheet)
 ├── public/
-│   └── brand/                         → assets copied out of context/Design/assets/
+│   └── brand/                         → mark.svg + wordmark.svg, copied out of context/Design/assets/
 ├── supabase/
 │   └── migrations/                    → timestamped SQL migrations (schema + RLS)
 ├── tests/
@@ -64,14 +67,17 @@ VideoCircle/
 └── src/
     ├── middleware.ts                  → Supabase session refresh on every request
     ├── app/
-    │   ├── layout.tsx                 → root layout, fonts, providers
-    │   ├── globals.css                → Tailwind import + @theme design tokens
-    │   ├── page.tsx                   → Home: new meeting, join by code, sign in
+    │   ├── layout.tsx                 → root layout: html/body, JetBrains Mono, metadata
+    │   ├── globals.css                → Tailwind import + :root token mirror + @theme inline
+    │   ├── (shell)/                   → route group: header + footer chrome
+    │   │   ├── layout.tsx             → SiteHeader / <main> / SiteFooter
+    │   │   ├── page.tsx               → Home: new meeting, join by code, sign in
+    │   │   └── history/page.tsx       → call history (Server Component, auth required)
+    │   ├── tokens/
+    │   │   └── page.tsx               → token specimen sheet; notFound() in production
     │   ├── auth/
     │   │   ├── callback/route.ts      → OAuth PKCE code → session exchange
     │   │   └── signout/route.ts       → sign out, redirect Home
-    │   ├── history/
-    │   │   └── page.tsx               → call history (Server Component, auth required)
     │   ├── room/[code]/
     │   │   ├── page.tsx               → resolves code, renders <RoomExperience/>
     │   │   └── not-found.tsx          → invalid or unknown room code
@@ -80,8 +86,9 @@ VideoCircle/
     │       ├── token/route.ts         → POST: mint a LiveKit AccessToken
     │       └── livekit/webhook/route.ts → POST: LiveKit participant/room events
     ├── components/
-    │   ├── ui/                        → shadcn primitives (button, dialog, sheet, …)
-    │   ├── home/                      → landing hero, join-by-code form, sign-in button
+    │   ├── ui/                        → shadcn primitives (button; others added per feature)
+    │   ├── shell/                     → wordmark, site header, site footer
+    │   ├── home/                      → hero, call preview, how-it-works, feature grid, join-by-code form
     │   ├── lobby/                     → self-preview, device pickers, pre-join controls
     │   ├── room/                      → grid, tiles, control bar, panels, reactions
     │   ├── chat/                      → encrypted chat panel, composer, message list
@@ -121,6 +128,7 @@ VideoCircle/
 | `src/app/api` | HTTP boundary: parse, authorize, delegate to `src/lib`, shape the response. Contains no React and no rendering logic. |
 | `src/components` | Presentation and local interaction state. Never reads `process.env` secrets, never constructs a Supabase admin client, never mints tokens, never talks to Postgres directly. |
 | `src/components/ui` | Unmodified-in-spirit shadcn primitives. No product concepts — nothing here may know what a meeting is. |
+| `src/components/shell` | The header/footer chrome rendered by the `(shell)` route group, plus the wordmark. Knows nothing about auth — the header takes a sign-in slot as a prop. |
 | `src/hooks` | Reusable client-side stateful logic bridging LiveKit/Web Crypto to React. No JSX. |
 | `src/lib` | Framework-agnostic logic and third-party client construction. Imports nothing from `src/components` or `src/app`. |
 | `src/lib/crypto` | All Web Crypto usage. No other folder may call `crypto.subtle` directly. |
@@ -657,7 +665,9 @@ export function apiError(code: string, message: string, status: number) {
 **Design**
 
 - Literal colour, radius, type-size, and easing values appear only in the `:root` and `@theme inline` blocks of `src/app/globals.css`; every other file uses Tailwind utilities.
-- The `:root` block is a mirror of `context/Design/colors_and_type.css` — brand values change by re-copying from the kit, never by hand-editing `globals.css`.
+- The `:root` block is a mirror of `context/Design/colors_and_type.css` — brand values change by re-copying from the kit, never by hand-editing `globals.css`. `_verify.mjs` compares three copies (kit, `library-docs.md`, `globals.css`) and fails `npm run lint` if any two disagree.
+- `@import 'tailwindcss'` stays above `:root` in `globals.css`. Kit tokens whose names collide with a Tailwind theme namespace (`--radius-*`, `--text-*`, `--leading-*`, `--tracking-*`, `--ease-*`) resolve only because `:root` cascades after the generated theme block. Asserted by `_verify.mjs`.
+- The footer renders from the `(shell)` route group only. `/room/[code]` sits outside it, so no call surface can inherit chrome.
 - The application uses exactly one typeface family. No file sets a `font-family` other than the `--font-mono` stack.
 - No emoji appear in any component, string constant, or piece of user-facing copy.
 - No `dark:` variants and no theme toggle exist — the application is dark-only.

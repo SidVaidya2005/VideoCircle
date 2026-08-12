@@ -48,7 +48,7 @@ to hardcode a value. Read `context/Design/README.md` in full before starting.
 
 **UI:**
 
-- App shell on warm near-black: header with the VideoCircle wordmark, sign-in slot, content region
+- App shell on warm near-black, rendered by a `(shell)` route group so `/room/[code]` cannot inherit it: header with the VideoCircle wordmark, sign-in slot, content region
 - Footer with the author byline and links — Source, LinkedIn, Email, Portfolio — as wide-tracked caps with dot separators, per `context/Design/preview/footer.html`. Rendered on Home and Call History only; **never inside the call**, where it would break the fixed-strip layout
 - The signature grid backdrop as a reusable `.grid-backdrop` surface, bleeding past its container
 - A tokens preview route (development only) showing every surface step, text step, radius, easing, and interaction state side by side with `context/Design/preview/*.html`
@@ -60,7 +60,7 @@ to hardcode a value. Read `context/Design/README.md` in full before starting.
 - `prefers-reduced-motion` reset block
 - Copy `context/Design/assets/mark.svg` into `public/brand/` for the favicon and OG tile. The wordmark renders as live text, not an image — see `context/Design/preview/logo.html`
 - Wire `context/Design/_adherence.eslint.mjs` into `eslint.config.mjs` (`_verify.mjs` is already in the `lint` script from feature 01)
-- Install the shadcn primitives needed downstream — button, dialog, sheet, dropdown-menu, tooltip, input, avatar, sonner — then restyle them to the kit: whisper borders, kit radii, drop shadows stripped
+- Install `button` and restyle it to the kit — whisper borders, kit radii, drop shadows stripped, `dark:` variants removed, every size at the 44px hit-area floor. Dialog, sheet, dropdown-menu, tooltip, input, avatar, and sonner are added by the feature that first mounts them, per `code-standards.md` → Dependencies
 - Adopt the kit's interaction states verbatim: white fill at rest for primary, `rgba(255,255,255,.05)` → `.1` for chips, inverted fill for active, asymmetric 50ms-in / 250ms-out hover transitions
 
 **Verify:** The preview route matches the kit's specimens; grepping `src/` for a hex
@@ -107,6 +107,11 @@ infinite recursion.
 **Verify:** Sign in, reload, close and reopen the tab — the session survives. Sign out clears it.
 
 ### 05 Home page
+
+> **The visual surface landed early, during feature 02** — hero, mock call
+> preview, how-it-works, and feature grid, per the Core Principle of building the
+> visible surface before the logic. What remains here is behaviour: the
+> join-by-code form, and wiring the two hero controls, which are currently inert.
 
 **UI:**
 
