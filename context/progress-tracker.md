@@ -19,7 +19,8 @@ progress, and what is next.
 
 **Phase:** Phase 1 — Identity and entry
 **Last completed:** 04 Google sign-in and session — verified end to end against a real Google account: sign in, session surviving reload and a tab close, sign out, and `profiles.display_name` holding a real name
-**Next:** 05 Home page — the join-by-code form and wiring the two inert hero controls
+**Last completed:** 05 Home page — join-by-code verified in a browser: a bare code and a pasted uppercase link both navigate, the `#k=` fragment arrives byte-identical, and a malformed code fires no request at all
+**Next:** 06 Create meeting and share link — `START A MEETING`, the chat key, and `POST /api/meetings`
 
 ---
 
@@ -35,7 +36,7 @@ progress, and what is next.
 ### Phase 1 — Identity and entry
 
 - [x] 04 Google sign-in and session
-- [ ] 05 Home page
+- [x] 05 Home page
 - [ ] 06 Create meeting and share link
 - [ ] Phase checkpoint — verify Phase 1 — Identity and entry is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
 
@@ -99,6 +100,7 @@ Open work carried out of Phase 0. Cleared as the feature that needs each arrives
 
 ## Key Decisions
 
+- **A fragment is never case-normalised.** `parseRoomCodeInput` lowercases the room code but splits the fragment off first: the chat key is base64url and case-sensitive, so normalising the whole pasted string would silently decode to the wrong bytes. Now an invariant in `architecture.md` → Encryption. (F05)
 - **The session is read server-side in the `(shell)` layout**, which makes Home and Call History dynamic. A client-side read would keep Home static at the cost of showing a signed-out header on every load before correcting — worst on exactly the cold free-tier load this project already fights. (F04)
 - **RLS helpers live in `private` and keep `EXECUTE` for `authenticated`** — the schema is what hides them; revoking the grant breaks every policy read. (F03)
 - **The expiry sweep has a 2-hour grace period**, resolving a contradiction in `architecture.md` between "closes open rows" and "skips meetings with open rows". (F03)
@@ -108,4 +110,3 @@ Open work carried out of Phase 0. Cleared as the feature that needs each arrives
 - **~70 tokens mirrored into `:root`, `@theme inline` is pure `var()`** — the radii, type scale, tracking and easings were previously unguarded literals. The 16-hue chromatic palette stays out until a feature earns a stop. (F02)
 - **shadcn primitives arrive per feature, not up front** — only `button` exists, restyled to the kit. (F02)
 - **TypeScript 6, not 7** — `typescript-eslint` hard-refuses TS 7 and takes all of `eslint-config-next` down with it. Three workarounds tested and rejected. Full reasoning in `constraints.md` → Tooling. (F01)
-- **Environment splits into `env.ts` (public) and `env.server.ts` (secrets)** — a single schema throws in the browser, because Next replaces non-public `process.env` reads with `undefined`. (F01)

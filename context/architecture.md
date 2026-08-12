@@ -51,10 +51,11 @@ filled in by the feature that needs it. Built so far:
 - **F02** — the `globals.css` token mirror, the `(shell)` route group, `src/components/{shell,home,ui}/`, `public/brand/`, the dev-only `/tokens` route
 - **F03** — `supabase/` with seven migrations, `src/lib/supabase/`, `src/middleware.ts`, `src/types/database.ts`
 - **F04** — `src/app/auth/{callback,signout}/`, `src/lib/auth/`, the header auth menu, and the `dropdown-menu` primitive
+- **F05** — `src/lib/room-code.ts`, `src/lib/parse-room-code.ts`, the hero's join-by-code form, and the `input` primitive
 
 Not yet built: everything under `room/`, `api/`, `hooks/`,
-`lib/{livekit,crypto}`, `lib/room-code.ts`, `types/meeting.ts`, the `history`
-page, and `render.yaml`.
+`lib/{livekit,crypto}`, `types/meeting.ts`, the `history` page, and
+`render.yaml`.
 
 ```
 VideoCircle/
@@ -97,7 +98,7 @@ VideoCircle/
     │       ├── token/route.ts         → POST: mint a LiveKit AccessToken
     │       └── livekit/webhook/route.ts → POST: LiveKit participant/room events
     ├── components/
-    │   ├── ui/                        → shadcn primitives (button, dropdown-menu; others added per feature)
+    │   ├── ui/                        → shadcn primitives (button, dropdown-menu, input; others added per feature)
     │   ├── shell/                     → wordmark, site header, site footer, auth menu
     │   ├── home/                      → hero, call preview, how-it-works, feature grid, join-by-code form, auth-error notice
     │   ├── lobby/                     → self-preview, device pickers, pre-join controls
@@ -122,6 +123,7 @@ VideoCircle/
     │   │   ├── chat-key.ts            → key generation, export, import, hash parsing
     │   │   └── chat-message.ts        → encrypt/decrypt the message envelope
     │   ├── room-code.ts               → generation and validation of meeting codes
+    │   ├── parse-room-code.ts         → pulls a code + opaque fragment out of a pasted code or link
     │   ├── api.ts                     → apiOk / apiError response helpers
     │   ├── constants.ts               → shared literals: data topics, caps, footer links
     │   ├── env.ts                     → Zod-parsed NEXT_PUBLIC_* access (safe anywhere)
@@ -681,6 +683,7 @@ export function apiError(code: string, message: string, status: number) {
 - The sole exception to "hash only" is the sign-in round trip, where the fragment is held in `sessionStorage` — same-origin, same-tab, never transmitted — and restored onto the URL with `history.replaceState` before any read. It is never placed in `next`, in OAuth `state`, or in any other parameter that reaches Google or our own server.
 - Every payload published to the `vc.chat` data-channel topic is the `Uint8Array` returned by `encryptChatMessage()`; plaintext is never passed to `publishData`.
 - Chat message contents are never persisted — not to Postgres, not to `localStorage`, not to `sessionStorage`.
+- A fragment is never case-normalised. The key is base64url and case-sensitive, so any code that lowercases or uppercases a string is responsible for splitting the fragment off first — see `parseRoomCodeInput`, which normalises the room code and leaves the fragment untouched. This failure is silent: the call still works and only chat is unreadable.
 - `crypto.subtle` is called only from files under `src/lib/crypto/`.
 - Cryptographic and room-code randomness comes from `crypto.getRandomValues` or `crypto.randomUUID`; `Math.random()` is never used to produce a code, key, nonce, or identity.
 

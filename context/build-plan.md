@@ -132,22 +132,38 @@ F03 deferred to here.
 
 > **The visual surface landed early, during feature 02** — hero, mock call
 > preview, how-it-works, and feature grid, per the Core Principle of building the
-> visible surface before the logic. What remains here is behaviour: the
-> join-by-code form, and wiring the two hero controls, which are currently inert.
+> visible surface before the logic. The header's two auth variants landed in F04.
+> What remains here is the join-by-code path.
 
 **UI:**
 
 - Hero explaining what VideoCircle is, with "New meeting" as the primary action
 - "Join with a code" input accepting either a bare code or a full pasted link
 - Inline validation for a malformed code
-- Signed-out and signed-in variants of the header
 - Responsive from 360px up
 
 **Logic:**
 
+- `src/lib/room-code.ts` — `generateRoomCode`, `isValidRoomCode`, `ROOM_CODE_PATTERN`
 - Parse a pasted link down to its code, preserving the `#k=` fragment if present
 - Client-side validation via `isValidRoomCode`
 - Navigate to `/room/[code]`, carrying the fragment through unchanged
+
+**Decisions, agreed before building:**
+
+- **Only the join path is wired.** The note above originally said "the two hero controls", which contradicted F06's own Logic list: `START A MEETING` needs `generateRoomCode`, a Web Crypto chat key, and `POST /api/meetings`, all three F06's. It stays inert until then, and F06 keeps its shape.
+- **The form replaces `JOIN AS GUEST` inline in the hero.** Once the input is on screen, a button whose job is to reveal it is a click toward something already visible. Two entry points, both immediate, and no dialog primitive to add and restyle.
+- **`src/lib/room-code.ts` lands whole, here rather than in F06**, with the shape/alphabet/collision tests F06's verify asks for. `architecture.md` defines it as one canonical block; splitting it across two features means editing the file twice and reviewing the 32-character alphabet reasoning twice. `generateRoomCode` is unused for exactly one feature.
+- **Navigating lands on a 404 until Phase 2, and that is the pass condition.** What this feature owns is the parse and the push; the URL bar — including the surviving fragment — is the observable.
+- **Parsing is permissive about origin, strict about the code.** Any string with a path segment matching `ROOM_CODE_PATTERN` yields that code, so a link pasted from the deployed site while running locally, or one carrying tracking parameters, still works. Input is trimmed and lowercased first: the alphabet is lowercase-only, and a code capitalised by an email client is not a malformed code.
+- **The fragment is opaque here.** Carried byte-for-byte from the pasted string to the destination URL, never parsed, decoded, logged, or validated — F17 owns reading it.
+- **Validation runs on submit, not on keystroke**, and typing clears a showing error, so the message can never contradict what is currently in the field.
+
+**Verify:** Unit tests for room-code shape, alphabet, and collision-freeness over a
+large sample, and for every input shape the parser accepts. In a browser: a bare code
+and a pasted link both navigate, a link ending `#k=TESTKEY` arrives with the fragment
+byte-identical, a code containing the forbidden `i` does not navigate, and submitting
+fires no network request at all.
 
 ### 06 Create meeting and share link
 
@@ -160,13 +176,12 @@ F03 deferred to here.
 
 **Logic:**
 
-- `src/lib/room-code.ts` — `generateRoomCode`, `isValidRoomCode`, `ROOM_CODE_PATTERN`
 - `src/lib/crypto/base64url.ts` and `chat-key.ts` — generate, export, import, read-from-hash
 - `POST /api/meetings` inserting the meeting row via `supabaseAdmin`, recording `created_by` when signed in and setting `expires_at`
 - On a unique-violation (`23505`) on `code`, regenerate server-side and retry once, then return `409`
 - Navigate to `/room/[code]#k=<key>`
 
-**Verify:** Unit tests for room-code shape, alphabet, and collision-freeness over a large sample; the created code appears in Postgres; the fragment appears in no server log or request.
+**Verify:** The created code appears in Postgres; the fragment appears in no server log or request. Room-code shape, alphabet, and collision tests landed with the module in F05.
 
 ---
 
