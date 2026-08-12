@@ -199,6 +199,11 @@
   --animate-level: vc-level 900ms var(--ease-in-out-quint) infinite;
   --animate-live-dot: vc-live-dot 2s var(--ease-in-out-quint) infinite;
 
+  /* Chrome motion — the header's dropdown. Not Home-only, but still outside the
+     call, where JS-driven animation is banned and CSS is the only option anyway.
+     One-shot on open: Radix unmounts on close, so there is no exit to animate. */
+  --animate-menu-in: vc-menu-in 150ms var(--ease-out-quint);
+
   /* ---- shadcn/ui aliases -------------------------------------------------
      Generated components reference these names. Aliasing them once here means
      a component is on-brand before it is touched, and no component ever needs
@@ -343,6 +348,21 @@ html {
   }
   50% {
     opacity: 0.25;
+  }
+}
+
+/* A dropdown grows from the corner Radix anchored it to — the transform origin is
+   the CSS variable Radix sets on the content element. Replaces shadcn's generated
+   `animate-in fade-in-0 zoom-in-95`, which are `tw-animate-css` utilities this
+   project does not import and which therefore did nothing. */
+@keyframes vc-menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 
