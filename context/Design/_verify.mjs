@@ -33,26 +33,65 @@ function check(name, fn) {
 const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
 
 /* ── 1. The token mirror ──────────────────────────────────────────────────
-   library-docs.md carries a copy of the kit's :root for globals.css. Two
-   copies of a literal is exactly what drifts — --shadow-soft already did. */
+   THREE copies of every token exist: the kit (the source), the block quoted in
+   library-docs.md (what an agent reads), and src/app/globals.css (what actually
+   renders). Three copies of a literal is exactly what drifts — --shadow-soft
+   already did once. All three must agree.
+
+   --font-mono is absent from every :root by design: the kit names the family
+   literally, the app needs the variable next/font generates, so it lives only in
+   the @theme inline block of globals.css and is never compared here. */
 check('token mirror matches the kit', () => {
   const css = read(join(KIT, 'colors_and_type.css'));
-  const lib = read(join(CTX, 'library-docs.md'));
-  const block = lib.match(/VideoCircle design tokens[\s\S]*?\n:root \{([\s\S]*?)\n\}/);
-  assert(block, 'could not find the mirrored :root block in library-docs.md');
+
+  const rootBlock = (text, label) => {
+    const block = text.match(/VideoCircle design tokens[\s\S]*?\n:root \{([\s\S]*?)\n\}/);
+    assert(block, `could not find the mirrored :root block in ${label}`);
+    return block[1];
+  };
 
   const decls = (s) => Object.fromEntries(
     [...s.matchAll(/(--[a-z0-9-]+):\s*([^;]+);/g)].map(m => [m[1], m[2].trim().toLowerCase()])
   );
-  const src = decls(css), mir = decls(block[1]);
 
-  const bad = Object.entries(mir).flatMap(([k, v]) => {
-    if (!(k in src)) return [`${k} is mirrored but no longer exists in the kit`];
-    if (src[k] !== v) return [`${k}: kit has "${src[k]}", library-docs has "${v}"`];
-    return [];
-  });
+  const src = decls(css);
+  const copies = [
+    ['library-docs', decls(rootBlock(read(join(CTX, 'library-docs.md')), 'library-docs.md'))],
+    ['globals.css', decls(rootBlock(read(join(ROOT, 'src/app/globals.css')), 'globals.css'))],
+  ];
+
+  const bad = copies.flatMap(([label, mir]) =>
+    Object.entries(mir).flatMap(([k, v]) => {
+      if (!(k in src)) return [`${label}: ${k} is mirrored but no longer exists in the kit`];
+      if (src[k] !== v) return [`${label}: ${k} — kit has "${src[k]}", ${label} has "${v}"`];
+      return [];
+    })
+  );
+
+  // Agreeing with the kit is not enough: one copy could silently omit a token
+  // the other carries, and a missing token fails at render, not here.
+  const [[, libMir], [, cssMir]] = copies;
+  for (const k of Object.keys(libMir)) if (!(k in cssMir)) bad.push(`${k} is in library-docs but missing from globals.css`);
+  for (const k of Object.keys(cssMir)) if (!(k in libMir)) bad.push(`${k} is in globals.css but missing from library-docs`);
+
   assert(!bad.length, bad.join('; '));
-  return `${Object.keys(mir).length} mirrored tokens in sync`;
+  return `${Object.keys(cssMir).length} tokens in sync across kit, library-docs, globals.css`;
+});
+
+/* ── 1b. Tailwind's import must precede our :root ─────────────────────────
+   Tailwind emits a self-referential `--radius-lg: var(--radius-lg)` for every
+   kit token whose name collides with one of its theme namespaces (radius, text,
+   leading, tracking, ease). Our :root resolves those only because it cascades
+   after. Reorder these two and the colliding tokens resolve to nothing — a
+   silent, wide-reaching breakage, so it is asserted rather than assumed. */
+check('globals.css imports tailwind above :root', () => {
+  const g = read(join(ROOT, 'src/app/globals.css'));
+  const imported = g.indexOf("@import 'tailwindcss'");
+  const rooted = g.indexOf(':root {');
+  assert(imported !== -1, "globals.css does not @import 'tailwindcss'");
+  assert(rooted !== -1, 'globals.css has no :root block');
+  assert(imported < rooted, "@import 'tailwindcss' must come before :root — see the comment in globals.css");
+  return 'cascade order correct';
 });
 
 /* ── 2. Specimens only use tokens that exist ─────────────────────────────── */

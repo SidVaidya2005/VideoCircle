@@ -2,11 +2,16 @@ import { defineConfig, globalIgnores } from 'eslint/config';
 import nextVitals from 'eslint-config-next/core-web-vitals';
 import nextTs from 'eslint-config-next/typescript';
 
-// The design-system adherence fragment (context/Design/_adherence.eslint.mjs) is
-// wired in during feature 02, alongside the tokens it enforces.
+// Enforces the design system's non-negotiables in src/**: no raw hex or colour
+// functions, no arbitrary token-covered values, no `dark:` variants, no
+// backdrop-blur, no emoji. It relies on the `react` plugin that nextVitals
+// registers, so it must be spread after it.
+import designAdherence from './context/Design/_adherence.eslint.mjs';
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  ...designAdherence,
   globalIgnores([
     // Defaults of eslint-config-next, restated because listing any ignore replaces them.
     '.next/**',

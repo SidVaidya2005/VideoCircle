@@ -500,52 +500,136 @@ upstream source. `@theme inline` maps them to readable Tailwind utilities. These
 are the only two places in the codebase where a literal value may appear.
 
 ```css
-/* src/app/globals.css */
+/* src/app/globals.css — reproduced in full. _verify.mjs compares this block,
+   the kit, and the real file, and fails the build if any two disagree. */
+/* The Tailwind import must stay ABOVE :root. Tailwind's generated theme block
+   emits a self-referential `--radius-lg: var(--radius-lg)` for every token whose
+   kit name collides with one of its own namespaces (radius, text, leading,
+   tracking, ease). Our :root wins only because it cascades after. Reordering
+   these two would leave those tokens resolving to nothing.
+   context/Design/_verify.mjs asserts this ordering. */
 @import 'tailwindcss';
 
-/* ---- VideoCircle design tokens — mirror of context/Design/colors_and_type.css :root.
-        Update by re-copying from the kit, never by hand-editing a value here. ---- */
+/* ---- VideoCircle design tokens ------------------------------------------
+   A mirror of the :root block in context/Design/colors_and_type.css, under the
+   kit's own variable names. To change a brand value, change it in the kit and
+   re-copy — never hand-edit a value here. _verify.mjs compares this block, the
+   kit, and the copy in library-docs.md, and fails the build if they disagree.
+
+   Deliberately omitted: the 16-hue chromatic palette (README calls it
+   "available, rarely correct"; add a stop here when a feature earns it), and
+   upstream's --br / --padding / --input-border-radius aliases, which duplicate
+   --radius-lg / --space-4 / --radius-xs.
+
+   --font-mono is the one token that legitimately diverges from the kit, so it
+   lives in @theme inline below rather than here: the kit names the family
+   literally, the app needs the variable next/font generates.
+   ------------------------------------------------------------------------ */
 :root {
-  /* Elevation ladder */
-  --bg-1: #252423;  /* page — warm near-black, never true black */
-  --bg-2: #2a2928;  /* card */
-  --bg-3: #2f2e2d;  /* raised */
-  --bg-4: #353433;  /* overlay */
-  --bg-5: #3a3938;  /* higher overlay */
+  /* --- Neutrals --- */
+  --white-1: #f6f4f2; /* active/engaged control fill — the inverted press state */
+  --white-2: #b8b6b3; /* that fill on hover */
 
-  /* Foreground ladder */
-  --fg-1: #dddcda;  /* primary text */
-  --fg-2: #c6c3c1;  /* secondary text */
-  --fg-3: #96918f;  /* tertiary / labels */
-  --fg-4: #65655e;  /* muted / disabled */
-  --fg-5: #33332e;  /* divider / border */
-
-  --white-1: #f6f4f2;  /* active-state fill */
-  --white-2: #b8b6b3;  /* active-state hover */
-
-  /* Signal + status */
+  /* --- Signal and status stops (the rest of each hue ladder is not mirrored) --- */
   --red-1: #ff4b4b;
   --red-4: #532a29;
   --red-5: #412726;
   --green-1: #6aff65;
   --yellow-1: #ffcc2a;
-  --accent-cyan: #4bfffd;
 
-  /* Grid backdrop */
+  /* --- Semantic backgrounds (ascending elevation) --- */
+  --bg-1: #252423; /* page — warm near-black, never true black */
+  --bg-2: #2a2928; /* card */
+  --bg-3: #2f2e2d; /* raised */
+  --bg-4: #353433; /* overlay */
+  --bg-5: #3a3938; /* higher overlay */
+
+  /* --- Semantic foregrounds (descending emphasis) --- */
+  --fg-1: #dddcda; /* primary text */
+  --fg-2: #c6c3c1; /* secondary text */
+  --fg-3: #96918f; /* tertiary / labels */
+  --fg-4: #65655e; /* muted / disabled */
+  --fg-5: #33332e; /* divider / border */
+
+  /* --- Signature accents --- */
+  --accent-red: var(--red-1); /* the signature dot + highlight */
+  --accent-cyan: #4BFFFD; /* logo burst lines — never repurposed for UI state */
+  --accent-green: #00FF5D; /* the 'final' logo green */
+
+  /* --- Shape --- */
+  --radius-xs: 0.25rem; /* inputs, small chips */
+  --radius-sm: 0.4rem; /* buttons */
+  --radius-md: 0.6rem; /* chip-style toggles */
+  --radius-lg: 1rem; /* cards / panels */
+  --radius-xl: 1.25rem; /* hero panels */
+  --radius-pill: 999px;
+
+  /* --- Spacing --- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  /* --- Type scale: terminal-feel, visible jumps --- */
+  --text-xs: 0.75rem; /* 12 — parameter legends, fine print */
+  --text-sm: 0.875rem; /* 14 — secondary labels */
+  --text-base: 1rem; /* 16 — body */
+  --text-md: 1.125rem; /* 18 — emphasis */
+  --text-lg: 1.25rem; /* 20 — small heads */
+  --text-xl: 1.5rem; /* 24 — h3 */
+  --text-2xl: 2rem; /* 32 — h2 */
+  --text-3xl: 2.5rem; /* 40 — h1 */
+  --text-4xl: 3.5rem; /* 56 — hero */
+  --text-5xl: 5rem; /* 80 — monumental */
+
+  --leading-tight: 1.1;
+  --leading-snug: 1.25;
+  --leading-normal: 1.5;
+
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.06em; /* the signature overline gesture */
+  --tracking-wider: 0.12em;
+
+  /* --- Borders + strokes. Dashed and dotted are for measurement contexts only. --- */
+  --border-subtle: 1px solid rgba(255, 255, 255, 0.08);
+  --border-soft: 1px solid rgba(255, 255, 255, 0.15);
+  --border-dashed: 1px dashed rgba(255, 255, 255, 0.5);
+  --border-dotted: 1px dotted rgba(255, 255, 255, 0.5);
+
+  /* --- Grid lines (the signature "scope on grid" backdrop) --- */
   --grid-line-major: rgba(255, 255, 255, 0.05);
   --grid-line-minor: rgba(255, 255, 255, 0.04);
 
-  /* Functional shadows only */
+  /* --- Shadows. Functional only — never a depth cue. --- */
   --shadow-soft: 0 10px 10px 0 var(--bg-1);
   --shadow-ring: 0 0 0 1px rgba(255, 255, 255, 0.1);
   --glow-red: 0 0 24px rgba(255, 75, 75, 0.5);
+  --glow-cyan: 0 0 24px rgba(75, 255, 253, 0.4);
 
-  /* Video scrims — text over live video never sits on bare pixels */
+  /* --- Video scrims. Text over live video never sits on bare pixels. --- */
   --scrim-tile: linear-gradient(to top, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0) 100%);
   --scrim-flat: rgba(0, 0, 0, 0.5);
   --scrim-tile-height: 33%;
+
+  /* --- Motion: the brand's own curves --- */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-quint: cubic-bezier(0.83, 0, 0.17, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 600ms;
 }
 
+/* ---- Tailwind utility names ---------------------------------------------
+   Maps the kit's variables onto readable utilities. Together with :root above,
+   these are the only two blocks in the codebase where a literal value may
+   appear. Everything else consumes utilities.
+   ------------------------------------------------------------------------ */
 @theme inline {
   /* Surfaces → bg-canvas, bg-card, bg-raised, bg-overlay, bg-lifted */
   --color-canvas: var(--bg-1);
@@ -561,9 +645,11 @@ are the only two places in the codebase where a literal value may appear.
   --color-faint: var(--fg-4);
   --color-line: var(--fg-5);
 
+  /* The engaged state of a control is a white fill, never red. */
   --color-active: var(--white-1);
   --color-active-hover: var(--white-2);
 
+  /* Red is the Leave control and your own muted state. Nothing else. */
   --color-signal: var(--red-1);
   --color-signal-dim: var(--red-4);
   --color-signal-faint: var(--red-5);
@@ -574,52 +660,115 @@ are the only two places in the codebase where a literal value may appear.
   /* One family. --font-jetbrains-mono is set by next/font in the root layout. */
   --font-mono: var(--font-jetbrains-mono), 'IoskeleyMono', 'IBM Plex Mono', ui-monospace, monospace;
 
-  /* Terminal type scale — visible jumps, no in-between sizes */
-  --text-xs: 0.75rem;
-  --text-sm: 0.875rem;
-  --text-base: 1rem;
-  --text-md: 1.125rem;
-  --text-lg: 1.25rem;
-  --text-xl: 1.5rem;
-  --text-2xl: 2rem;
-  --text-3xl: 2.5rem;
-  --text-4xl: 3.5rem;
-  --text-5xl: 5rem;
+  /* Line-height is always applied explicitly (leading-tight / snug / normal),
+     so these carry Tailwind's default pairings and nothing depends on them. */
+  --text-xs: var(--text-xs);
+  --text-sm: var(--text-sm);
+  --text-base: var(--text-base);
+  --text-md: var(--text-md);
+  --text-lg: var(--text-lg);
+  --text-xl: var(--text-xl);
+  --text-2xl: var(--text-2xl);
+  --text-3xl: var(--text-3xl);
+  --text-4xl: var(--text-4xl);
+  --text-5xl: var(--text-5xl);
 
-  --leading-tight: 1.1;
-  --leading-snug: 1.25;
-  --leading-normal: 1.5;
+  --leading-tight: var(--leading-tight);
+  --leading-snug: var(--leading-snug);
+  --leading-normal: var(--leading-normal);
 
-  --tracking-tight: -0.01em;
-  --tracking-wide: 0.06em;   /* the signature overline gesture */
-  --tracking-wider: 0.12em;
+  --tracking-tight: var(--tracking-tight);
+  --tracking-normal: var(--tracking-normal);
+  --tracking-wide: var(--tracking-wide);
+  --tracking-wider: var(--tracking-wider);
 
-  --radius-xs: 0.25rem;   /* inputs, small chips */
-  --radius-sm: 0.4rem;    /* buttons */
-  --radius-md: 0.6rem;    /* chip toggles */
-  --radius-lg: 1rem;      /* cards, panels */
-  --radius-xl: 1.25rem;   /* hero panels */
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-pill: var(--radius-pill);
 
-  /* The brand's own curves */
-  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-in-out-quint: cubic-bezier(0.83, 0, 0.17, 1);
-  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-quint: var(--ease-out-quint);
+  --ease-in-out-quint: var(--ease-in-out-quint);
+  --ease-out-expo: var(--ease-out-expo);
+
+  /* ---- shadcn/ui aliases -------------------------------------------------
+     Generated components reference these names. Aliasing them once here means
+     a component is on-brand before it is touched, and no component ever needs
+     to reach past them for a raw value.
+     --color-primary is WHITE, not red: the kit's engaged state is an inverted
+     white fill, and red stays reserved for destructive actions.
+     -------------------------------------------------------------------- */
+  --color-background: var(--bg-1);
+  --color-foreground: var(--fg-1);
+  --color-card-foreground: var(--fg-1);
+  --color-popover: var(--bg-4);
+  --color-popover-foreground: var(--fg-1);
+  --color-primary: var(--white-1);
+  --color-primary-foreground: var(--bg-1);
+  --color-secondary: var(--bg-3);
+  --color-secondary-foreground: var(--fg-1);
+  --color-accent: var(--bg-3);
+  --color-accent-foreground: var(--fg-1);
+  --color-muted-foreground: var(--fg-3);
+  --color-destructive: var(--red-1);
+  --color-destructive-foreground: var(--fg-1);
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-input: rgba(255, 255, 255, 0.08);
+  --color-ring: var(--white-1);
 }
 
 html {
   color-scheme: dark; /* native form controls and scrollbars render dark */
 }
 
-/* The signature double grid. Home, lobby, and empty states only — never over video. */
+/* The signature double grid — fine 10-unit subgrid over a 100-unit major grid.
+   Home, the lobby, and empty states only. NEVER behind or over live video: it
+   adds noise over faces and reads as compression artefacting. */
 .grid-backdrop {
   background-image:
     linear-gradient(var(--grid-line-minor) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line-minor) 1px, transparent 1px),
     linear-gradient(var(--grid-line-major) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line-major) 1px, transparent 1px);
-  background-size: 10px 10px, 10px 10px, 100px 100px, 100px 100px;
+  background-size:
+    10px 10px,
+    10px 10px,
+    100px 100px,
+    100px 100px;
 }
 
+/* The red square that dots the i in "videocircle". Sized in em so it tracks the
+   wordmark at every size. Lives here rather than in the component because the
+   offsets are literals, and literals belong in this file.
+
+   `top` is 0.234em, not the 0.30em in preview/logo.html. That specimen was
+   authored against IoskeleyMono; we ship JetBrains Mono, whose metrics differ,
+   and at 0.30em the square lands exactly on the x-height and collides with the
+   glyph. Derived from the shipped face, measured via canvas TextMetrics:
+     font ascent            1.020em above the baseline (top of the inline box)
+     dotted "i" tittle top  0.786em above the baseline
+     dotless "ı" ink top    0.550em above the baseline (x-height)
+   so top = 1.020 - 0.786 = 0.234em puts the square where the real tittle sits,
+   clearing the stem by 0.066em. Design/README.md is the specification and the
+   specimens are sketches, so matching the intent beats copying the number. */
+.wordmark-i {
+  position: relative;
+}
+
+.wordmark-i::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0.234em;
+  width: 0.17em;
+  height: 0.17em;
+  transform: translateX(-50%);
+  background: var(--red-1);
+}
+
+/* Keep opacity changes, drop transforms and staggers. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -627,6 +776,7 @@ html {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 ```

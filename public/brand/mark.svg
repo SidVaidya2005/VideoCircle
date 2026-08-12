@@ -1,0 +1,22 @@
+<!--
+  VideoCircle compact mark: favicon, OG tile, avatar fallback.
+
+  Pure geometry, no text. This is the one asset that must survive at 16px,
+  so it carries no type.
+
+  Colours are literals because an SVG file cannot read CSS custom properties
+  from globals.css. They are the same values as the bg-1, red-1, and
+  shadow-ring tokens in colors_and_type.css. Keep them in sync by hand.
+  (Token names appear here without their CSS prefix: an XML comment may not
+  contain a double hyphen.)
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="VideoCircle">
+  <title>VideoCircle</title>
+
+  <!-- warm near-black ground with the kit's ring, never a drop shadow -->
+  <rect x="0.5" y="0.5" width="63" height="63" rx="12"
+        fill="#252423" stroke="rgba(255,255,255,0.1)" stroke-width="1" />
+
+  <!-- the signal dot. Square, not round: the kit's mark is a square. -->
+  <rect x="20" y="20" width="24" height="24" fill="#ff4b4b" />
+</svg>
