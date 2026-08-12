@@ -177,11 +177,25 @@ fires no network request at all.
 **Logic:**
 
 - `src/lib/crypto/base64url.ts` and `chat-key.ts` — generate, export, import, read-from-hash
-- `POST /api/meetings` inserting the meeting row via `supabaseAdmin`, recording `created_by` when signed in and setting `expires_at`
-- On a unique-violation (`23505`) on `code`, regenerate server-side and retry once, then return `409`
+- `POST /api/meetings` generating the code, inserting the meeting row via `supabaseAdmin`, and recording `created_by` when signed in
+- On a unique-violation (`23505`) on `code`, regenerate and retry once, then return `409`
 - Navigate to `/room/[code]#k=<key>`
 
-**Verify:** The created code appears in Postgres; the fragment appears in no server log or request. Room-code shape, alphabet, and collision tests landed with the module in F05.
+**Decisions, agreed before building:**
+
+- **The server is the only room-code generator.** The client POSTs an empty body and trusts the returned code. The collision retry already regenerates server-side, so a client navigating to the code *it* sent would land on the wrong room — a bug that surfaces only on a collision, which is to say almost never, which is to say it would ship. `architecture.md`'s creation flow was corrected to match.
+- **The share panel replaces the hero's action area on Home**, rather than the user being pushed straight to the room. It is the only place this feature's UI can live, since `/room/[code]` does not exist until Phase 2 — and it matches the product, where the link is the deliverable. `JOIN NOW` is what finally navigates.
+- **Copy confirms inline on the button, not with a toast.** shadcn's toast is now `sonner`, which is not on `code-standards.md`'s approved list; a browser-bundle dependency is not worth one confirmation that belongs on the control anyway.
+- **`expires_at` comes from the column default, never the insert payload.** The 24-hour window is declared once in the migration and read by `/api/token` and the sweep; writing it again in application code would put the same literal in two places, free to drift.
+- **The exported key lives in client-only `useState`** and never crosses a Server Component boundary as a prop — `library-docs.md` → Web Crypto forbids copying it into state that could be serialized. It is generated, exported once, and the `CryptoKey` itself discarded: this feature never encrypts anything.
+- **This is the first feature to import `supabaseAdmin`**, and therefore the first that needs `SUPABASE_SERVICE_ROLE_KEY`. `env.server.ts` parses at module load, so a blank key throws on import rather than at request time.
+
+**Verify:** The created code appears in Postgres with `created_by` null for a guest and
+set when signed in, `expires_at` about 24 hours out. The request body is `{}` and the
+response is `{ code }` — no key material in either, and none in the server log. Copy
+yields exactly `${NEXT_PUBLIC_SITE_URL}/room/<code>#k=<key>`, and `JOIN NOW` arrives
+with that fragment intact. Room-code shape, alphabet, and collision tests landed with
+the module in F05.
 
 ---
 
@@ -233,6 +247,7 @@ fires no network request at all.
 - `POST /api/token` — Zod validation, then **meeting-state check before minting**: 404 unknown code, 410 ended, 410 expired
 - `getUser()`, identity resolution (`user:<uuid>` / `guest:<uuid>`), `mintAccessToken`
 - `src/lib/livekit/token.ts` with the `min(1h, expires_at − now)` TTL cap and single-room grant
+- A `server-only` env module parsing `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`. They were dropped from `env.server.ts` in F06, because one shared secret schema made `/api/meetings` fail to build over credentials it never uses — see `code-standards.md` → Environment Variables
 - Lobby transitions to the connected state, passing the chosen mic/camera state into `<LiveKitRoom>`
 
 **Verify:** Decode the returned JWT and confirm the grant names exactly one room and

@@ -149,7 +149,7 @@ VideoCircle/
 | `src/lib` | Framework-agnostic logic and third-party client construction. Imports nothing from `src/components` or `src/app`. |
 | `src/lib/auth` | Sign-in entry points and the redirect validation the callback depends on. `sign-in.ts` is `'use client'` — it is the only module that touches the chat-key stash. |
 | `src/lib/crypto` | All Web Crypto usage. No other folder may call `crypto.subtle` directly. |
-| `src/lib/env.server.ts` | The only place secrets are read out of `process.env`. `import 'server-only'` on line one. |
+| `src/lib/env.*.server` modules | The only place secrets are read out of `process.env`, one module per service so an absent credential fails only its own consumers. `import 'server-only'` on line one. `env.server.ts` is Supabase's; LiveKit's arrives in F09. |
 | `src/lib/supabase/admin.ts` | The only consumer of `serverEnv.SUPABASE_SERVICE_ROLE_KEY`. `import 'server-only'` on line one. |
 | `src/lib/livekit/token.ts` | The only place `serverEnv.LIVEKIT_API_SECRET` is used for signing. |
 | `src/types` | Shared type declarations only. No runtime values, no logic. |
@@ -165,17 +165,24 @@ VideoCircle/
 
 ```
 Home page · "New meeting" (client)
-  → generateRoomCode()               (crypto.getRandomValues, browser)
   → generateChatKey() + exportChatKey()  (Web Crypto, browser — key never leaves)
-  → POST /api/meetings { code }
-      → route handler validates code shape
+  → POST /api/meetings {}
       → reads session via createServerClient (may be null for a guest)
+      → generateRoomCode()             (crypto.getRandomValues, server)
       → supabaseAdmin.insert into meetings { code, created_by }
-      → on 23505 (unique violation on code): regenerate server-side and retry once,
-        then 409. A real collision needs ~33M meetings at 50 bits, so a second
-        failure means a bug, not bad luck — fail loudly rather than looping.
+        expires_at comes from the column default, never the payload — the 24-hour
+        window is declared once, in the migration.
+      → on 23505 (unique violation on code): regenerate and retry once, then 409.
+        A real collision needs ~33M meetings at 50 bits, so a second failure means
+        a bug, not bad luck — fail loudly rather than looping.
       → 201 { code }
-  → router.push(`/room/${code}#k=${exportedKey}`)
+  → share panel renders `${NEXT_PUBLIC_SITE_URL}/room/${code}#k=${exportedKey}`
+  → "Join now" → router.push(`/room/${code}#k=${exportedKey}`)
+
+The server is the only generator, and the browser uses the code it is given. If the
+client generated the code and the server regenerated it on a collision, the client
+would navigate to a room it does not own — a bug that appears only on a collision,
+and so would not appear until it mattered.
 ```
 
 ### Joining a call
@@ -669,9 +676,10 @@ export function apiError(code: string, message: string, status: number) {
 
 **Secrets and privilege**
 
-- Secrets leave `process.env` in exactly one file, `src/lib/env.server.ts`, which begins with `import 'server-only'`. Nothing else reads `process.env.SUPABASE_SERVICE_ROLE_KEY`, `process.env.LIVEKIT_API_KEY`, or `process.env.LIVEKIT_API_SECRET`.
+- Secrets leave `process.env` only inside a `server-only` env module under `src/lib`, **one per service**: `env.server.ts` holds Supabase's service-role key, and LiveKit's pair gets its own module in F09. Nothing outside those modules reads `process.env.SUPABASE_SERVICE_ROLE_KEY`, `process.env.LIVEKIT_API_KEY`, or `process.env.LIVEKIT_API_SECRET`.
+- **One schema per service, not one for all secrets.** Each module parses at import so a misconfigured deploy fails at boot rather than at first request — but a single shared schema makes every consumer fail on every other service's absent credential. `/api/meetings` does not call LiveKit and must not fail to build because LiveKit is unconfigured; in production the same coupling would take meeting creation down during a LiveKit key rotation.
 - `serverEnv.SUPABASE_SERVICE_ROLE_KEY` is consumed in exactly one file, `src/lib/supabase/admin.ts`, which also begins with `import 'server-only'`.
-- `serverEnv.LIVEKIT_API_SECRET` is consumed only in `src/lib/livekit/token.ts` and `src/lib/livekit/webhook.ts`, both `server-only`.
+- The LiveKit API secret is consumed only in `src/lib/livekit/token.ts` and `src/lib/livekit/webhook.ts`, both `server-only`.
 - `src/lib/env.ts` holds `NEXT_PUBLIC_*` values only and never a secret, which is what makes it safe to import from a Client Component. Adding a secret to it would ship that secret to every visitor.
 - No file containing the `'use client'` directive, and no file under `src/components/` or `src/hooks/`, reads any environment variable that is not prefixed `NEXT_PUBLIC_`.
 - LiveKit access tokens are minted only inside `src/app/api/token/route.ts`; the browser never constructs, signs, or extends a token.
@@ -729,6 +737,6 @@ export function apiError(code: string, message: string, status: number) {
 
 - Nothing under `src/lib/` imports from `src/components/` or `src/app/`.
 - Nothing under `src/components/ui/` references a product concept such as a meeting, participant, or room.
-- Route handlers under `src/app/api/` validate their request body with a Zod schema before touching any other code.
+- Route handlers under `src/app/api/` that accept a request body validate it with a Zod schema before touching any other code. A handler that takes no input says so in a comment rather than parsing an empty schema for the look of it — `/api/meetings` is the one such handler.
 - Route handlers under `src/app/api/` return either `apiOk(data)` or `apiError(code, message, status)` and never a bare `Response` or an unshaped object. The `/auth/*` handlers are the deliberate exception and the only one: they are navigated to by the browser rather than fetched, so they answer with a redirect — a JSON body would render to the user as text.
 - Every page and panel is usable at a 360px viewport width with no horizontal scroll.

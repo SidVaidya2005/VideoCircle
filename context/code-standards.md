@@ -496,12 +496,20 @@ misconfigured deploy fails immediately and loudly rather than at first request.
 | `LIVEKIT_API_KEY` | `src/lib/livekit/token.ts`, `src/lib/livekit/webhook.ts` | **Yes** |
 | `LIVEKIT_API_SECRET` | `src/lib/livekit/token.ts`, `src/lib/livekit/webhook.ts` | **Yes** |
 
-**Two modules, split by secrecy.** The four `NEXT_PUBLIC_*` values are parsed in
-`src/lib/env.ts`, which is safe to import anywhere. The three secrets are parsed in
-`src/lib/env.server.ts`, which begins with `import 'server-only'`. The split is not
-stylistic: Next replaces non-public `process.env` reads with `undefined` in the
-browser, so a single schema covering both would throw the moment any Client
-Component imported it — including `src/lib/supabase/client.ts`.
+**Split twice: by secrecy, then by service.** The four `NEXT_PUBLIC_*` values are
+parsed in `src/lib/env.ts`, which is safe to import anywhere. Secrets are parsed in
+`server-only` modules — `src/lib/env.server.ts` holds Supabase's service-role key,
+and LiveKit's pair gets its own module in feature 09.
+
+Neither split is stylistic. **By secrecy:** Next replaces non-public `process.env`
+reads with `undefined` in the browser, so a single schema covering both would throw
+the moment any Client Component imported it — including `src/lib/supabase/client.ts`.
+**By service:** these modules parse at import so a misconfigured deploy fails at
+boot rather than at first request, which means one shared secret schema makes every
+consumer fail on every other service's missing credential. That is not hypothetical —
+it blocked `/api/meetings`, which never calls LiveKit, from building at all while the
+LiveKit keys were blank, and in production it would take meeting creation down
+during a LiveKit key rotation.
 
 - A `NEXT_PUBLIC_` prefix means the value is compiled into the client bundle and is visible to anyone. Never add that prefix to a secret.
 - `src/middleware.ts` is the single exception to reading env through `env`: it runs in the Edge runtime under a bundle-size budget, and importing the Zod-parsed module would pull Zod in with it. It may read the two `NEXT_PUBLIC_` Supabase values from `process.env` directly, and nothing else.
