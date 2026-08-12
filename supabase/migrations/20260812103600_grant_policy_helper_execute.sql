@@ -1,0 +1,21 @@
+-- Grants EXECUTE on the RLS helper back to `authenticated`.
+--
+-- The previous RLS migration revoked it, following the general advice to make
+-- security definer helpers uncallable by client roles. That advice is correct
+-- for helpers invoked from application code. It is WRONG for a helper invoked
+-- from inside a policy: Postgres evaluates a policy expression as the calling
+-- user, so `authenticated` needs EXECUTE or every read fails with
+--
+--     ERROR: 42501: permission denied for function is_meeting_participant
+--
+-- Verified by hitting exactly that error before adding this grant.
+--
+-- Nothing is weakened by granting it. The isolation comes from the schema, not
+-- the grant: `private` is not in PostgREST's exposed schemas, so the function has
+-- no HTTP surface and cannot be reached as RPC regardless of who holds EXECUTE.
+-- And the function answers only about its caller — auth.uid() is checked inside
+-- the body — so calling it reveals nothing the caller could not already read.
+grant execute on function private.is_meeting_participant(uuid) to authenticated;
+
+-- anon keeps nothing: an unauthenticated visitor has no participation rows, and
+-- every policy is scoped `to authenticated` anyway.
