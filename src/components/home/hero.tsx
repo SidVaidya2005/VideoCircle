@@ -7,10 +7,10 @@ import { Button } from '@/components/ui/button';
  * The landing hero.
  *
  * The two controls are deliberately inert for now — "New meeting" needs
- * `/api/meetings` (feature 06) and Supabase (feature 03), and sign-in needs
- * feature 04. build-plan.md's Core Principle is to build the visible surface
- * first and wire the logic behind it, so they are styled and placed but do
- * nothing yet.
+ * `/api/meetings` (feature 06) and "Join with a code" needs feature 05.
+ * build-plan.md's Core Principle is to build the visible surface first and wire
+ * the logic behind it, so they are styled and placed but do nothing yet.
+ * Sign-in is live as of feature 04, and lives in the header rather than here.
  *
  * TODO: wire "New meeting" to POST /api/meetings in feature 06.
  * TODO: wire "Join with a code" to the join-by-code form in feature 05.
