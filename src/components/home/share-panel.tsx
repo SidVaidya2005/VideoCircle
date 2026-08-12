@@ -88,13 +88,18 @@ export function SharePanel({ code, chatKey }: SharePanelProps) {
         </Button>
       </div>
 
-      {/* Announced rather than merely shown: the button's own label change is easy
-          to miss, and the failure path needs to reach a screen reader too. */}
+      {/* Success is announced politely — the button's own label change is easy to
+          miss. Failure is an alert, matching every other control here that fails in
+          response to something the user just did. */}
       <p role="status" aria-live="polite" className="sr-only">
         {copied ? 'Link copied to the clipboard.' : ''}
       </p>
 
-      {copyFailed ? <p className="text-ink-2 text-xs leading-normal">{COPY_FAILED}</p> : null}
+      {copyFailed ? (
+        <p role="alert" className="text-ink-2 text-xs leading-normal">
+          {COPY_FAILED}
+        </p>
+      ) : null}
 
       <p className="text-ink-2 text-xs leading-normal">
         This link carries the chat key after the <code className="text-ink">#</code>. Send it as

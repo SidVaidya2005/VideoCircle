@@ -52,7 +52,7 @@ export function AuthMenu({ account }: AuthMenuProps) {
         </Button>
         {failed ? (
           // Not `signal` red: that is reserved for Leave and your own muted state.
-          <p role="status" className="text-ink-2 max-w-48 text-right text-xs leading-snug">
+          <p role="alert" className="text-ink-2 max-w-48 text-right text-xs leading-snug">
             {SIGN_IN_FAILED}
           </p>
         ) : null}
