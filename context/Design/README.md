@@ -54,10 +54,15 @@ upstream itself names as the closest match.
 
 ## The mark
 
-The wordmark is `videocircle`, lowercase, in the brand mono, with a **red square
-dotting the i in "circle"** — the same gesture upstream uses on the `i` in its own
-wordmark, applied to our name. The glyph is U+0131 DOTLESS I so the red square is
-the only tittle.
+The wordmark is `VideoCircle`, PascalCase, in the brand mono, with a **red square
+dotting both i's** — the same gesture upstream uses on the `i` in its own
+wordmark, applied to our name and doubled. Each i is U+0131 DOTLESS I so the red
+square is the only tittle on that letter; an ordinary `i` would keep its own dot
+underneath the square.
+
+This is the one place red appears twice on a single element, and it stays within
+"used sparingly" because the mark is not UI: it carries no state, so it cannot
+compete with the Leave control or a muted-mic warning for meaning.
 
 **In the app, render it as live text, not an image.** It is a mono wordmark, so
 real text stays crisp at every size, scales with the type ramp, and is readable

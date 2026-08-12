@@ -18,14 +18,17 @@
     display:inline-flex;
     align-items:flex-start;
   }
-  /* U+0131 dotless i, so the red square is the only tittle */
+  /* U+0131 dotless i on BOTH i's, so each red square is the only tittle */
   .wordmark .i{position:relative}
   .wordmark .i::before{
     content:'';
     position:absolute;
-    left:50%;
+    /* 0.25em, not 50%: JetBrains Mono centres the i stem at 0.245em while the
+       0.6em advance box centres at 0.3em, so a box-centred square hangs right
+       of the letter. Measured; see src/app/globals.css. */
+    left:.25em;
     transform:translateX(-50%);
-    top:.30em;
+    top:.235em;  /* measured; see src/app/globals.css */
     width:.17em;
     height:.17em;
     background:var(--red-1);   /* the one signal colour on the mark */
@@ -38,8 +41,8 @@
 </style></head><body>
 
 <div>
-  <div class="lbl">wordmark — live text, one family, lowercase</div>
-  <div class="wordmark">videoc<span class="i">&#x0131;</span>rcle</div>
+  <div class="lbl">wordmark — live text, one family, PascalCase, both i&#39;s dotted</div>
+  <div class="wordmark">V<span class="i">&#x0131;</span>deoC<span class="i">&#x0131;</span>rcle</div>
 </div>
 
 <div>
@@ -47,8 +50,8 @@
   <div class="row">
     <div class="mark"><i></i></div>
     <div class="sizes">
-      <span class="wordmark" style="font-size:var(--text-lg)">videoc<span class="i">&#x0131;</span>rcle</span>
-      <span class="wordmark" style="font-size:var(--text-base)">videoc<span class="i">&#x0131;</span>rcle</span>
+      <span class="wordmark" style="font-size:var(--text-lg)">V<span class="i">&#x0131;</span>deoC<span class="i">&#x0131;</span>rcle</span>
+      <span class="wordmark" style="font-size:var(--text-base)">V<span class="i">&#x0131;</span>deoC<span class="i">&#x0131;</span>rcle</span>
     </div>
   </div>
 </div>
