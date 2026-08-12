@@ -44,4 +44,19 @@ At that phase's checkpoint, the whole phase collapses to:
 
 -->
 
-_Nothing yet — build not started._
+## Phase 0 — Foundation
+
+### Feature 01 — Project scaffold and tooling  *(2026-08-12)*
+
+- Decision: **TypeScript 6.0.3, not 7.** `typescript-eslint` carries a runtime guard that throws on TS 7 and aborts ESLint from inside `eslint-config-next`'s entry point, so the entire config dies rather than just the typed rules. Three alternatives were tested in a scratch project before deciding: npm `overrides` (silences the peer warning, not the guard); the official `@typescript/typescript6` side-by-side shim (ESLint works, but `next build` then reports "you do not have the required package(s) installed"); and a nested TS 6 under `typescript-eslint` via overrides (npm will not nest a peer dependency). Promoted to `constraints.md` → Tooling.
+- Decision: **ESLint 9, not 10.** Independent of TypeScript — `eslint-plugin-react` inside `eslint-config-next` calls the pre-10 rule context API and throws `contextOrFilename.getFilename is not a function`.
+- Decision: **`env` split into `env.ts` (public) and `env.server.ts` (secrets).** The single schema documented in `library-docs.md` would have thrown on the first browser import of `src/lib/supabase/client.ts`, since Next replaces non-public `process.env` reads with `undefined` client-side. `architecture.md`, `code-standards.md`, and `library-docs.md` were corrected.
+- Decision: **`globals.css` ships almost empty.** The token mirror lands whole in F02; a half-copied mirror is the drift the mirror rule exists to prevent. Placeholder Home is deliberately unstyled until then.
+- Decision: **`_verify.mjs` wired into `lint` at F01**, matching the script's own header rather than `build-plan.md`'s F02 note. `build-plan.md` corrected.
+- Gotcha: **`create-next-app` refuses a directory containing `CLAUDE.md`, `context/`, or `README.md`** — its conflict allowlist covers only `.git`, `.gitignore`, `LICENSE`, `.vscode`, `docs` and similar. Scaffolded into a scratch directory and copied the configs across.
+- Gotcha: **`z.url()` accepts `localhost:3000`**, parsing it as a URL whose scheme is `localhost`. Caught by a unit test that was expected to pass and failed. Both public URL fields now carry a `protocol` option; the same weakness was in `library-docs.md` and has been fixed there.
+- Gotcha: **Turbopack inferred a project root above the repository** because of a stray `package-lock.json` in the home directory. Pinned `turbopack.root` in `next.config.ts`.
+- Gotcha: `vitest.config.ts` triggered a Vite config-loader warning about ESM in a CJS-loaded file; renamed to `.mts`, which `tsconfig.json` already includes.
+- Gotcha: `next dev` appends a `nextjs-agent-rules` block to `CLAUDE.md` and re-adds it if removed. Left in place; it is meant to be committed.
+- Verified: from `rm -rf node_modules package-lock.json && npm install` — `typecheck`, `lint`, `test` (8 passing), `build`, and `test:e2e` (2 passing) all exit 0. `npm run start` serves Home at HTTP 200. `build` succeeds with **no `.env.local`**, because nothing yet imports `env`.
+- Verified adversarially, since a gate that passes on clean code proves nothing: `_verify.mjs` fails on a deliberately drifted token; ESLint errors on a deliberate `any`; `next build` fails with a `server-only` error when a Client Component imports `env.server.ts`. The `@/*` alias resolves under `tsc`, Vitest, and Turbopack.

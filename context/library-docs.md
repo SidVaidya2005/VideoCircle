@@ -442,7 +442,7 @@ export async function GET(request: NextRequest) {
 - MCP and the CLI are aids to *authoring and verifying* those files, not a substitute for them. Avoid `apply_migration` while a schema is still in flux: it writes straight to the remote project, so an iteration loop leaves a trail of half-right migrations you then have to reconcile by hand. Settle the schema locally or on a branch, then commit one clean migration.
 - After any migration, check RLS and security findings — via `get_advisors` if the MCP server is available, otherwise by reviewing policies directly — and fix them before moving on. This project's RLS is easy to get subtly wrong; see the recursion note in `architecture.md`.
 - Regenerate `src/types/database.ts` after every migration so the typed client stays honest.
-- Supabase's newer publishable/secret key names are drop-in replacements for anon/service-role. If you migrate to them, change `src/lib/env.ts` and `.env.example` together and update the table in `code-standards.md`.
+- Supabase's newer publishable/secret key names are drop-in replacements for anon/service-role. If you migrate to them, change `src/lib/env.ts` (publishable) and `src/lib/env.server.ts` (secret) alongside `.env.example`, and update the table in `code-standards.md`.
 
 ---
 
@@ -771,27 +771,48 @@ All usage is confined to `src/lib/crypto/`. The canonical implementations of
 
 ### Environment parsing
 
+Environment is parsed in **two** modules, split by secrecy. A single schema
+covering both would crash in the browser: Next replaces non-public `process.env`
+reads with `undefined` client-side, so `parse` would throw the moment any Client
+Component imported it — `src/lib/supabase/client.ts` among them.
+
 ```ts
-// src/lib/env.ts
+// src/lib/env.ts — NEXT_PUBLIC_* only. Safe to import anywhere.
 import { z } from 'zod';
 
-const EnvSchema = z.object({
-  NEXT_PUBLIC_SITE_URL: z.url(),
-  NEXT_PUBLIC_SUPABASE_URL: z.url(),
+// The protocol constraints are load-bearing: a bare z.url() accepts
+// "localhost:3000" — a valid URL whose scheme is "localhost" — which would pass
+// validation and then break every OAuth redirect and share link built from it.
+const PublicEnvSchema = z.object({
+  NEXT_PUBLIC_SITE_URL: z.url({ protocol: /^https?$/ }),
+  NEXT_PUBLIC_SUPABASE_URL: z.url({ protocol: /^https?$/ }),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
-  NEXT_PUBLIC_LIVEKIT_URL: z.string().startsWith('wss://'),
+  NEXT_PUBLIC_LIVEKIT_URL: z.url({ protocol: /^wss$/ }),
+});
+
+// Next inlines NEXT_PUBLIC_* at build time only for statically written references,
+// so each one must be spelled out rather than spread from process.env.
+export const env = PublicEnvSchema.parse({
+  NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
+  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  NEXT_PUBLIC_LIVEKIT_URL: process.env.NEXT_PUBLIC_LIVEKIT_URL,
+});
+```
+
+```ts
+// src/lib/env.server.ts — secrets. Never reaches the browser.
+import 'server-only';
+
+import { z } from 'zod';
+
+const ServerEnvSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   LIVEKIT_API_KEY: z.string().min(1),
   LIVEKIT_API_SECRET: z.string().min(1),
 });
 
-// Next.js inlines NEXT_PUBLIC_* at build time only for statically written
-// references, so each one must be spelled out rather than spread from process.env.
-export const env = EnvSchema.parse({
-  NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
-  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  NEXT_PUBLIC_LIVEKIT_URL: process.env.NEXT_PUBLIC_LIVEKIT_URL,
+export const serverEnv = ServerEnvSchema.parse({
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   LIVEKIT_API_KEY: process.env.LIVEKIT_API_KEY,
   LIVEKIT_API_SECRET: process.env.LIVEKIT_API_SECRET,
@@ -803,7 +824,10 @@ export const env = EnvSchema.parse({
 - Every route handler validates its body with `safeParse` and returns `apiError('invalid_request', …, 400)` on failure. Never `parse` a request body — a throw there becomes a 500 for what is really a 400.
 - Never return Zod's error object to the client; it describes internal field names.
 - Zod 4 moved string formats to top-level functions: `z.url()`, `z.email()`, `z.uuid()`. `z.string().url()` is deprecated.
-- `src/lib/env.ts` is the one place `parse` (throwing) is correct — a misconfigured deploy should fail at boot, loudly.
+- `z.url()` alone only checks that `new URL()` parses. Any URL that must be reachable over a particular scheme needs the `protocol` option.
+- These two files are the only places `parse` (throwing) is correct — a misconfigured deploy should fail at boot, loudly.
+- Never add a secret to `env.ts`. It is compiled into the client bundle, so a secret there ships to every visitor.
+- Because both parse at import time, a unit test must `vi.stubEnv` then `vi.resetModules()` **before** `await import()`, or it gets the previous test's cached module.
 
 ---
 

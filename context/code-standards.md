@@ -496,6 +496,13 @@ misconfigured deploy fails immediately and loudly rather than at first request.
 | `LIVEKIT_API_KEY` | `src/lib/livekit/token.ts`, `src/lib/livekit/webhook.ts` | **Yes** |
 | `LIVEKIT_API_SECRET` | `src/lib/livekit/token.ts`, `src/lib/livekit/webhook.ts` | **Yes** |
 
+**Two modules, split by secrecy.** The four `NEXT_PUBLIC_*` values are parsed in
+`src/lib/env.ts`, which is safe to import anywhere. The three secrets are parsed in
+`src/lib/env.server.ts`, which begins with `import 'server-only'`. The split is not
+stylistic: Next replaces non-public `process.env` reads with `undefined` in the
+browser, so a single schema covering both would throw the moment any Client
+Component imported it — including `src/lib/supabase/client.ts`.
+
 - A `NEXT_PUBLIC_` prefix means the value is compiled into the client bundle and is visible to anyone. Never add that prefix to a secret.
 - `src/middleware.ts` is the single exception to reading env through `env`: it runs in the Edge runtime under a bundle-size budget, and importing the Zod-parsed module would pull Zod in with it. It may read the two `NEXT_PUBLIC_` Supabase values from `process.env` directly, and nothing else.
 - Secrets are configured in the Render dashboard and listed in `render.yaml` with `sync: false`. They are never committed, and `.env.local` is git-ignored.

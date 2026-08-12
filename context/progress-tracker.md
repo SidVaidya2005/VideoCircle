@@ -18,8 +18,8 @@ progress, and what is next.
 ## Current Status
 
 **Phase:** Phase 0 — Foundation
-**Last completed:** Nothing yet — build not started
-**Next:** 01 Project scaffold and tooling
+**Last completed:** 01 Project scaffold and tooling — all six commands green on a clean install
+**Next:** 02 Design tokens and UI primitives
 
 ---
 
@@ -27,7 +27,7 @@ progress, and what is next.
 
 ### Phase 0 — Foundation
 
-- [ ] 01 Project scaffold and tooling
+- [x] 01 Project scaffold and tooling
 - [ ] 02 Design tokens and UI primitives
 - [ ] 03 Supabase project and schema
 - [ ] Phase checkpoint — verify Phase 0 — Foundation is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
@@ -87,4 +87,6 @@ progress, and what is next.
 
 ## Key Decisions
 
-_None yet._
+- **TypeScript 6, not 7** — `typescript-eslint` hard-refuses TS 7 and takes all of `eslint-config-next` down with it. Three workarounds tested and rejected. Full reasoning in `constraints.md` → Tooling. (F01)
+- **Environment splits into `env.ts` (public) and `env.server.ts` (secrets)** — a single schema throws in the browser, because Next replaces non-public `process.env` reads with `undefined`. (F01)
+- **`_verify.mjs` runs inside `npm run lint` from feature 01**, not 02 — it already passed, so context-drift guarding starts immediately. (F01)

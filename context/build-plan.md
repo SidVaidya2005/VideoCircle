@@ -34,8 +34,9 @@ code exists.
 - `tsconfig.json` with `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`
 - ESLint and Prettier with `prettier-plugin-tailwindcss`
 - Vitest configured with a `tests/unit` root; Playwright configured with fake media device flags
-- `src/lib/env.ts` with the Zod env schema, and a matching `.env.example`
+- `src/lib/env.ts` (public) and `src/lib/env.server.ts` (secrets), and a matching `.env.example`
 - `src/lib/api.ts` (`apiOk`, `apiError`), `src/lib/constants.ts`, `src/lib/utils.ts` (`cn`)
+- `node context/Design/_verify.mjs` wired into the `lint` script, so context drift fails the build
 - A placeholder Home route that renders, builds, and passes lint
 
 **Verify:** `npm run dev`, `build`, `lint`, `test`, and `test:e2e` all succeed on a clean checkout.
@@ -58,8 +59,7 @@ to hardcode a value. Read `context/Design/README.md` in full before starting.
 - JetBrains Mono wired through `next/font/google` with the `--font-jetbrains-mono` variable
 - `prefers-reduced-motion` reset block
 - Copy `context/Design/assets/mark.svg` into `public/brand/` for the favicon and OG tile. The wordmark renders as live text, not an image — see `context/Design/preview/logo.html`
-- Wire `context/Design/_adherence.eslint.mjs` into `eslint.config.mjs`
-- Add `node context/Design/_verify.mjs` to the `lint` script so token-mirror, specimen, and context-doc drift fails the build rather than waiting to be noticed
+- Wire `context/Design/_adherence.eslint.mjs` into `eslint.config.mjs` (`_verify.mjs` is already in the `lint` script from feature 01)
 - Install the shadcn primitives needed downstream — button, dialog, sheet, dropdown-menu, tooltip, input, avatar, sonner — then restyle them to the kit: whisper borders, kit radii, drop shadows stripped
 - Adopt the kit's interaction states verbatim: white fill at rest for primary, `rgba(255,255,255,.05)` → `.1` for chips, inverted fill for active, asymmetric 50ms-in / 250ms-out hover transitions
 

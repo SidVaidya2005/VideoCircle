@@ -69,16 +69,13 @@ copied into `public/brand/`, tokens are mirrored into `src/app/globals.css`.
 
 ## Commands
 
-**These do not work yet.** The repo currently holds only `CLAUDE.md`, `README.md`,
-`LICENSE`, and `context/`; feature 01 creates `package.json` and the configs that
-make them real.
-
 - `npm run dev` — start the Next.js dev server on `localhost:3000`
 - `npm run build` — production build
 - `npm run start` — serve the production build (what Render runs)
-- `npm run lint` — ESLint
+- `npm run lint` — ESLint, then `context/Design/_verify.mjs` for design and context drift
+- `npm run typecheck` — `tsc --noEmit`; faster feedback than a full build
 - `npm run test` — Vitest unit tests
-- `npm run test:e2e` — Playwright end-to-end tests
+- `npm run test:e2e` — Playwright end-to-end tests (run `npx playwright install chromium` once)
 - `npx shadcn@latest add <component>` — add a UI primitive into `src/components/ui/`
 - `npx supabase migration new <name>` — create a new SQL migration
 - `npx supabase db push` — apply migrations to the Supabase project
@@ -89,3 +86,13 @@ make them real.
 - **Supabase MCP** *(may not be present)* — `list_tables`, `execute_sql`, `generate_typescript_types`, `get_advisors`, `get_logs`. The tools are deferred: fetch them by name with `ToolSearch` and confirm they resolve before relying on them, and note they need a Supabase project to exist first (feature 03). The `supabase` CLI does everything they do, so treat the server as a convenience, never a requirement. Schema changes are always files in `supabase/migrations/` — see `library-docs.md` for why `apply_migration` is the wrong tool mid-iteration. Check for RLS findings after every migration.
 - **`supabase:supabase` skill** — Supabase auth, RLS, and SSR patterns. Load it before any task touching Supabase Auth or row-level security.
 - **Playwright MCP / `claude-in-chrome`** — driving a real browser to verify call flows, which is the only way to test most of this product.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

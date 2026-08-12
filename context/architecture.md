@@ -8,7 +8,7 @@
 
 | Layer | Tool | Purpose |
 | ----- | ---- | ------- |
-| Language | TypeScript 7 (`strict`) | All application code, client and server |
+| Language | TypeScript 6 (`strict`) | All application code, client and server. **Not 7** — see `constraints.md` → Tooling |
 | Framework | Next.js 16 (App Router) | Routing, Server Components, route handlers, single deployable |
 | UI runtime | React 19 | Component model |
 | Real-time media | LiveKit Cloud (SFU) | Video/audio transport, screen share, TURN, simulcast, reconnection |
@@ -25,6 +25,7 @@
 | UI primitives | shadcn/ui (Radix under the hood) | Dialog, dropdown, tooltip, toast, sheet — source lives in the repo, aliased to brand tokens |
 | Motion | CSS transitions with the kit's easing curves; `animejs` outside the call | Brand motion without competing with WebRTC encoding on the main thread |
 | Validation | Zod 4 | Request-body and env parsing at every server boundary |
+| Linting | ESLint 9 + `eslint-config-next` | **Not 10** — `eslint-plugin-react` breaks on it; see `constraints.md` → Tooling |
 | Unit tests | Vitest 4 | Crypto, room-code, formatting, and query-shaping logic |
 | E2E tests | Playwright 1.62 | Lobby → join → leave flows with faked media devices |
 | Hosting | Render (Web Service, Node runtime, **free tier**) | Single service running `next start`. Free instances sleep after 15 min idle and take ~1 min to wake — see `constraints.md` → Hosting |
@@ -43,9 +44,9 @@ Render runs the Next.js app; all media traverses LiveKit's infrastructure.
 
 ## Folder Structure
 
-**Planned, not yet built.** As of Phase 0 the repo contains only `CLAUDE.md`,
-`README.md`, `LICENSE`, and `context/`. Everything below is created during feature
-01; treat it as the target shape, not a description of what exists.
+**Partly built.** Feature 01 created the configs, `src/app/`, `src/lib/` (`env`,
+`env.server`, `api`, `constants`, `utils`), and `tests/`. Everything else below is
+the target shape, filled in by the feature that needs it.
 
 ```
 VideoCircle/
@@ -101,7 +102,9 @@ VideoCircle/
     │   │   └── chat-message.ts        → encrypt/decrypt the message envelope
     │   ├── room-code.ts               → generation and validation of meeting codes
     │   ├── api.ts                     → apiOk / apiError response helpers
-    │   ├── env.ts                     → Zod-parsed environment access
+    │   ├── constants.ts               → shared literals: data topics, caps, footer links
+    │   ├── env.ts                     → Zod-parsed NEXT_PUBLIC_* access (safe anywhere)
+    │   ├── env.server.ts              → Zod-parsed secrets, server-only
     │   └── utils.ts                   → cn() and small shared helpers
     └── types/
         ├── database.ts                → generated Supabase types
@@ -121,8 +124,9 @@ VideoCircle/
 | `src/hooks` | Reusable client-side stateful logic bridging LiveKit/Web Crypto to React. No JSX. |
 | `src/lib` | Framework-agnostic logic and third-party client construction. Imports nothing from `src/components` or `src/app`. |
 | `src/lib/crypto` | All Web Crypto usage. No other folder may call `crypto.subtle` directly. |
-| `src/lib/supabase/admin.ts` | The only place the service-role key is read. `import 'server-only'` on line one. |
-| `src/lib/livekit/token.ts` | The only place `LIVEKIT_API_SECRET` is read for signing. |
+| `src/lib/env.server.ts` | The only place secrets are read out of `process.env`. `import 'server-only'` on line one. |
+| `src/lib/supabase/admin.ts` | The only consumer of `serverEnv.SUPABASE_SERVICE_ROLE_KEY`. `import 'server-only'` on line one. |
+| `src/lib/livekit/token.ts` | The only place `serverEnv.LIVEKIT_API_SECRET` is used for signing. |
 | `src/types` | Shared type declarations only. No runtime values, no logic. |
 | `supabase/migrations` | Schema, indexes, and RLS policies as SQL. Schema is never mutated from application code. |
 | `tests` | Vitest and Playwright specs. No production code imports anything from here. |
@@ -343,7 +347,7 @@ read would be storage without purpose.
 - Provider: Supabase Auth
 - Methods: Google OAuth (PKCE flow) — the only sign-in method. Guests are unauthenticated and have no Supabase session at all.
 - Protected: `/history` (redirects to `/` when there is no session)
-- Public: `/`, `/room/[code]`, `/auth/callback`, `/api/token`, `/api/meetings`, `/api/livekit/webhook`
+- Public: `/`, `/room/[code]`, `/auth/callback`, `/auth/signout`, `/api/token`, `/api/meetings`, `/api/livekit/webhook`
 - `src/middleware.ts` runs on every non-static request and refreshes the Supabase session cookie so pages never render against a stale token.
 - Session reads on the server always use `supabase.auth.getUser()`, never `getSession()` — `getUser()` revalidates against the auth server, `getSession()` trusts the cookie.
 - Sign-in never blocks a call. Every public route works with a null user, and the auth callback returns the user to the path they came from.
@@ -404,10 +408,11 @@ import 'server-only';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/database';
 import { env } from '@/lib/env';
+import { serverEnv } from '@/lib/env.server';
 
 export const supabaseAdmin = createClient<Database>(
   env.NEXT_PUBLIC_SUPABASE_URL,
-  env.SUPABASE_SERVICE_ROLE_KEY,
+  serverEnv.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { persistSession: false, autoRefreshToken: false } },
 );
 ```
@@ -418,7 +423,7 @@ export const supabaseAdmin = createClient<Database>(
 // src/lib/livekit/token.ts
 import 'server-only';
 import { AccessToken, type VideoGrant } from 'livekit-server-sdk';
-import { env } from '@/lib/env';
+import { serverEnv } from '@/lib/env.server';
 
 /**
  * A token may never outlive the meeting it opens. Capped at one hour, or the
@@ -442,7 +447,7 @@ export async function mintAccessToken(params: {
   displayName: string;
   expiresAt: Date; // meetings.expires_at, already checked to be in the future
 }): Promise<string> {
-  const at = new AccessToken(env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET, {
+  const at = new AccessToken(serverEnv.LIVEKIT_API_KEY, serverEnv.LIVEKIT_API_SECRET, {
     identity: params.identity,
     name: params.displayName,
     ttl: tokenTtlSeconds(params.expiresAt),
@@ -613,8 +618,10 @@ export function apiError(code: string, message: string, status: number) {
 
 **Secrets and privilege**
 
-- `SUPABASE_SERVICE_ROLE_KEY` is read in exactly one file, `src/lib/supabase/admin.ts`, and that file begins with `import 'server-only'`.
-- `LIVEKIT_API_SECRET` is read in exactly one file, `src/lib/livekit/token.ts`, and that file begins with `import 'server-only'`.
+- Secrets leave `process.env` in exactly one file, `src/lib/env.server.ts`, which begins with `import 'server-only'`. Nothing else reads `process.env.SUPABASE_SERVICE_ROLE_KEY`, `process.env.LIVEKIT_API_KEY`, or `process.env.LIVEKIT_API_SECRET`.
+- `serverEnv.SUPABASE_SERVICE_ROLE_KEY` is consumed in exactly one file, `src/lib/supabase/admin.ts`, which also begins with `import 'server-only'`.
+- `serverEnv.LIVEKIT_API_SECRET` is consumed only in `src/lib/livekit/token.ts` and `src/lib/livekit/webhook.ts`, both `server-only`.
+- `src/lib/env.ts` holds `NEXT_PUBLIC_*` values only and never a secret, which is what makes it safe to import from a Client Component. Adding a secret to it would ship that secret to every visitor.
 - No file containing the `'use client'` directive, and no file under `src/components/` or `src/hooks/`, reads any environment variable that is not prefixed `NEXT_PUBLIC_`.
 - LiveKit access tokens are minted only inside `src/app/api/token/route.ts`; the browser never constructs, signs, or extends a token.
 - Every LiveKit grant names exactly one room and never sets `roomAdmin`, `roomCreate`, or `roomList`.
