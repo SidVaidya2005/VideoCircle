@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Call" name="Tile states" subtitle="Self · remote · muted · speaking" viewport="700x460" -->
+<html><head><meta charset="utf-8"><title>Tile States</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;padding:16px;background:var(--bg-1);color:var(--fg-1);font-family:var(--font-mono)}
+  .lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-3);margin-bottom:8px}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+
+  .tile{position:relative;aspect-ratio:4/3;border-radius:var(--radius-lg);overflow:hidden;
+        background:var(--bg-2);border:1px solid rgba(255,255,255,.08)}
+  .feed{position:absolute;inset:0;background:linear-gradient(150deg,#6f6a5e 0%,#3b3833 60%,#232220 100%)}
+  .scrim{position:absolute;left:0;right:0;bottom:0;height:var(--scrim-tile-height);background:var(--scrim-tile)}
+
+  .name{position:absolute;left:8px;right:8px;bottom:7px;display:flex;align-items:center;gap:6px;
+        font-size:var(--text-xs);letter-spacing:var(--tracking-wide);text-transform:uppercase;
+        color:var(--fg-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dot{width:6px;height:6px;flex:none}
+
+  /* camera off — initials on the elevation ladder, never a generated avatar */
+  .off{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+       background:var(--bg-3);color:var(--fg-3);font-size:var(--text-2xl);font-weight:700;letter-spacing:.02em}
+
+  /* speaking — a white ring, the kit's engaged state. Not red. */
+  .speaking{box-shadow:0 0 0 2px var(--white-1)}
+
+  .cap{margin-top:6px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-3)}
+  .note{margin-top:16px;font-size:11px;color:var(--fg-3);line-height:1.6}
+  .note strong{color:var(--fg-1)}
+  code{font-size:10px}
+</style></head><body>
+
+<div class="lbl">participant tile — four states</div>
+<div class="grid">
+
+  <div>
+    <div class="tile">
+      <div class="feed"></div><div class="scrim"></div>
+      <div class="name">Priya Raman</div>
+    </div>
+    <div class="cap">remote · default</div>
+  </div>
+
+  <div>
+    <div class="tile speaking">
+      <div class="feed"></div><div class="scrim"></div>
+      <div class="name">Tom Okafor</div>
+    </div>
+    <div class="cap">speaking · white ring</div>
+  </div>
+
+  <div>
+    <div class="tile">
+      <div class="feed"></div><div class="scrim"></div>
+      <div class="name"><span class="dot" style="background:var(--fg-3)"></span>Ana Duarte</div>
+    </div>
+    <div class="cap">remote muted · grey</div>
+  </div>
+
+  <div>
+    <div class="tile">
+      <div class="off">SV</div><div class="scrim"></div>
+      <div class="name"><span class="dot" style="background:var(--red-1)"></span>You</div>
+    </div>
+    <div class="cap">you, cam off + muted</div>
+  </div>
+
+</div>
+
+<div class="note">
+  <strong>Red marks your own muted mic and nothing else.</strong> A remote participant's mute dot is
+  <code>--fg-3</code>. Twelve red badges on a twelve-person grid would destroy the signal precisely
+  when it matters — the one thing red must still mean is Leave.<br>
+  <strong>Speaking is a white ring</strong> (<code>--white-1</code>), the kit's inverted engaged state,
+  applied to the tile rather than the label so it reads at any grid density.<br>
+  <strong>Camera off shows initials</strong> on <code>--bg-3</code>. No generated avatar, no illustration —
+  the brand is type and geometry. Names truncate with ellipsis; they never wrap or resize the tile.
+</div>
+
+</body></html>

@@ -1,14 +1,56 @@
 <!DOCTYPE html>
-<!-- @dsCard group="Brand" name="Logo" subtitle="V4 animated wordmark" viewport="700x400" -->
-<html><head><meta charset="utf-8"><title>Logo</title>
+<!-- @dsCard group="Brand" name="Wordmark" subtitle="Red square dots the i" viewport="700x400" -->
+<html><head><meta charset="utf-8"><title>Wordmark</title>
 <link rel="stylesheet" href="../colors_and_type.css">
 <style>
-  body{margin:0;padding:14px;background:var(--bg-1);color:var(--fg-1);font-family:var(--font-mono);display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;height:calc(100vh - 28px)}
-  .frame{position:relative;width:100%;max-width:640px;aspect-ratio:16/9;background:var(--bg-1);border-radius:8px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center}
-  .frame img{width:90%;height:auto}
-  .over{position:absolute;bottom:14%;left:0;right:0;text-align:center;font-size:11px;letter-spacing:.16em;color:var(--fg-1)}
+  body{margin:0;padding:20px;background:var(--bg-1);color:var(--fg-1);font-family:var(--font-mono);display:flex;flex-direction:column;gap:22px;align-items:center;justify-content:center;height:calc(100vh - 40px)}
+  .lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-3);margin-bottom:10px;text-align:center}
+
+  /* THE RECIPE — copy this. The wordmark is live text, never an image file. */
+  .wordmark{
+    font-family:var(--font-mono);
+    font-weight:700;
+    /* clamps so the wordmark never outruns a 360px viewport */
+    font-size:clamp(var(--text-xl), 11vw, var(--text-4xl));
+    line-height:var(--leading-tight);
+    letter-spacing:var(--tracking-normal);
+    color:var(--fg-1);
+    display:inline-flex;
+    align-items:flex-start;
+  }
+  /* U+0131 dotless i, so the red square is the only tittle */
+  .wordmark .i{position:relative}
+  .wordmark .i::before{
+    content:'';
+    position:absolute;
+    left:50%;
+    transform:translateX(-50%);
+    top:.30em;
+    width:.17em;
+    height:.17em;
+    background:var(--red-1);   /* the one signal colour on the mark */
+  }
+
+  .row{display:flex;flex-wrap:wrap;align-items:center;gap:20px 34px;justify-content:center}
+  .mark{width:64px;height:64px;border-radius:12px;background:var(--bg-1);box-shadow:var(--shadow-ring);display:flex;align-items:center;justify-content:center}
+  .mark i{display:block;width:24px;height:24px;background:var(--red-1)}
+  .sizes{display:flex;align-items:baseline;gap:26px;color:var(--fg-1)}
 </style></head><body>
-<div class="frame">
-  <img src="../assets/images/animejs-v4-logo-animation-dark.gif" alt="Anime.js V4 logo">
+
+<div>
+  <div class="lbl">wordmark — live text, one family, lowercase</div>
+  <div class="wordmark">videoc<span class="i">&#x0131;</span>rcle</div>
 </div>
+
+<div>
+  <div class="lbl">compact mark — favicon · og · avatar fallback</div>
+  <div class="row">
+    <div class="mark"><i></i></div>
+    <div class="sizes">
+      <span class="wordmark" style="font-size:var(--text-lg)">videoc<span class="i">&#x0131;</span>rcle</span>
+      <span class="wordmark" style="font-size:var(--text-base)">videoc<span class="i">&#x0131;</span>rcle</span>
+    </div>
+  </div>
+</div>
+
 </body></html>

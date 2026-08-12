@@ -58,7 +58,7 @@ import { AccessToken, type VideoGrant } from 'livekit-server-sdk';
 const at = new AccessToken(env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET, {
   identity, // stable per participant; how LiveKit and our webhooks identify them
   name: displayName, // shown in the UI; not unique
-  ttl: '4h',
+  ttl: tokenTtlSeconds(expiresAt), // min(1h, expires_at − now); never outlives the meeting
 });
 
 const grant: VideoGrant = {
@@ -95,7 +95,9 @@ switch (event.event) {
 - `toJwt()` is asynchronous in v2. Always `await` it; a forgotten `await` yields `[object Promise]` as the token and fails at connect time with an opaque error.
 - `identity` is the join/leave correlation key. Ours is `user:<uuid>` for signed-in users and `guest:<uuid>` for guests — never a display name, which is neither unique nor stable.
 - Grants always name exactly one room. Never set `roomAdmin`, `roomCreate`, or `roomList` — this project has no moderation features and a wildcard grant would let any token holder enter any meeting.
-- TTL is `4h`, not the `10m` used in LiveKit's quickstart. The token is re-validated on reconnect, so a short TTL silently breaks recovery from a network blip partway through a long call.
+- **TTL is `min(1h, expires_at − now)`** — capped so a token can never outlive the meeting it opens. See `architecture.md` → Expiry policy.
+- **A short TTL does not break long calls, contrary to the obvious worry.** Per LiveKit's token docs, the server *proactively refreshes tokens for connected clients* so they can reconnect after an interruption; a refreshed token lasts "10 minutes or the remaining lifetime of the original token, whichever is longer". The minted TTL therefore governs how long the token may be used to **join**, not how long a session may run. A blip 90 minutes into a call reconnects on the server-refreshed token.
+- A client that fully disconnects and re-joins does call `/api/token` again, which re-checks meeting state — that is the intended behaviour, not a bug to route around.
 - Webhook verification requires the exact raw bytes. Calling `request.json()` before `receive()` breaks the signature check.
 - LiveKit retries webhooks on non-2xx responses, and that retry is what we want. Return `500` when the handler fails transiently so the event is redelivered; return `200` only for events we understand and deliberately ignore, or that could never succeed on a retry. Call history is a stated success criterion — swallowing a failed write to dodge a retry trades correctness for nothing.
 - Webhook handlers must be idempotent; the same event can arrive more than once. Idempotency is precisely what makes returning `500` safe.
@@ -143,6 +145,7 @@ export function RoomShell({
       audio={initialAudio} // carries the lobby's mic choice into the call
       video={initialVideo} // carries the lobby's camera choice into the call
       onDisconnected={onLeave}
+      options={ROOM_OPTIONS}
     >
       {children}
       {/* Renders every remote audio track. Without it the call is silent. */}
@@ -242,8 +245,29 @@ for (const track of tracks) track.stop();
 
 - `<RoomAudioRenderer />` must be inside `<LiveKitRoom>`. Forgetting it produces a call where video works and nobody can hear anything — a bug that is easy to misdiagnose as a media problem.
 - `useTracks` requires `withPlaceholder: true` on `Track.Source.Camera` so camera-off participants still occupy a tile.
+### Room options — the two settings that decide whether a grid is usable
+
+```ts
+// src/lib/livekit/room-options.ts
+import type { RoomOptions } from 'livekit-client';
+
+// Defined once, at module scope. <LiveKitRoom> re-creates its Room whenever
+// this object's identity changes, so an inline literal reconnects on render.
+export const ROOM_OPTIONS: RoomOptions = {
+  adaptiveStream: true,
+  dynacast: true,
+};
+```
+
+- **Both default to `false`** in `livekit-client`, and `<LiveKitRoom>` does not override them — it passes `options` straight to `new Room(options)`. Omit them and you get the slow path silently.
+- **`adaptiveStream: true`** subscribes to a resolution matched to the size of the `<video>` element the track is attached to, and pauses tracks that are not visible. Without it, twelve 200px tiles each receive and decode a full-resolution stream. This is the single largest performance lever in the product, and it is the one that decides whether a low-end phone survives a full grid.
+- **`dynacast: true`** pauses publishing of simulcast layers no subscriber is consuming, cutting upload bandwidth and encoder CPU on the *sending* side.
+- Together they are what makes `MAX_VISIBLE_TILES = 12` viable. Pagination bounds the tile count; adaptive stream bounds the cost of each tile.
+
 - Screen share uses `Track.Source.ScreenShare` and is separate from the camera track — a participant sharing their screen publishes both.
-- Guard screen share behind a `typeof navigator.mediaDevices?.getDisplayMedia === 'function'` check. iOS Safari and Android Chrome do not implement it, and calling it throws.
+- Guard screen share behind a `typeof navigator.mediaDevices?.getDisplayMedia === 'function'` check. **No mobile browser implements it** — per MDN's browser-compat-data, `version_added: false` for Safari iOS, Chrome Android, Firefox Android, Samsung Internet, Opera Android, and Android WebView. Desktop Chrome, Edge, Firefox, and Safari all support it.
+- **The presence check is necessary but not sufficient.** Chrome Android 72–88 and Firefox Android 66–79 *exposed* the method but it always rejected with `NotAllowedError`. Those versions pass a `typeof` check and then fail at call time, so the call itself is always wrapped in `try`/`catch`.
+- **`NotAllowedError` is ambiguous and must not be treated as a fault.** It is what those old Android builds threw, *and* what every browser throws when the user dismisses the picker — by far the common case. Cancelling a share is a normal action: return the bar to its resting state silently. Never show an error toast, and never log it as an error.
 - Reactions and raise-hand use `{ reliable: false }`; chat uses `{ reliable: true }`. Losing an emoji is fine, losing a message is not.
 - Always stop lobby preview tracks before connecting. A leaked preview track keeps the camera light on and, on some devices, blocks the room from acquiring it.
 - Never call `navigator.mediaDevices.getUserMedia` directly — use `createLocalTracks` so LiveKit owns track lifecycle and device switching.
@@ -323,16 +347,47 @@ export const config = {
 ### Google sign-in
 
 ```ts
+// src/lib/auth/sign-in.ts
 'use client';
 import { createClient } from '@/lib/supabase/client';
 
-const supabase = createClient();
-await supabase.auth.signInWithOAuth({
-  provider: 'google',
-  options: {
-    redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(returnTo)}`,
-  },
-});
+/** Same-origin, same-tab, and cleared the moment it is consumed. */
+const CHAT_KEY_STASH = 'vc.pending-chat-key';
+
+export async function signInWithGoogle(returnTo: string) {
+  // The OAuth round trip destroys the fragment: our own JS navigates away, and
+  // the provider redirects back to a URL it constructs. Carrying the key through
+  // `next` or OAuth `state` would put it in a query string on a request that
+  // reaches both Google and our server — exactly what the invariant forbids.
+  // sessionStorage never leaves the browser, so the key survives without ever
+  // being transmitted. It is transit only: the callback restores the fragment
+  // and deletes the entry, so the key is still *read* from the hash and nowhere else.
+  if (window.location.hash.startsWith('#k=')) {
+    sessionStorage.setItem(CHAT_KEY_STASH, window.location.hash);
+  }
+
+  const supabase = createClient();
+  await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      // returnTo is a path only — never include the fragment here.
+      redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(returnTo)}`,
+    },
+  });
+}
+
+/**
+ * Runs once on mount of the returned-to page, before anything reads the key.
+ * Restores the fragment onto the URL without a navigation, then clears the stash.
+ */
+export function restoreChatKeyFragment() {
+  const stashed = sessionStorage.getItem(CHAT_KEY_STASH);
+  if (!stashed) return;
+  sessionStorage.removeItem(CHAT_KEY_STASH);
+  if (!window.location.hash) {
+    history.replaceState(null, '', window.location.pathname + window.location.search + stashed);
+  }
+}
 ```
 
 ### Auth callback
@@ -341,6 +396,21 @@ await supabase.auth.signInWithOAuth({
 // src/app/auth/callback/route.ts
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+
+/**
+ * `next` is attacker-influenced. A prefix check is NOT a same-origin check:
+ * "//evil.com" and "/\evil.com" both start with "/" and both resolve elsewhere.
+ * Parse against our own origin and compare. The fragment is dropped on purpose —
+ * `next` never legitimately carries one.
+ */
+function safeNext(next: string, origin: string): string {
+  try {
+    const url = new URL(next, origin);
+    return url.origin === origin ? url.pathname + url.search : '/';
+  } catch {
+    return '/';
+  }
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -351,8 +421,7 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      // `next` is attacker-influenced — only ever redirect to a same-origin path.
-      return NextResponse.redirect(new URL(next.startsWith('/') ? next : '/', origin));
+      return NextResponse.redirect(new URL(safeNext(next, origin), origin));
     }
   }
 
@@ -367,7 +436,8 @@ export async function GET(request: NextRequest) {
 - In Server Components, `cookieStore.set()` throws; the `try`/`catch` in `src/lib/supabase/server.ts` swallowing that is deliberate and must not be "fixed".
 - `supabaseAdmin` bypasses RLS entirely. Import it only in route handlers, never in a page, component, or hook, and always scope its queries explicitly.
 - Guests have no Supabase session. Any code path reachable by a guest must work with `user === null` — that is the normal case, not an error.
-- The `next` parameter on the auth callback is user-controlled. Always verify it starts with `/` before redirecting.
+- **The `next` parameter is attacker-controlled — resolve and compare origins, never prefix-match.** `next.startsWith('/')` is not a same-origin check: `//evil.com` and `/\evil.com` both start with `/`, and both resolve to a different origin (WHATWG URL treats `\` as `/` in special schemes). Use `safeNext` above, which parses against our own origin and compares `url.origin`. It also drops any fragment, which `next` must never carry — see Google sign-in for why.
+- **The chat key crosses the OAuth round trip in `sessionStorage`, never in a URL.** Stash before `signInWithOAuth`, restore with `history.replaceState` on return, delete on read. `sessionStorage` is same-origin and same-tab, so the key is never transmitted, and the fragment is back on the URL before anything reads it.
 - Schema changes are files in `supabase/migrations/*.sql`, applied with `npx supabase db push`. That file is the artifact of record — it is reviewable, versioned, and replayable on a fresh database. Never `ALTER TABLE` from application code.
 - MCP and the CLI are aids to *authoring and verifying* those files, not a substitute for them. Avoid `apply_migration` while a schema is still in flux: it writes straight to the remote project, so an iteration loop leaves a trail of half-right migrations you then have to reconcile by hand. Settle the schema locally or on a branch, then commit one clean migration.
 - After any migration, check RLS and security findings — via `get_advisors` if the MCP server is available, otherwise by reviewing policies directly — and fix them before moving on. This project's RLS is easy to get subtly wrong; see the recursion note in `architecture.md`.
@@ -433,7 +503,7 @@ are the only two places in the codebase where a literal value may appear.
 /* src/app/globals.css */
 @import 'tailwindcss';
 
-/* ---- Anime.js design system tokens — mirror of context/Design/colors_and_type.css.
+/* ---- VideoCircle design tokens — mirror of context/Design/colors_and_type.css :root.
         Update by re-copying from the kit, never by hand-editing a value here. ---- */
 :root {
   /* Elevation ladder */
@@ -456,6 +526,7 @@ are the only two places in the codebase where a literal value may appear.
   /* Signal + status */
   --red-1: #ff4b4b;
   --red-4: #532a29;
+  --red-5: #412726;
   --green-1: #6aff65;
   --yellow-1: #ffcc2a;
   --accent-cyan: #4bfffd;
@@ -468,6 +539,11 @@ are the only two places in the codebase where a literal value may appear.
   --shadow-soft: 0 10px 10px 0 var(--bg-1);
   --shadow-ring: 0 0 0 1px rgba(255, 255, 255, 0.1);
   --glow-red: 0 0 24px rgba(255, 75, 75, 0.5);
+
+  /* Video scrims — text over live video never sits on bare pixels */
+  --scrim-tile: linear-gradient(to top, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0) 100%);
+  --scrim-flat: rgba(0, 0, 0, 0.5);
+  --scrim-tile-height: 33%;
 }
 
 @theme inline {
@@ -490,6 +566,7 @@ are the only two places in the codebase where a literal value may appear.
 
   --color-signal: var(--red-1);
   --color-signal-dim: var(--red-4);
+  --color-signal-faint: var(--red-5);
   --color-good: var(--green-1);
   --color-warn: var(--yellow-1);
   --color-burst: var(--accent-cyan);
@@ -584,7 +661,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 ---
 
-## Anime.js Design System (`context/Design/`)
+## VideoCircle Design System (`context/Design/`)
 
 **Check first:** `context/Design/README.md` for the full specification, then
 `context/Design/preview/*.html` for specimens and `context/Design/ui_kits/` for
@@ -608,71 +685,19 @@ the specification, the examples are sketches.
 Read them for layout, proportion, and interaction feel. Take values from
 `colors_and_type.css`.
 
-### Product overrides
+### Where the design rules live
 
-Two places where VideoCircle deliberately departs from the kit. These are decisions,
-not oversights — do not "correct" them back:
+These used to be restated here and drifted. Each now has exactly one home:
 
-| Kit says | VideoCircle does | Why |
-| -------- | ---------------- | --- |
-| Active chips and selected cards fill with **red** (`--red-1`) and flip text to `--bg-1` | Active controls fill with **white** (`--white-1`); red is reserved for Leave and your own muted state | A call shows many simultaneous active toggles. If "active" is red, red stops meaning "danger" precisely when it matters most. The kit's inverted-fill *shape* is kept; only the hue changes. |
-| Reactions are not addressed; emoji are banned outright | Reactions are wide-tracked CAPS chips plus the red-dot burst | Keeps the feature without breaking non-negotiable #4. |
+| Looking for | Read |
+| ----------- | ---- |
+| Colour, type, motion, hover and press timings, borders, radii, layout, iconography | `context/Design/README.md` — the visual specification |
+| What each file in the kit is for | `context/Design/README.md` → Index |
+| Red vs. white-fill allocation in a call, text-over-video scrim, tile states | `context/code-standards.md` → Design System and Styling |
+| Copy-pasteable specimens | `context/Design/preview/*.html` |
 
-### What is where
-
-| Path | Use it for |
-| ---- | ---------- |
-| `README.md` | The specification: voice, colour, type, motion, hover states, borders, layout. Read in full before designing a surface. |
-| `colors_and_type.css` | Token ground truth. Mirrored into `src/app/globals.css`. |
-| `preview/*.html` | One specimen per concept — buttons, cards, form inputs, palette, type scale, grid backdrop, iconography. Reference, not source (see below). |
-| `ui_kits/playground/ClockControls.jsx` | The canonical fixed control-strip layout: params pinned top, control row pinned bottom. **The layout model for the meeting room** — its inline styles are not. |
-| `ui_kits/playground/ScopeCanvas.jsx` | Grid backdrop and the red-on-black "scope" language. |
-| `ui_kits/site/` | Marketing surfaces — hero, nav, feature grid, footer. The model for Home. |
-| `assets/images/` | Real brand imagery. Copy into `public/`; never generate a substitute. |
-| `fonts/` | IoskeleyMono woff2. **Not shipped** — licensed. Reference only. |
-| `_adherence.oxlintrc.json` | Lint rules forbidding raw hex, raw px, and non-kit fonts. |
-
-### Canonical interaction states
-
-From `README.md` → *Hover & press states*. These are exact, not approximate:
-
-```css
-/* Primary button: white fill at rest, one step darker on hover. */
-background: var(--white-1);  /* hover → var(--white-2) */
-
-/* Chip / toggle: barely-there fill, doubling on hover. */
-background: rgba(255, 255, 255, 0.05);  /* hover → rgba(255, 255, 255, 0.1) */
-
-/* Active/engaged: inverted — solid fill, dark text. Also the keyboard-focus style. */
-background: var(--white-1);
-color: var(--bg-1);
-
-/* Asymmetric by design: snaps on, relaxes off. */
-transition: background-color 0.05s ease-out;          /* hover in */
-transition: background-color 0.25s ease-in-out;       /* hover out */
-```
-
-**Rules:**
-
-- **No emoji anywhere.** This is the kit's non-negotiable #4 and it applies to reactions, empty states, toasts, and copy alike.
-- **No generated illustrations or decorative SVG.** If an asset does not exist in `context/Design/assets/`, use a typographic or geometric placeholder instead of inventing one.
-- **No italics.** The font is used structurally.
-- Icons are rare and stroked — Lucide at 2px, never filled, never a coloured fill icon. The kit flags Lucide as our substitution, not brand-official, so prefer a wide-tracked CAPS label over an icon whenever space allows.
-- Copy follows the kit's voice: technical, plain, no hype words, second-person or imperative. Never corporate "we".
-- Code identifiers and room codes render lowercase and verbatim, never prettified.
-- Press states do not shrink. The background inverts instead.
-- Elevation is the background ladder. Cards get no drop shadow.
-- The grid backdrop bleeds past its container in the kit (`width: calc(75px + 100%); left: -75px`). Reproduce that on Home and the lobby; keep it off the call.
-
----
-
-## shadcn/ui
-
-**Check first:** <https://ui.shadcn.com/docs>, and read the existing components in `src/components/ui/` before adding a new one.
-
-Components are generated into `src/components/ui/` and become project source. There
-is no runtime dependency to upgrade.
-
+`context/Design/_verify.mjs` asserts the token block above still matches
+`colors_and_type.css`. Run it after touching either.
 ### Adding a component
 
 ```bash

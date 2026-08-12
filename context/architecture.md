@@ -17,17 +17,23 @@
 | Auth | Supabase Auth (Google OAuth, PKCE) | Sign-in, session cookies, user identity |
 | Auth glue | `@supabase/ssr` 0.12 | Cookie-based Supabase clients for Server Components, route handlers, middleware |
 | Database | Supabase Postgres | `profiles`, `meetings`, `meeting_participants` |
-| DB client | `@supabase/supabase-js` 2.110 | Queries, and the service-role admin client |
+| DB client | `@supabase/supabase-js` 2.112 | Queries, and the service-role admin client |
 | Encryption | Web Crypto API (`SubtleCrypto`, AES-GCM 256) | End-to-end encryption of chat messages in the browser |
 | Styling | Tailwind CSS 4.3 | Utility styling; design tokens declared with `@theme` |
-| Design system | Anime.js brand kit (`context/Design/`) | Terminal-dark, mono-only visual language; token and specimen source of truth |
+| Design system | VideoCircle design system (`context/Design/`) | Terminal-dark, mono-only visual language; token and specimen source of truth. Adapted from the MIT-licensed Anime.js kit |
 | Typeface | JetBrains Mono via `next/font/google` | The single family, self-hosted at build time. Substitutes for the kit's licensed IoskeleyMono |
 | UI primitives | shadcn/ui (Radix under the hood) | Dialog, dropdown, tooltip, toast, sheet — source lives in the repo, aliased to brand tokens |
 | Motion | CSS transitions with the kit's easing curves; `animejs` outside the call | Brand motion without competing with WebRTC encoding on the main thread |
 | Validation | Zod 4 | Request-body and env parsing at every server boundary |
 | Unit tests | Vitest 4 | Crypto, room-code, formatting, and query-shaping logic |
 | E2E tests | Playwright 1.62 | Lobby → join → leave flows with faked media devices |
-| Hosting | Render (Web Service, Node runtime) | Single service running `next start` |
+| Hosting | Render (Web Service, Node runtime, **free tier**) | Single service running `next start`. Free instances sleep after 15 min idle and take ~1 min to wake — see `constraints.md` → Hosting |
+
+Versions above name the **minor family** intended at planning time, not exact
+pins — `2.112` means "2.112.x". `package.json` is the source of truth once feature
+01 creates it; these are the floor, and a newer patch or minor within the same
+major is expected and fine. A major-version bump is a decision, not an upgrade:
+record it in `constraints.md`.
 
 LiveKit Cloud is a hard requirement rather than a preference: Render does not
 expose UDP, so neither an SFU nor a coturn TURN server can be self-hosted there.
@@ -45,7 +51,7 @@ Render runs the Next.js app; all media traverses LiveKit's infrastructure.
 VideoCircle/
 ├── CLAUDE.md                          → agent entry point
 ├── context/                           → this documentation set
-│   └── Design/                        → Anime.js brand kit (spec, tokens, specimens, assets)
+│   └── Design/                        → VideoCircle design system (spec, tokens, specimens, mark)
 ├── render.yaml                        → Render service + env definition
 ├── public/
 │   └── brand/                         → assets copied out of context/Design/assets/
@@ -178,8 +184,12 @@ Chat composer (client)
 ```
 LiveKit Cloud  ── webhook POST ──▶  /api/livekit/webhook
   → WebhookReceiver.receive(rawBody, authHeader)   (signature verified)
-  → participant_joined  → insert meeting_participants { meeting, user_id|null, name, joined_at }
-  → participant_left    → set left_at on the open participation row
+  → participant_joined  → insert meeting_participants
+                            { meeting, identity, user_id|null, display_name, joined_at }
+                          identity is not null and is the join↔leave correlation key;
+                          user_id is parsed from the `user:<uuid>` identity prefix,
+                          and is null for a `guest:<uuid>` identity.
+  → participant_left    → set left_at on the open row matched by (meeting, identity)
   → room_finished       → set meetings.ended_at
                         → AND close every still-open participation row for that
                           meeting: left_at = coalesce(left_at, now()). This is the
@@ -217,11 +227,16 @@ Mirrors `auth.users`; populated by a trigger on user creation.
 | Column | Type | Notes |
 | ------ | ---- | ----- |
 | `id` | `uuid` | PK, references `auth.users(id)` on delete cascade |
-| `display_name` | `text` | From the Google profile; user-editable later |
+| `display_name` | `text` | From the Google profile. Not user-editable — profile editing is out of scope |
 | `avatar_url` | `text` | Nullable, from the Google profile |
 | `created_at` | `timestamptz` | Default `now()` |
 
-RLS: `select` and `update` where `id = auth.uid()`.
+RLS: `select` where `id = auth.uid()`. **No `update` policy**, and none is needed:
+the row is written once by the `auth.users` trigger, nothing in scope edits a
+profile, and every application write goes through the service-role client, which
+bypasses RLS anyway. An `update` policy here would be dead code implying a feature
+that does not exist. Add it in the same migration as profile editing, if that is
+ever built.
 
 ### `meetings`
 
@@ -238,6 +253,13 @@ Indexes: unique on `code`; `(expires_at) where ended_at is null` for the sweep.
 
 **Joinability.** A meeting is joinable when `ended_at is null and now() < expires_at`.
 `/api/token` enforces this and refuses otherwise — codes are not self-authorizing.
+
+**Expiry policy.** Expiry closes the door; it does not clear the room.
+
+- **No new joins after `expires_at`.** `/api/token` returns `410`.
+- **No token outlives the meeting.** TTL is `min(1h, expires_at − now)`, so a token minted at hour 23 of a 24-hour window is valid for one hour, not four.
+- **A call already in progress is allowed to finish.** LiveKit refreshes the session tokens of connected clients on its own, so participants are not ejected at the boundary. Cutting a live conversation mid-sentence to enforce a 24-hour bookkeeping limit would be worse than letting it drain, and `room_finished` sets `ended_at` when the last person leaves.
+- **The nightly sweep skips meetings that still have open participation rows.** It exists as a backstop for a dropped `room_finished`, not as a reaper — closing a meeting people are still sitting in would write a `left_at` for participants who have not left.
 
 **Lifecycle.** Meetings are created on "New meeting" and closed one of two ways: the
 `room_finished` webhook sets `ended_at` when the LiveKit room empties, or a nightly
@@ -398,17 +420,32 @@ import 'server-only';
 import { AccessToken, type VideoGrant } from 'livekit-server-sdk';
 import { env } from '@/lib/env';
 
-const TOKEN_TTL = '4h'; // Long enough that a mid-call reconnect re-validates successfully.
+/**
+ * A token may never outlive the meeting it opens. Capped at one hour, or the
+ * time left before `expires_at`, whichever is smaller.
+ *
+ * One hour is safe despite calls running longer: LiveKit refreshes the session
+ * token of a *connected* client automatically, so this TTL governs how long the
+ * token can be used to JOIN, not how long a call may last. A blip mid-call
+ * reconnects on the server-refreshed token, not this one.
+ */
+const MAX_TOKEN_TTL_SECONDS = 60 * 60;
+
+function tokenTtlSeconds(expiresAt: Date): number {
+  const remaining = Math.floor((expiresAt.getTime() - Date.now()) / 1000);
+  return Math.min(MAX_TOKEN_TTL_SECONDS, remaining);
+}
 
 export async function mintAccessToken(params: {
   roomCode: string;
   identity: string;
   displayName: string;
+  expiresAt: Date; // meetings.expires_at, already checked to be in the future
 }): Promise<string> {
   const at = new AccessToken(env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET, {
     identity: params.identity,
     name: params.displayName,
-    ttl: TOKEN_TTL,
+    ttl: tokenTtlSeconds(params.expiresAt),
   });
 
   const grant: VideoGrant = {
@@ -585,6 +622,7 @@ export function apiError(code: string, message: string, status: number) {
 **Encryption**
 
 - The chat encryption key is read only via `readChatKeyFromHash(window.location.hash)` and never appears in a fetch body, query string, request header, `console` call, analytics payload, or database write.
+- The sole exception to "hash only" is the sign-in round trip, where the fragment is held in `sessionStorage` — same-origin, same-tab, never transmitted — and restored onto the URL with `history.replaceState` before any read. It is never placed in `next`, in OAuth `state`, or in any other parameter that reaches Google or our own server.
 - Every payload published to the `vc.chat` data-channel topic is the `Uint8Array` returned by `encryptChatMessage()`; plaintext is never passed to `publishData`.
 - Chat message contents are never persisted — not to Postgres, not to `localStorage`, not to `sessionStorage`.
 - `crypto.subtle` is called only from files under `src/lib/crypto/`.

@@ -1,9 +1,21 @@
 /* ============================================================
-   Anime.js Design System — Colors & Type Foundations
-   Source: examples/assets/css/styles.css from animejs repo
+   VideoCircle — Colors & Type Foundations
+   Adapted from the Anime.js brand kit (MIT). See README.md → Provenance.
    ============================================================ */
 
-/* -------- Fonts -------- */
+/* -------- Fonts --------
+
+   PRODUCTION LOADS JETBRAINS MONO VIA next/font/google. Nothing below ships.
+
+   The @font-face rules exist so the preview/*.html specimens render in the
+   real upstream typeface on a machine that has it. IoskeleyMono is licensed
+   and git-ignored (see .gitignore), so these files are absent on a fresh
+   clone and the stack falls through to JetBrains Mono — which is what the app
+   actually uses, so the specimens still render accurately.
+
+   Only the :root and SEMANTIC TYPE ROLES blocks are mirrored into
+   src/app/globals.css. These @font-face rules are never copied.
+   -------------------------------------------------------------- */
 
 @font-face {
   font-family: 'IoskeleyMono';
@@ -26,20 +38,18 @@
    ============================================================ */
 
 :root {
-  /* --- Neutrals: near-black backgrounds + warm off-white fg ----- */
-  --black-1: #252423;  /* the canonical terminal bg */
-  --black-2: #262422;
-  --black-3: #262422;
-  --black-4: #262422;
-  --black-5: #272421;
-  --black-6: #272421;
-
-  --white-1: #f6f4f2;  /* bright warm off-white */
-  --white-2: #b8b6b3;
-  --white-3: #9a9593;
-  --white-4: #524f49;
-  --white-5: #413d39;
-  --white-6: #312e2b;
+  /* --- Neutrals -------------------------------------------------
+     Upstream shipped --black-1..6 and --white-1..6 alongside the --bg/--fg
+     ladders below. --black-2..6 were not a ladder at all (#262422 three
+     times, then #272421 twice) and --white-3..6 duplicated --fg-* at
+     different values. --black-1 duplicated --bg-1 exactly and backed only
+     --shadow-soft, which is semantically masking the page background, so it
+     now points at --bg-1 directly. All three sets are gone: elevation is
+     --bg-*, text emphasis is --fg-*, and the active fill is --white-1/2.
+     There is no fourth neutral scale.
+     -------------------------------------------------------------- */
+  --white-1: #f6f4f2;  /* active/engaged control fill — the inverted press state */
+  --white-2: #b8b6b3;  /* that fill on hover */
 
   /* --- Brand accents (-1 is the vivid stop; -2..-6 darken) --- */
   --red-1: #ff4b4b;       --red-2: #bf3e3e;    --red-3: #9e3838;    --red-4: #532a29;    --red-5: #412726;    --red-6: #322523;
@@ -101,9 +111,14 @@
   --space-7: 3rem;
   --space-8: 4rem;
 
-  /* --- Type families (mono-only brand) --- */
-  --font-mono: 'IoskeleyMono', 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace;
-  --font-system: 'IoskeleyMono', ui-monospace, monospace, sans-serif;
+  /* --- Type family (mono-only brand; there is exactly one) ------
+     JetBrains Mono leads because it is what the app actually loads, via
+     next/font/google. IoskeleyMono stays in the stack so the specimens
+     render in the upstream face on a machine that has it locally.
+     Upstream's second alias --font-system is dropped: in a one-family
+     brand a "system" font variable is an invitation to break the rule.
+     -------------------------------------------------------------- */
+  --font-mono: 'JetBrains Mono', 'IoskeleyMono', 'IBM Plex Mono', ui-monospace, monospace;
 
   /* --- Type scale: terminal-feel; tight line-height --- */
   --text-xs:   0.75rem;   /* 12 — parameter legends, fine print */
@@ -123,7 +138,7 @@
 
   --tracking-tight: -0.01em;
   --tracking-normal: 0;
-  --tracking-wide: 0.06em;   /* terminal caps like AVAILABLE NOW AT ANIMEJS.COM */
+  --tracking-wide: 0.06em;   /* terminal caps like START A MEETING */
   --tracking-wider: 0.12em;
 
   /* --- Borders + strokes used throughout --- */
@@ -137,10 +152,22 @@
   --grid-line-minor: rgba(255, 255, 255, 0.04);
 
   /* --- Shadows (used sparingly; lib mostly relies on flat + glow) --- */
-  --shadow-soft: 0 10px 10px 0 var(--black-1);
+  --shadow-soft: 0 10px 10px 0 var(--bg-1);
   --shadow-ring: 0 0 0 1px rgba(255, 255, 255, 0.1);
   --glow-red: 0 0 24px rgba(255, 75, 75, 0.5);
   --glow-cyan: 0 0 24px rgba(75, 255, 253, 0.4);
+
+  /* --- Video scrims (VideoCircle addition; no upstream equivalent) ------
+     Every other contrast pairing in this file assumes a known --bg-*. Text
+     on a video tile sits on arbitrary live pixels — a bright window behind a
+     participant erases --fg-3 entirely — so a label over video always rides
+     a scrim. Flat semi-opaque black, matching the kit's logs panel; never
+     backdrop-blur, which the brand does not use.
+     See preview/video-scrim.html for the specimen and the contrast floor.
+     ------------------------------------------------------------------ */
+  --scrim-tile: linear-gradient(to top, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0) 100%);
+  --scrim-flat: rgba(0, 0, 0, 0.5);
+  --scrim-tile-height: 33%;  /* the gradient band at the foot of a tile */
 
   /* --- Motion easings (the brand's own signature curves) --- */
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);

@@ -42,12 +42,13 @@ code exists.
 
 ### 02 Design tokens and UI primitives
 
-Port the Anime.js brand kit into the app so no later feature has an excuse to
-hardcode a value. Read `context/Design/README.md` in full before starting.
+Port the VideoCircle design system into the app so no later feature has an excuse
+to hardcode a value. Read `context/Design/README.md` in full before starting.
 
 **UI:**
 
 - App shell on warm near-black: header with the VideoCircle wordmark, sign-in slot, content region
+- Footer with the author byline and links — Source, LinkedIn, Email, Portfolio — as wide-tracked caps with dot separators, per `context/Design/preview/footer.html`. Rendered on Home and Call History only; **never inside the call**, where it would break the fixed-strip layout
 - The signature grid backdrop as a reusable `.grid-backdrop` surface, bleeding past its container
 - A tokens preview route (development only) showing every surface step, text step, radius, easing, and interaction state side by side with `context/Design/preview/*.html`
 
@@ -56,7 +57,9 @@ hardcode a value. Read `context/Design/README.md` in full before starting.
 - `globals.css`: `:root` mirroring `context/Design/colors_and_type.css`, plus the `@theme inline` mapping to utility names and the shadcn token aliases
 - JetBrains Mono wired through `next/font/google` with the `--font-jetbrains-mono` variable
 - `prefers-reduced-motion` reset block
-- Copy brand assets from `context/Design/assets/images/` into `public/brand/`
+- Copy `context/Design/assets/mark.svg` into `public/brand/` for the favicon and OG tile. The wordmark renders as live text, not an image — see `context/Design/preview/logo.html`
+- Wire `context/Design/_adherence.eslint.mjs` into `eslint.config.mjs`
+- Add `node context/Design/_verify.mjs` to the `lint` script so token-mirror, specimen, and context-doc drift fails the build rather than waiting to be noticed
 - Install the shadcn primitives needed downstream — button, dialog, sheet, dropdown-menu, tooltip, input, avatar, sonner — then restyle them to the kit: whisper borders, kit radii, drop shadows stripped
 - Adopt the kit's interaction states verbatim: white fill at rest for primary, `rgba(255,255,255,.05)` → `.1` for chips, inverted fill for active, asymmetric 50ms-in / 250ms-out hover transitions
 
@@ -124,6 +127,8 @@ infinite recursion.
 **UI:**
 
 - Post-create confirmation showing the full share link with a copy button and a "link includes the chat key" note
+- A quiet line beneath the share link noting a first visit after an idle spell may take about a minute to load — honest about the free-tier cold start rather than letting the recipient meet a blank page
+- The "link includes the chat key" note also warns against shortening the link: a shortener drops the `#k=` fragment and silently costs the recipient chat
 - Copy confirmation toast
 
 **Logic:**
@@ -185,7 +190,7 @@ infinite recursion.
 
 - `POST /api/token` — Zod validation, then **meeting-state check before minting**: 404 unknown code, 410 ended, 410 expired
 - `getUser()`, identity resolution (`user:<uuid>` / `guest:<uuid>`), `mintAccessToken`
-- `src/lib/livekit/token.ts` with the four-hour TTL and single-room grant
+- `src/lib/livekit/token.ts` with the `min(1h, expires_at − now)` TTL cap and single-room grant
 - Lobby transitions to the connected state, passing the chosen mic/camera state into `<LiveKitRoom>`
 
 **Verify:** Decode the returned JWT and confirm the grant names exactly one room and
@@ -277,8 +282,8 @@ enough to get into a room.
 ### 15 Reactions and raise hand
 
 Brand-native reactions, not emoji — the kit forbids emoji outright. Reactions are
-wide-tracked CAPS chips plus the signature red-dot burst, built on the exact button
-row from `context/Design/ui_kits/playground/ClockControls.jsx`.
+wide-tracked CAPS chips plus the signature red-dot burst, built on the control-row
+treatment in `context/Design/preview/control-states.html`.
 
 **UI:**
 
@@ -379,7 +384,7 @@ than leaving `left_at` null.
 **UI:**
 
 - Reverse-chronological list: date and time, duration, participant names, and the meeting code
-- "Rejoin" action where the meeting has not ended — with the caveat that a rejoin link has no chat key, stated plainly
+- "Rejoin" action only where the meeting is still joinable — `ended_at is null AND now() < expires_at`, the same rule `/api/token` enforces, so the button is never offered for a link that would 410. With the caveat that a rejoin link has no chat key, stated plainly
 - Empty state for users with no history
 - Card layout on mobile, table on desktop
 
@@ -400,7 +405,9 @@ than leaving `left_at` null.
 
 **UI:**
 
-- Every route audited at 360px, 390px, and 768px
+- Every route audited at 360px, 390px, 430px, 768px, 1024px, 1440px, and 1920px — phones, both iPad orientations, laptop, and desktop
+- Audit is measured, not eyeballed: zero horizontal overflow (`scrollWidth === clientWidth`) and zero interactive targets under 44×44 at every width above
+- Performance targets in `code-standards.md` → Performance verified on the deployed instance: bundle sizes from `next build`, Lighthouse on mobile throttling, and a ten-minute four-participant call
 - Call layout using `dvh` with safe-area insets honoured top and bottom
 - All touch targets at least 44px, panels as full-height sheets
 - Landscape orientation on phones handled without clipping the control bar
@@ -449,7 +456,9 @@ than leaving `left_at` null.
 
 **Logic:**
 
-- `render.yaml` defining the Node web service, build and start commands, and every env var with `sync: false` for secrets
+- `render.yaml` defining the Node web service on the **free** plan, build and start commands, and every env var with `sync: false` for secrets
+- A `/healthz` route for Render's health check. **No external keep-alive pinger** — see `constraints.md` → Hosting for why
+- README states above the demo link that a first visit after an idle spell takes about a minute to wake
 - Set `NEXT_PUBLIC_SITE_URL` to the deployed origin
 - Add the deployed origin to Supabase's allowed redirect URLs and to the Google OAuth client
 - Point the LiveKit webhook at the deployed `/api/livekit/webhook`

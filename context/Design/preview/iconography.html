@@ -1,25 +1,61 @@
 <!DOCTYPE html>
-<!-- @dsCard group="Brand" name="Iconography" subtitle="Stroked · red dot native" viewport="700x220" -->
+<!-- @dsCard group="Brand" name="Iconography" subtitle="Lucide · 2px stroke · call controls" viewport="700x340" -->
 <html><head><meta charset="utf-8"><title>Iconography</title>
 <link rel="stylesheet" href="../colors_and_type.css">
 <style>
   body{margin:0;padding:16px;background:var(--bg-1);color:var(--fg-1);font-family:var(--font-mono)}
   .lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-3);margin-bottom:10px}
-  .grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;align-items:center}
-  .cell{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px;background:var(--bg-2);border:1px solid rgba(255,255,255,.08);border-radius:.6rem}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .cell{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px;background:var(--bg-2);border:1px solid rgba(255,255,255,.08);border-radius:.6rem}
   .cell svg{width:22px;height:22px;stroke:var(--fg-1);stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
-  .cell span{font-size:10px;color:var(--fg-3)}
-  .note{margin-top:10px;font-size:11px;color:var(--fg-3)}
-  .red{background:var(--red-1)}
+  .cell code{font-size:10px;color:var(--fg-3);letter-spacing:0}
+  .note{margin-top:12px;font-size:11px;color:var(--fg-3);line-height:1.5}
+  .note strong{color:var(--fg-1)}
 </style></head><body>
-<div class="lbl">iconography — stroked only, 2px, Lucide as substitute</div>
+
+<div class="lbl">call controls — stroked only, 2px, never filled</div>
 <div class="grid">
-  <div class="cell"><svg viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4" fill="currentColor" stroke="none"/></svg><span>play</span></div>
-  <div class="cell"><svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" fill="currentColor" stroke="none"/></svg><span>pause</span></div>
-  <div class="cell"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg><span>reset</span></div>
-  <div class="cell"><svg viewBox="0 0 24 24"><path d="M18 8 22 12 18 16"/><path d="M22 12H6"/><path d="M6 4v16"/></svg><span>seek</span></div>
-  <div class="cell"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg><span>complete</span></div>
-  <div class="cell" style="background:var(--red-1)"><div style="width:10px;height:10px;background:var(--bg-1)"></div><span style="color:var(--bg-1)">dot</span></div>
+  <div class="cell">
+    <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4"/></svg>
+    <code>Mic</code>
+  </div>
+  <div class="cell">
+    <svg viewBox="0 0 24 24"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m22 8-6 4 6 4V8Z"/></svg>
+    <code>Video</code>
+  </div>
+  <div class="cell">
+    <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+    <code>MonitorUp</code>
+  </div>
+  <div class="cell">
+    <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    <code>MessageSquare</code>
+  </div>
+  <div class="cell">
+    <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>
+    <code>Users</code>
+  </div>
+  <div class="cell">
+    <svg viewBox="0 0 24 24"><path d="M18 11V6a2 2 0 0 0-4 0"/><path d="M14 10V4a2 2 0 0 0-4 0v6"/><path d="M10 10V6a2 2 0 0 0-4 0v9"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2a8 8 0 0 1-8-8"/></svg>
+    <code>Hand</code>
+  </div>
+  <div class="cell">
+    <svg viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+    <code>Link</code>
+  </div>
+  <!-- the ONE red icon in the product -->
+  <div class="cell">
+    <svg viewBox="0 0 24 24" style="stroke:var(--red-1)"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z" transform="rotate(135 12 12)"/></svg>
+    <code style="color:var(--red-1)">PhoneOff</code>
+  </div>
 </div>
-<div class="note">Brand has no built-in icon font. Use Lucide (2px stroke) for interface controls. Red square dot = the only <em>native</em> brand glyph.</div>
+
+<div class="note">
+  <strong>Shapes above are indicative, drawn in Lucide's style.</strong> Production imports the real
+  thing from <code>lucide-react</code> — never hand-copy a path into a component.<br>
+  The brand ships no icon set; Lucide is the sanctioned substitution. Stroked, 2px, never filled,
+  never coloured except <strong>PhoneOff</strong>, which is the only red icon in the product.
+  The red square dot remains the only <em>native</em> brand glyph.
+</div>
+
 </body></html>

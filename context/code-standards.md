@@ -59,13 +59,15 @@ The AI agent on this project operates as a senior engineer. This means:
 
 ## Design System and Styling
 
-The project follows the **Anime.js design system** in `context/Design/` — a
-terminal-dark, mono-only brand built on warm near-black. `context/Design/README.md`
-is the full specification and `context/Design/colors_and_type.css` is the token
-ground truth. Read both before building any UI. `context/Design/preview/*.html` are
-specimens to lift from, and `context/Design/ui_kits/` holds working component
-recipes — the playground's fixed top-params / bottom-controls layout is the direct
-model for the meeting room.
+The project follows the **VideoCircle design system** in `context/Design/` — a
+terminal-dark, mono-only brand built on warm near-black, adapted from the
+MIT-licensed Anime.js kit. `context/Design/README.md` is the full specification and
+`context/Design/colors_and_type.css` is the token ground truth. Read both before
+building any UI. `context/Design/preview/*.html` are the specimens to lift from —
+including `control-states.html`, `tile-label.html`, and `video-scrim.html`, which
+carry the call-specific rules. `context/Design/ui_kits/` is upstream reference
+only: read it for layout, never copy it. Its playground's fixed top-params /
+bottom-controls layout is the direct model for the meeting room.
 
 ### Non-negotiables, taken from the kit
 
@@ -78,9 +80,9 @@ model for the meeting room.
 
 ### Tokens
 
-- All brand variables live in `:root` in `src/app/globals.css`, copied verbatim from `context/Design/colors_and_type.css` so the kit stays the upstream source. A `@theme inline` block maps them to readable Tailwind utility names. Those two blocks are the only place a literal value may appear.
+- All brand variables live in `:root` in `src/app/globals.css`, mirroring **the `:root` block only** of `context/Design/colors_and_type.css` so the kit stays the source. The file's `@font-face` rules and semantic type roles are not copied — JetBrains Mono loads through `next/font/google` instead. A `@theme inline` block maps them to readable Tailwind utility names. Those two blocks are the only place a literal value may appear.
 - Utility names map as: `bg-canvas` (bg-1) → `bg-card` (bg-2) → `bg-raised` (bg-3) → `bg-overlay` (bg-4) → `bg-lifted` (bg-5); `text-ink` (fg-1), `text-ink-2` (fg-2), `text-muted` (fg-3), `text-faint` (fg-4), `border-line` (fg-5); `signal` for red-1.
-- Never write a raw colour (`#hex`, `rgb()`, `oklch()`) outside those two blocks. The kit ships `_adherence.oxlintrc.json`, which forbids exactly this.
+- Never write a raw colour (`#hex`, `rgb()`, `oklch()`) outside those two blocks. The kit ships `_adherence.eslint.mjs`, a flat-config fragment enforcing this on `.ts`/`.tsx`; wire it into `eslint.config.mjs` in feature 02. ESLint cannot lint CSS, so `globals.css` itself is guarded by review.
 - Never write arbitrary-value utilities (`w-[327px]`, `text-[13.5px]`) for anything a token covers. Arbitrary values are for genuinely one-off geometry only, with a comment.
 - Compose class names with `cn()` from `src/lib/utils.ts`. Do not build class strings with template literals.
 
@@ -102,13 +104,14 @@ status colours, so the allocation is fixed here rather than decided per componen
 - **Neutral steps** — everything else. Remote participants' mute indicators are `text-muted`, not red; twelve red badges on a twelve-person grid would destroy the signal.
 - **Connection quality** — `green-1` / `yellow-1` / `red-1`, but only as a small marker, never a filled surface.
 - **Cyan and green accents** — reserved for the logo burst and completion moments, per the kit. Do not repurpose them for UI state.
+- **Any text over live video rides a scrim.** Every other contrast pairing assumes a known `--bg-*`; a tile label sits on arbitrary pixels, and a participant backlit by a window erases `--fg-3` outright. Use `--scrim-tile` for tile labels and `--scrim-flat` for full overlays, with `--fg-1` text on top — never a muted grey. See `preview/video-scrim.html`.
 
 ### Surfaces and shape
 
 - Elevation comes from the background ladder, not shadows. Cards are `bg-card` with a `1px` `rgba(255,255,255,.08)` border and `rounded-lg` (1rem). **No drop shadows on cards.**
 - The only shadows in the system are functional: `--shadow-soft` as a scroll mask under sticky headers, `--shadow-ring` on the logo frame, and the red/cyan glows as embellishment. Never use a shadow as a depth cue.
 - Radii: `rounded-xs` inputs and chips, `rounded-sm` buttons, `rounded-md` chip-style toggles, `rounded-lg` cards and panels, `rounded-xl` hero panels, `rounded-full` only for pills and dots. Never `rounded-none` — the brand always softens slightly.
-- Borders are whispers. Dashed and dotted borders are reserved for measurement contexts (sliders, ranges, axis rules) — see `ClockControls.jsx`.
+- Borders are whispers. Dashed and dotted borders are reserved for measurement contexts (sliders, ranges, axis rules) — see `ui_kits/playground/ClockControls.jsx` for the treatment, reading it as reference only.
 - **No glassmorphism.** The kit uses flat semi-opaque fills (`rgba(0,0,0,.5)`), never `backdrop-blur`.
 - The signature grid backdrop belongs on Home, the lobby, and empty states. **Never render it behind or over live video tiles** — it adds visual noise over faces and reads as compression artefacting.
 
@@ -132,10 +135,46 @@ status colours, so the allocation is fixed here rather than decided per componen
 - Restyle generated components toward the terminal aesthetic — square-ish radii, whisper borders, no shadows — but keep their Radix behaviour, which is the reason they are here.
 - Record non-trivial edits in `build-journal.md` so a later `shadcn add` does not silently revert them.
 
-### Mobile
+### Responsive
 
 - Mobile is a first-class target, not a cleanup pass: build every layout mobile-first, use `dvh`/`svh` rather than `vh` for full-height regions, and give every interactive element a minimum 44×44px hit area.
 - The kit's fixed control strips map directly onto a call: parameters and status pin to the top, media controls pin to the bottom, video breathes in between. Honour the safe-area insets on both.
+- **Breakpoints are Tailwind's defaults, and only three are used.** `sm:` 640px is the phone/tablet line, `md:` 768px is iPad portrait, `lg:` 1024px is iPad landscape and small laptops. Unprefixed utilities target the phone. Do not introduce custom breakpoints — a fourth is a sign the layout is fighting the content.
+- **A hit area never shrinks to make a row fit.** Control rows use `flex-none` on every target. A bar that fits by compressing its buttons to 35px has not been made responsive, it has been broken quietly — the layout must drop or collapse controls instead. See `preview/control-states.html`.
+- **Below `sm:` the in-call bar keeps only mic, camera, MORE, and Leave.** Chat, participants, and raise hand move into the MORE sheet. **Width and capability are separate axes**: width decides what sits on the bar versus in the sheet, capability decides whether a control exists at all. Screen share is gated on capability, not width — absent on every phone, but present in the MORE sheet of a narrow *desktop* window, which does support it. Seven controls at the 44px floor measure 440px, which does not fit any phone. Mic, camera, and Leave are never collapsed — they are what someone reaches for under pressure.
+- **Cap line length on large screens.** Text and form content sits in a `max-w-3xl` (or narrower) centred container; only the video grid and the grid backdrop are allowed to run full-bleed. Without this, Home and Call History stretch to unreadable line lengths on a 1440px laptop and worse on a 2560px monitor.
+- **Verify by measuring, not by eye.** `document.documentElement.scrollWidth > clientWidth` at a given width is the objective test for horizontal overflow, and comparing every interactive `getBoundingClientRect()` against 44 is the test for hit areas. Both are quick to run in the browser and catch what a screenshot hides.
+
+---
+
+## Performance
+
+This is a video product: the main thread is shared with WebRTC encoding and
+decoding, and the cost of getting it wrong lands on the weakest device in the
+call, not the developer's laptop.
+
+- **`adaptiveStream` and `dynacast` are both `true`.** They default to `false`, and `<LiveKitRoom>` does not override them. See `library-docs.md` → Room options; without them a twelve-tile grid pulls twelve full-resolution streams.
+- **The room tree is code-split.** `livekit-client` and `@livekit/components-react` are large and are needed only after someone joins. Load the room shell with `next/dynamic` and `ssr: false` so Home, sign-in, and the lobby never pay for it in their bundle. They are also client-only libraries, so SSR would fail regardless.
+- **Cap re-renders inside the grid.** LiveKit hooks fire on every participant event — speaking changes, quality changes, track mutations. A tile that subscribes to room-wide state re-renders on every one of them, times twelve. Subscribe each tile to *its own* participant, keep `useTracks` filters narrow, and memoise tile components. Never put a whole-room hook in a component that renders per tile.
+- **No JS-driven animation inside `<LiveKitRoom>`** — CSS transitions only, using the kit's easing variables. `animejs` is for Home, the lobby, and sign-in.
+- **Never render the grid backdrop behind live video.** It is a repeating gradient over a constantly repainting surface, and it buys nothing over a face.
+- **Honour `prefers-reduced-motion: reduce`** everywhere: keep opacity changes, drop transforms and staggers.
+
+### Targets
+
+Measured on the deployed Render instance, not a dev server. These are the numbers
+feature 22 checks — an unmeasurable goal is not a goal.
+
+| What | Target | How |
+| ---- | ------ | --- |
+| Home, first load JS | under 200 kB gzipped | `next build` output |
+| Home, Lighthouse performance | 90+ on mobile throttling | Chrome DevTools |
+| Room route, first load JS | room chunk loads only after join | `next build` + network panel |
+| Four-participant call | stable for 10 minutes, no audio/video desync | two real devices |
+| Full grid on a low-end phone | no dropped frames on the local preview | real Android, not an emulator |
+
+If a target cannot be met, record the reason in `constraints.md` rather than
+quietly lowering it.
 
 ---
 
@@ -267,6 +306,9 @@ export async function POST(request: NextRequest) {
       roomCode: parsed.data.code,
       identity,
       displayName: parsed.data.displayName,
+      // Caps the TTL so the token cannot outlive the meeting. Already validated
+      // above as being in the future.
+      expiresAt: new Date(meeting.expires_at),
     });
 
     return apiOk({ serverUrl: env.NEXT_PUBLIC_LIVEKIT_URL, token, identity });
@@ -431,6 +473,7 @@ export function useChatKey(): ChatKeyState {
 - Media permission denial is a first-class UI state, not an error toast: the lobby explains that camera or microphone access was blocked and how to re-enable it, and still allows joining audio-only or view-only.
 - A chat message that fails to decrypt renders as an "unreadable message" placeholder in the transcript. It never throws into the render tree and never silently disappears.
 - A missing `#k=` fragment disables the chat composer and shows an explanation that this link cannot read chat. It is not treated as a crash.
+- **A fragment can be lost in transit, and that is expected.** The `#k=` part never reaches a server, which is what keeps the chat key private — but it also means anything that rewrites a URL can drop it: some link shorteners, some chat clients' link handling, and any "copy link" that re-serialises rather than copying the raw string. The call still works; only chat is affected. Share the link as plain text, and never route it through a shortener.
 - LiveKit disconnects are handled by rendering a reconnecting state; the control bar stays interactive throughout. Never unmount the room tree on a transient disconnect.
 - Every `catch` either handles the error or re-throws it with added context. An empty catch block requires a comment explaining what is being deliberately ignored.
 - Errors are logged to the server console only. There is no error-reporting service in this project.
@@ -480,7 +523,19 @@ export const REACTION_TTL_MS = 4_000;
 
 export const MAX_DISPLAY_NAME_LENGTH = 48;
 export const MAX_CHAT_MESSAGE_LENGTH = 2_000;
+
+/** Footer links. Rendered on Home and Call History, so they live here, not inline. */
+export const AUTHOR_LINKS = [
+  { label: 'Source', href: 'https://github.com/SidVaidya2005/VideoCircle' },
+  { label: 'LinkedIn', href: 'https://www.linkedin.com/in/siddarth-vaidya-885871239' },
+  { label: 'Email', href: 'mailto:siddarthvaidya2005@gmail.com' },
+  { label: 'Portfolio', href: 'https://siddarthvaidya2005-7iyf.onrender.com' },
+] as const;
+
+export const AUTHOR_BYLINE = 'Built by Siddarth Vaidya';
 ```
+
+- Every external link in `AUTHOR_LINKS` renders with `target="_blank"` and `rel="noopener noreferrer"`. The `mailto:` gets neither.
 
 - Any value used by more than one module lives here. A magic number appearing twice is a bug waiting to happen.
 - `DATA_TOPIC` values are a wire protocol shared between peers — changing one is a breaking change for anyone mid-call on an older bundle.
@@ -500,7 +555,7 @@ export const MAX_CHAT_MESSAGE_LENGTH = 2_000;
 ## Comments
 
 - Comment *why*, never *what*. If the code needs a comment to explain what it does, rename something instead.
-- Non-obvious constraints must be commented: why the webhook reads the raw body, why the token TTL is four hours, why the alphabet has 32 characters, why a `catch` is empty.
+- Non-obvious constraints must be commented: why the webhook reads the raw body, why the token TTL is capped to the meeting's remaining life, why the alphabet has 32 characters, why a `catch` is empty.
 - Every security-relevant decision carries a one-line comment, because the next reader must not "simplify" it away.
 - JSDoc goes on exported functions in `src/lib/` whose contract is not obvious from the signature — especially anything in `src/lib/crypto/`.
 - `TODO:` comments must name what is missing. A bare `TODO` is not acceptable. Anything deferred also gets an entry in `build-journal.md`.

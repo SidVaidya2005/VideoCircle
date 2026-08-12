@@ -38,14 +38,22 @@ working in this repo.
 | `context/build-journal.md` | Decisions and gotchas, per feature |
 | `context/Design/` | The Anime.js brand kit this project is designed against |
 
-## Prerequisites
+## Running it
+
+> **Nothing in this section works yet.** Everything from here to the end of the
+> file — prerequisites, environment, local development, testing, deployment —
+> describes the intended setup once the build reaches it. `package.json` does not
+> exist until feature 01, so every command below will fail today. Live status is
+> `context/progress-tracker.md`.
+
+### Prerequisites
 
 - Node.js 20+
 - A [LiveKit Cloud](https://cloud.livekit.io) project (API key, secret, and `wss://` URL)
 - A [Supabase](https://supabase.com) project with the Google OAuth provider enabled
 - A Google Cloud OAuth 2.0 client, with Supabase's callback URL registered
 
-## Environment
+### Environment
 
 Copy `.env.example` to `.env.local` and fill it in. Never commit `.env.local`.
 
@@ -59,7 +67,7 @@ Copy `.env.example` to `.env.local` and fill it in. Never commit `.env.local`.
 | `LIVEKIT_API_KEY` | **Yes** | |
 | `LIVEKIT_API_SECRET` | **Yes** | Also verifies webhook signatures |
 
-## Local development
+### Local development
 
 ```bash
 npm install
@@ -70,7 +78,7 @@ npm run dev              # http://localhost:3000
 `localhost` counts as a secure context, so the Web Crypto APIs behind encrypted chat
 work in development without HTTPS.
 
-## Testing
+### Testing
 
 ```bash
 npm run test       # Vitest — crypto, room codes, formatting
@@ -80,7 +88,7 @@ npm run test:e2e   # Playwright — lobby, join, two-party chat
 Playwright launches Chromium with fake media devices, so call flows run without a
 real camera.
 
-## First deploy to Render
+### First deploy to Render
 
 1. Create a Render **Web Service** from this repo; `render.yaml` defines the build and start commands.
 2. Set every environment variable above in the Render dashboard. Secrets are declared `sync: false` and must be entered by hand.

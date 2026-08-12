@@ -16,13 +16,13 @@
 <div class="lbl">code block · mono · syntax uses brand accents</div>
 <pre><span class="k">import</span> { <span class="f">animate</span>, <span class="f">stagger</span> } <span class="k">from</span> <span class="s">'animejs'</span>;
 
-<span class="f">animate</span>(<span class="s">'.square'</span>, {
-  x: <span class="n">320</span>,
-  rotate: { from: <span class="n">-180</span> },
-  duration: <span class="n">1250</span>,
-  delay: <span class="f">stagger</span>(<span class="n">65</span>, { from: <span class="s">'center'</span> }),
-  ease: <span class="s">'inOutQuint'</span>,
-  loop: <span class="k">true</span>,
-  alternate: <span class="k">true</span>
+<span class="c">// Home only — never inside &lt;LiveKitRoom&gt;, where JS animation</span>
+<span class="c">// competes with WebRTC encoding for the main thread.</span>
+<span class="f">animate</span>(<span class="s">'.hero-char'</span>, {
+  opacity: { from: <span class="n">0</span> },
+  y: { from: <span class="n">12</span> },
+  duration: <span class="n">600</span>,
+  delay: <span class="f">stagger</span>(<span class="n">35</span>, { from: <span class="s">'center'</span> }),
+  ease: <span class="s">'outExpo'</span>
 });</pre>
 </body></html>

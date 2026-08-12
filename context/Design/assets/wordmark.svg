@@ -1,0 +1,34 @@
+<!--
+  VideoCircle wordmark: the red square dotting the i in "circle".
+
+  This is the kit's own gesture. Upstream dots the i in its wordmark with a red
+  square; this is the same move on our name. Set lowercase, one family, no
+  tracking, because the brand reserves wide tracking for CAPS overlines.
+
+  IN THE APP, RENDER THE WORDMARK AS LIVE TEXT, NOT THIS FILE. It is a mono
+  wordmark, so real text in next/font's JetBrains Mono stays crisp at every
+  size, scales with the type ramp, and is readable by screen readers. See
+  preview/logo.html for the HTML/CSS recipe. This SVG exists only for places
+  live text is unavailable: OG images, README embeds, external decks.
+
+  The glyph is U+0131 DOTLESS I, so the red square is the only tittle; an
+  ordinary "i" would show its own dot underneath. Dot placement assumes a
+  0.6em monospace advance (JetBrains Mono). If the family ever changes,
+  recompute x = (charIndex + 0.5) * 0.6 * fontSize.
+
+  Colours are literals because an SVG cannot read CSS custom properties. They
+  match the fg-1 and red-1 tokens in colors_and_type.css; keep them in sync by
+  hand. (Token names appear without their CSS prefix: an XML comment may not
+  contain a double hyphen.)
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" width="320" height="80" role="img" aria-label="VideoCircle">
+  <title>VideoCircle</title>
+
+  <text x="0" y="60"
+        font-family="'JetBrains Mono','IoskeleyMono','IBM Plex Mono',ui-monospace,monospace"
+        font-size="48" font-weight="700" letter-spacing="0" fill="#dddcda"
+        xml:space="preserve">videoc&#x0131;rcle</text>
+
+  <!-- the tittle: index 6 of "videocircle", centred at (6 + 0.5) * 28.8 = 187.2 -->
+  <rect x="183.2" y="24" width="8" height="8" fill="#ff4b4b" />
+</svg>

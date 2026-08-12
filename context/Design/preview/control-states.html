@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Call" name="Control states" subtitle="Rest · engaged · warning · leave" viewport="700x460" -->
+<html><head><meta charset="utf-8"><title>Control States</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;padding:16px;background:var(--bg-1);color:var(--fg-1);font-family:var(--font-mono)}
+  .lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-3);margin-bottom:10px}
+
+  /* THE RECIPE — 44px minimum hit area, asymmetric hover, no shrink on press */
+  .ctrl{
+    width:44px;height:44px;
+    /* flex:none is load-bearing, not cosmetic. Without it these shrink to fit a
+       narrow bar and the 44px hit-area floor is breached silently — the bar
+       still "fits", but every target is too small to hit. Never remove it. */
+    flex:none;
+    display:inline-flex;align-items:center;justify-content:center;
+    border:0;border-radius:var(--radius-md);
+    background:rgba(255,255,255,.05);
+    color:var(--fg-1);
+    cursor:pointer;
+    /* snaps on, relaxes off — the kit's asymmetry */
+    transition:background-color .25s ease-in-out, color .25s ease-in-out;
+  }
+  .ctrl:hover{background:rgba(255,255,255,.1);transition:background-color .05s ease-out, color .05s ease-out}
+  .ctrl svg{width:20px;height:20px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+
+  /* engaged = white fill, dark glyph. The kit's inverted press state. NOT red. */
+  .ctrl.on{background:var(--white-1);color:var(--bg-1)}
+  .ctrl.on:hover{background:var(--white-2)}
+
+  /* self-warning = red glyph on a red-tinted ground. Your mic/cam only. */
+  .ctrl.warn{background:var(--red-5);color:var(--red-1)}
+  .ctrl.warn:hover{background:var(--red-4)}
+
+  /* leave = the one solid red control in the product */
+  .ctrl.leave{background:var(--red-1);color:var(--bg-1);width:64px}
+  .ctrl.leave:hover{background:var(--red-2)}
+
+  .ctrl:disabled{background:rgba(255,255,255,.03);color:var(--fg-4);cursor:not-allowed}
+
+  .bar{display:flex;gap:8px;align-items:center;padding:10px 12px;background:var(--bg-2);
+       border:1px solid rgba(255,255,255,.08);border-radius:var(--radius-lg);width:max-content}
+  /* Specimen-only: lets this page show the 440px bar without the page itself
+     overflowing. The product does NOT scroll its control bar — below 640px it
+     uses the phone layout above. */
+  .scroller{overflow-x:auto;padding-bottom:4px}
+  .spacer{width:14px}
+  .phone{max-width:360px}   /* the narrowest supported viewport */
+
+  .legend{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:18px}
+  .item{display:flex;gap:9px;align-items:flex-start}
+  .item .cap{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-3);line-height:1.5}
+  .item .cap b{display:block;color:var(--fg-1);margin-bottom:2px}
+  .note{margin-top:18px;font-size:11px;color:var(--fg-3);line-height:1.6}
+  .note strong{color:var(--fg-1)}
+  code{font-size:10px}
+</style></head><body>
+
+<div class="lbl">phone (under 640px) — secondary controls collapse into MORE</div>
+<div class="phone">
+  <div class="bar">
+    <button class="ctrl" aria-label="Mute microphone">
+      <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4"/></svg>
+    </button>
+    <button class="ctrl" aria-label="Turn off camera">
+      <svg viewBox="0 0 24 24"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m22 8-6 4 6 4V8Z"/></svg>
+    </button>
+    <button class="ctrl" aria-label="More options" aria-haspopup="menu" aria-expanded="false">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+    </button>
+    <span class="spacer"></span>
+    <button class="ctrl leave" aria-label="Leave the meeting">
+      <svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z" transform="rotate(135 12 12)"/></svg>
+    </button>
+  </div>
+</div>
+
+<div class="lbl" style="margin-top:22px">tablet and up (640px+) — full bar. hover the controls</div>
+<div class="scroller">
+<div class="bar">
+  <button class="ctrl" aria-label="Mute microphone">
+    <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4"/></svg>
+  </button>
+  <button class="ctrl warn" aria-label="Unmute microphone" aria-pressed="true">
+    <svg viewBox="0 0 24 24"><path d="m2 2 20 20"/><path d="M9 9v3a3 3 0 0 0 5.1 2.1"/><path d="M15 9.3V5a3 3 0 0 0-5.9-.7"/><path d="M5 11a7 7 0 0 0 10.7 6"/><path d="M19 11v1"/><path d="M12 18v4"/></svg>
+  </button>
+  <button class="ctrl" aria-label="Turn off camera">
+    <svg viewBox="0 0 24 24"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m22 8-6 4 6 4V8Z"/></svg>
+  </button>
+  <!-- Screen share appears ONLY where getDisplayMedia exists. On a device
+       without it the control is absent, never disabled — see the note below. -->
+  <button class="ctrl" aria-label="Share your screen">
+    <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+  </button>
+  <!-- engaged: the chat panel is open -->
+  <button class="ctrl on" aria-label="Close chat" aria-pressed="true">
+    <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+  </button>
+  <button class="ctrl" aria-label="Show participants">
+    <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>
+  </button>
+  <span class="spacer"></span>
+  <button class="ctrl leave" aria-label="Leave the meeting">
+    <svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z" transform="rotate(135 12 12)"/></svg>
+  </button>
+</div>
+</div>
+
+<div class="legend">
+  <div class="item"><div class="cap"><b>Rest</b><code>rgba(255,255,255,.05)</code> → <code>.1</code> on hover</div></div>
+  <div class="item"><div class="cap"><b>Engaged</b><code>--white-1</code> fill, <code>--bg-1</code> glyph</div></div>
+  <div class="item"><div class="cap"><b>Self warning</b><code>--red-5</code> ground, <code>--red-1</code> glyph</div></div>
+  <div class="item"><div class="cap"><b>Leave</b><code>--red-1</code> fill, <code>--bg-1</code> glyph</div></div>
+  <div class="item"><div class="cap"><b>Unavailable</b>control is absent, not disabled</div></div>
+  <div class="item"><div class="cap"><b>Hit area</b>44×44 floor, always</div></div>
+</div>
+
+<div class="note">
+  <strong>Engaged is a white fill, never red.</strong> Several toggles can be engaged at once in a call;
+  if "on" were red, red would stop meaning danger exactly when Leave needs it most. Red appears twice
+  only: your own muted mic or stopped camera, and Leave.<br>
+  <strong>Press does not shrink.</strong> The kit inverts the fill instead, and keyboard focus reuses
+  that same inverted state — so focus and press look identical by design.<br>
+  <strong>Transitions are asymmetric</strong> — <code>50ms ease-out</code> in, <code>250ms ease-in-out</code>
+  out. CSS only: this bar lives inside <code>&lt;LiveKitRoom&gt;</code>, where JS animation competes with
+  video encoding. Every control carries an <code>aria-label</code>, and every toggle an <code>aria-pressed</code>.<br>
+  <strong>An unavailable capability is absent, not disabled.</strong> Screen share renders only where
+  <code>navigator.mediaDevices.getDisplayMedia</code> exists. It exists on no mobile browser — not iOS
+  Safari, not Chrome, Firefox, Samsung Internet, or Opera on Android — so on a phone the control simply
+  is not there. A permanently dead button that can never be enabled on this device is noise, and it
+  invites a tap that can only disappoint.<br>
+  <strong>The full bar does not fit a phone, and hit areas do not shrink.</strong> Seven controls at the
+  44px floor plus the wider Leave measure 440px — wider than a 430px iPhone, let alone a 360px Android.
+  Below <code>sm:</code> (640px) only <strong>mic, camera, MORE, and Leave</strong> stay on the bar; chat,
+  participants, screen share, and raise hand move into the MORE sheet. Mic, camera, and Leave are never
+  collapsed — they are the controls someone reaches for under pressure.
+</div>
+
+</body></html>

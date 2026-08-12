@@ -7,8 +7,9 @@
 ## About the Project
 
 VideoCircle is a browser-based video calling product. Anyone can start a meeting,
-get a random share link, and be in a call within seconds — no download, and no
-account unless they want one. People who sign in with Google additionally get a
+get a random share link, and hand it to someone who joins by opening it — no
+download, no install, no meeting ID typed by hand, and no account unless they
+want one. People who sign in with Google additionally get a
 history of the calls they took part in. Every meeting opens into a lobby where you
 see your own camera preview and set your mic and camera state before anyone else
 sees or hears you, and those controls stay available for the whole call.
@@ -113,7 +114,7 @@ That is a narrower promise than "nothing is stored." The participation record fo
 guest — display name, the one-off identity, and join/leave timestamps — persists as
 long as the meeting does, because it is what puts their name in other participants'
 call history. What does not exist is any way to ask "which meetings did this person
-attend," since the identity is discarded at the end of the call and never reused.
+attend," because the identity is single-use: a fresh one is minted on every join and never reused, so two appearances by the same person share no identifier. The identity string itself does persist in the participation row — that is what the sentence above describes — it simply links to nothing else.
 
 ### Meetings
 
@@ -182,7 +183,9 @@ conversation stays private.
 
 ## Success Criteria
 
-- A first-time visitor with no account can go from landing on Home to being in a call with a second person in under 30 seconds, using only a copied link.
+- **The join path costs no steps that a stopwatch would measure.** A first-time visitor with no account joins by opening a link: no download, no install, no extension, no meeting ID typed by hand, no sign-up. This — not a wall-clock figure — is the product claim, and it holds on any tier.
+- On a **warm** instance, opening a share link to being connected takes under 10 seconds of *application* time, measured from navigation start to LiveKit reporting connected. This deliberately excludes the browser's camera and microphone permission prompt and the time the person spends typing a display name: both are the person's own pace, not the app's.
+- On a **cold** instance the free Render service adds roughly a minute before any of the above, because it spins down after 15 minutes idle. That is an accepted hosting cost recorded in `constraints.md` → Hosting, not a regression to chase, and it is disclosed wherever a link is handed out.
 - Opening a share link in a fresh browser profile reaches the lobby, shows a self-preview, and joins successfully without any sign-in.
 - Mic and camera can be toggled in the lobby, the state carries into the call, and both can be toggled again at any point during the call.
 - Switching camera or microphone mid-call swaps the published track without dropping the connection.
@@ -197,3 +200,29 @@ conversation stays private.
 - Every page and panel is usable at a 360px viewport width, with no horizontal scroll and all interactive targets at least 44px.
 - A four-participant call runs on the deployed Render instance with stable video and audio for ten minutes.
 - `npm run build`, `npm run lint`, `npm run test`, and `npm run test:e2e` all pass.
+
+---
+
+## Reading this folder
+
+`context/` is self-contained: it explains what this product is, how it is built,
+why it is built that way, and the rules every change follows. You should not need
+to read `src/` to understand any of that.
+
+| To find out | Read |
+| ----------- | ---- |
+| What it is, who it's for, what's out of scope | this file |
+| Stack, folder layout, data model, boundaries, **invariants** | `architecture.md` |
+| The rules every change must follow | `code-standards.md` |
+| How to use a specific library here | `library-docs.md` — that library's section |
+| What gets built, in what order | `build-plan.md` |
+| What is done and what is next | `progress-tracker.md` |
+| Decisions that still bind | `constraints.md` |
+| How the build got here, feature by feature | `build-journal.md` |
+| The visual language | `Design/README.md` |
+
+The one thing deliberately **not** here is how to clone, obtain LiveKit and
+Supabase credentials, and run the app locally. That lives in the repository
+`README.md`, so there is exactly one copy of it and it cannot drift from what a
+newcomer actually types.
+

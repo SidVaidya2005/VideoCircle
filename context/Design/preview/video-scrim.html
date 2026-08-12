@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Call" name="Video scrim" subtitle="Text over live video" viewport="700x420" -->
+<html><head><meta charset="utf-8"><title>Video Scrim</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;padding:16px;background:var(--bg-1);color:var(--fg-1);font-family:var(--font-mono)}
+  .lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-3);margin-bottom:8px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+
+  .tile{position:relative;aspect-ratio:16/10;border-radius:var(--radius-lg);overflow:hidden;background:var(--bg-3)}
+  /* Stand-in for the worst-case frame: a bright window filling the lower half,
+     i.e. brightest exactly where the label sits. This is the case the rule is
+     for — a highlight in the middle of frame would not test anything. */
+  .feed{position:absolute;inset:0;background:
+     radial-gradient(ellipse 90% 70% at 38% 88%, #ffffff 0%, #f7f4ec 26%, #ddd6c6 48%, transparent 78%),
+     linear-gradient(160deg, #8d8778 0%, #6c6659 45%, #3a3730 100%);}
+
+  .scrim{position:absolute;left:0;right:0;bottom:0;height:var(--scrim-tile-height);background:var(--scrim-tile);pointer-events:none}
+
+  .name{position:absolute;left:10px;bottom:9px;display:flex;align-items:center;gap:7px;
+        font-size:var(--text-xs);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--fg-1)}
+  .name .muted{width:6px;height:6px;background:var(--red-1);flex:none}
+
+  .bad .name{color:var(--fg-3)}
+  .verdict{margin-top:7px;font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+  .ok{color:var(--green-1)} .no{color:var(--red-1)}
+  .note{margin-top:14px;font-size:11px;color:var(--fg-3);line-height:1.6}
+  .note strong{color:var(--fg-1)}
+  code{font-size:10px}
+</style></head><body>
+
+<div class="row">
+  <div>
+    <div class="lbl">without scrim</div>
+    <div class="tile bad">
+      <div class="feed"></div>
+      <div class="name">Priya Raman</div>
+    </div>
+    <div class="verdict no">label dissolves into the highlight</div>
+  </div>
+
+  <div>
+    <div class="lbl">with scrim — the rule</div>
+    <div class="tile">
+      <div class="feed"></div>
+      <div class="scrim"></div>
+      <div class="name"><span class="muted"></span>Priya Raman</div>
+    </div>
+    <div class="verdict ok">holds on any frame</div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Any text over live video rides a scrim.</strong> Every other contrast pairing in this kit
+  assumes a known <code>--bg-*</code>; a video tile has no known background, and the worst case is a
+  bright window behind the participant.<br>
+  Use <code>--scrim-tile</code> (bottom-up gradient, <code>--scrim-tile-height</code>) for tile labels,
+  <code>--scrim-flat</code> for a full overlay. Label text is <code>--fg-1</code> on the scrim, never
+  <code>--fg-3</code> — muted greys are for known backgrounds only.<br>
+  <strong>No <code>backdrop-blur</code>.</strong> The brand uses flat semi-opaque fills; glassmorphism is
+  not part of it, and the blur costs GPU on exactly the phones the call is hardest on.
+</div>
+
+</body></html>
