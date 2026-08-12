@@ -1,6 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 3000;
+// Deliberately NOT 3000. With `reuseExistingServer`, anything already holding the
+// dev port gets reused — a leftover `next start`, or an editor's port-forwarding
+// helper — and the suite then tests something other than what it just built. That
+// failed confusingly once: a stale production server made the dev-only /tokens
+// route 404 and five unrelated tests went red. A dedicated port removes the class
+// of problem rather than the instance.
+const PORT = 3100;
 const BASE_URL = `http://localhost:${PORT}`;
 
 export default defineConfig({
@@ -32,7 +38,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: process.env.CI ? 'npm run build && npm run start' : 'npm run dev',
+    command: process.env.CI
+      ? `npm run build && npm run start -- --port ${PORT}`
+      : `npm run dev -- --port ${PORT}`,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
