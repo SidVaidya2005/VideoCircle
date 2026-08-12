@@ -23,9 +23,18 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet, headers) {
           for (const { name, value, options } of cookiesToSet) {
             response.cookies.set(name, value, options);
+          }
+
+          // The second argument is not optional in spirit. When auth cookies are
+          // set, @supabase/ssr passes the no-store cache directives that stop a CDN
+          // or reverse proxy from caching this response and later serving one
+          // user's session token to somebody else. Dropping it is silent until it
+          // is catastrophic.
+          for (const [key, value] of Object.entries(headers)) {
+            response.headers.set(key, value);
           }
         },
       },
