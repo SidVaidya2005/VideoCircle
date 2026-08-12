@@ -46,6 +46,23 @@ At that phase's checkpoint, the whole phase collapses to:
 
 ## Phase 0 — Foundation
 
+### Feature 03 — Supabase project and schema  *(2026-08-12)*
+
+- Project `jpsmnmafupzqwxueksyo` ("VideoCircle"), `ap-southeast-1`, free plan, Postgres 17. Region matches the existing Promptx project; Supabase latency is paid by the Next.js server on every render, so it wants to sit near Render, not near end users.
+- Decision: **`private.is_meeting_participant`, not `public`.** A `security definer` function in an API-exposed schema is callable as RPC by any authenticated user. `private` is not in PostgREST's exposed schemas, so it has no HTTP surface. Also `set search_path = ''` (empty, not `public`), forcing fully-qualified relations.
+- Gotcha: **revoking `EXECUTE` from `authenticated` breaks every policy read** — `42501: permission denied for function is_meeting_participant`. Postgres evaluates a policy expression as the calling user. The widely-repeated advice to revoke applies to helpers called from application code, not from inside a policy. Migration 6 grants it back and explains why; the isolation was never coming from the grant. Found by hitting the error, not by reading about it.
+- Gotcha: **the performance advisor flagged `multiple_permissive_policies`** on `meeting_participants`. The two SELECT policies were nested rather than merely overlapping: "read own participation" allowed rows where `user_id = auth.uid()`, and every such row is by definition in a meeting the caller participated in, so the co-participant helper already returned true for it. Dropped the narrower one; nothing widened.
+- Gotcha: **`abc-defg-hij` — the example room code in the docs — is invalid.** The alphabet excludes `i`, `l`, `0` and `1`, and the new CHECK constraint rejected it on the first seed attempt. Fixed to `abc-defg-hjk` in `project-overview.md` and the unit test. Precisely the reason for duplicating the pattern into the database rather than trusting the application check.
+- Decision: **2-hour grace period on the sweep**, resolving a contradiction in `architecture.md` — Data Flow said it closes open participation rows, Expiry Policy said it skips meetings that have any. Taken literally the second made the first unreachable, and since a dropped `room_finished` usually means `participant_left` was dropped too, skipping open rows would have defeated the backstop entirely.
+- Decision: **`(select auth.uid())` everywhere**, and `to authenticated` on every policy. Bare `auth.uid()` is re-evaluated per candidate row.
+- Decision: **no `force row level security`.** It subjects the table owner to its own policies and would fight migrations; `service_role` bypasses RLS through `bypassrls` either way.
+- Gotcha: wrote all four Supabase clients before installing `@supabase/ssr` and `@supabase/supabase-js`, so typecheck and build failed on missing modules. Installed 0.12.4 and 2.112.3.
+- Verified: **security advisors return zero findings.** Performance returns four `unused_index` INFOs, which is what a database that has never served a query looks like — those indexes exist for F06, F20 and F21.
+- Verified with three seeded users and two meetings, impersonating each via `set local role authenticated` plus fabricated `request.jwt.claims`: no recursion; Alice (in M1 with Bob and a guest) sees 3 participation rows, 1 meeting, 1 profile, and only M1's code; Carol sees only her own meeting; anon sees nothing at all. The trigger populated `profiles` through all three coalesce branches — `full_name`, `name`, and the email local-part.
+- Verified the constraints reject what they must: a second open row for one `(meeting_id, identity)`, an explicit `is_guest` write, a `left_at` before `joined_at`, and a malformed code. Verified the sweep closes a meeting expired 3h ago *and* its stranded participation row, closes one expired 3h ago that was never joined, and leaves one expired 10 minutes ago untouched. All seed data deleted afterwards; all four tables back to zero rows.
+- Verified `cron.job` holds `sweep-expired-meetings` at `17 3 * * *`, active.
+- Verified the middleware runs against the live project: HTTP 200, no console or server errors, no `sb-` cookies (correct — nobody has signed in yet).
+
 ### Feature 02 — Design tokens and UI primitives  *(2026-08-12)*
 
 - Decision: **~70 tokens mirrored into `:root`, `@theme inline` reduced to pure `var()` mapping.** Previously the radii, type scale, tracking and easings lived as literals inside `@theme inline`, where nothing compared them to the kit. The 16-hue chromatic palette (96 values) stays out — `Design/README.md` calls it "available, rarely correct" — as do upstream's `--br` / `--padding` / `--input-border-radius` aliases, which duplicate tokens we keep.

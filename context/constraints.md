@@ -33,7 +33,16 @@ feature. The feature refs below point at where each one will be applied.*
 
 - **Render's free tier is a deliberate choice, and it spins down.** A free web service sleeps after 15 minutes without inbound traffic, and the next request takes roughly a minute to wake it — Render serves its own loading page during that window, before any of our code runs, so it cannot be branded, shortened, or replaced. Accepted to keep the project free to run. (F25)
 - **Design for the cold click.** The person who feels this is never the meeting's creator — they have just used the app, so it is warm. It is whoever opens a shared link after an idle spell, and anyone opening the portfolio demo link cold. Surfaces that hand out a link say so plainly; the README says so above the demo link. Never promise instant join in copy. (F06, F25)
+- **A free Supabase project pauses after ~7 days idle, and `pg_cron` does not run while paused.** The expiry sweep is a backstop, not the primary path — `room_finished` is — so this degrades rather than breaks: a meeting stays open until the next request wakes the project and the following night's sweep runs. Do not add a pinger to work around it, for the same reason as below. (F03)
 - **Do not add a keep-alive pinger.** One always-on free service consumes about 730 of the 750 free instance hours per month, and exceeding that suspends every free service in the workspace. The margin is too thin to be worth the ~60s it saves. (F25)
+
+## Data and RLS
+
+- **A `security definer` helper used inside an RLS policy must keep `EXECUTE` for `authenticated`.** Postgres evaluates a policy expression as the calling user, so revoking it makes every read fail with `42501: permission denied for function`. The common advice to revoke applies to helpers called from application code, not from a policy. Isolation comes from the `private` schema — which PostgREST does not expose — not from the grant. Verified by hitting the error. (F03)
+- **`private` is the home for every `security definer` function**, with `set search_path = ''` and fully-qualified relations. A function in `public` is callable as RPC by any authenticated user. (F03)
+- **One permissive policy per table per action, where possible.** Postgres evaluates every permissive policy against every candidate row and ORs the results. `meeting_participants` originally had a "read own" policy that was a strict subset of the co-participant one; the advisor flagged it as `multiple_permissive_policies` and it was dropped. (F03)
+- **The expiry sweep waits 2 hours past `expires_at`.** Long enough that no call is plausibly still draining, short enough to still be a nightly backstop. It closes open participation rows, which a sweep without a grace period could not do safely. (F03)
+- **`meetings.code` is CHECK-constrained to the room-code alphabet**, which excludes `i`, `l`, `0` and `1`. `abc-defg-hij` — used as the example code in the docs until F03 — is *invalid* and the database rejects it. Use `abc-defg-hjk`. (F03)
 
 ## Design system
 

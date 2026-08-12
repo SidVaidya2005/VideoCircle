@@ -60,6 +60,7 @@ VideoCircle/
 ├── public/
 │   └── brand/                         → mark.svg + wordmark.svg, copied out of context/Design/assets/
 ├── supabase/
+│   ├── config.toml                    → CLI config (supabase init)
 │   └── migrations/                    → timestamped SQL migrations (schema + RLS)
 ├── tests/
 │   ├── unit/                          → Vitest specs
@@ -137,6 +138,7 @@ VideoCircle/
 | `src/lib/livekit/token.ts` | The only place `serverEnv.LIVEKIT_API_SECRET` is used for signing. |
 | `src/types` | Shared type declarations only. No runtime values, no logic. |
 | `supabase/migrations` | Schema, indexes, and RLS policies as SQL. Schema is never mutated from application code. |
+| `private` (DB schema) | Every `security definer` function. Not exposed by PostgREST, so nothing in it is reachable as RPC. |
 | `tests` | Vitest and Playwright specs. No production code imports anything from here. |
 
 ---
@@ -207,10 +209,11 @@ LiveKit Cloud  ── webhook POST ──▶  /api/livekit/webhook
                           meeting: left_at = coalesce(left_at, now()). This is the
                           reconciliation for a dropped participant_left event.
 
-Nightly pg_cron sweep (backstop for a dropped room_finished):
-  → meetings where ended_at is null and expires_at < now()
-      → ended_at = expires_at
+Nightly pg_cron sweep (backstop for a dropped room_finished), 03:17 UTC:
+  → meetings where ended_at is null and expires_at < now() - interval '2 hours'
       → close any participation rows still open, left_at = expires_at
+      → then ended_at = expires_at
+    The 2-hour grace is what lets it close open rows safely — see Expiry policy.
 ```
 
 ### Reading call history
@@ -271,7 +274,7 @@ Indexes: unique on `code`; `(expires_at) where ended_at is null` for the sweep.
 - **No new joins after `expires_at`.** `/api/token` returns `410`.
 - **No token outlives the meeting.** TTL is `min(1h, expires_at − now)`, so a token minted at hour 23 of a 24-hour window is valid for one hour, not four.
 - **A call already in progress is allowed to finish.** LiveKit refreshes the session tokens of connected clients on its own, so participants are not ejected at the boundary. Cutting a live conversation mid-sentence to enforce a 24-hour bookkeeping limit would be worse than letting it drain, and `room_finished` sets `ended_at` when the last person leaves.
-- **The nightly sweep skips meetings that still have open participation rows.** It exists as a backstop for a dropped `room_finished`, not as a reaper — closing a meeting people are still sitting in would write a `left_at` for participants who have not left.
+- **The nightly sweep waits 2 hours past `expires_at`, then closes everything — including open participation rows.** It is a backstop for a dropped `room_finished`, not a reaper. The grace period is what reconciles two things that would otherwise conflict: a dropped `room_finished` usually means `participant_left` was dropped too, so a sweep that skipped meetings with open rows would never fix the case it exists for; but closing a meeting people are still sitting in would write a `left_at` for participants who have not left. Two hours past a 24-hour expiry is long enough that a still-running call is implausible and anything remaining is stale bookkeeping.
 
 **Lifecycle.** Meetings are created on "New meeting" and closed one of two ways: the
 `room_finished` webhook sets `ended_at` when the LiveKit room empties, or a nightly
@@ -308,37 +311,58 @@ row in the same meeting" — is a `meeting_participants` policy that queries
 infinitely. It fails at migration time, not gradually.
 
 The fix is a `security definer` function, which runs with the owner's rights and so
-does not re-enter the policy:
+does not re-enter the policy. Because it bypasses RLS on what it touches, the
+`auth.uid()` check must live **inside the body** — otherwise it answers "is anyone
+a participant" rather than "am I":
 
 ```sql
-create or replace function public.is_meeting_participant(target_meeting uuid)
+-- The helper lives in `private`, NOT `public`. A security definer function in an
+-- API-exposed schema is callable as RPC by any authenticated user; `private` is
+-- not in PostgREST's exposed schemas, so it has no HTTP surface at all.
+create schema if not exists private;
+
+create or replace function private.is_meeting_participant(target_meeting uuid)
 returns boolean
 language sql
 security definer
 stable
-set search_path = public   -- required: prevents search_path hijacking on a definer function
+set search_path = ''       -- empty, so every relation below must be fully qualified
 as $$
   select exists (
     select 1 from public.meeting_participants
     where meeting_id = target_meeting
-      and user_id = auth.uid()
+      and user_id = (select auth.uid())
   );
 $$;
 
-revoke all on function public.is_meeting_participant(uuid) from public;
-grant execute on function public.is_meeting_participant(uuid) to authenticated;
+-- `authenticated` MUST keep EXECUTE. Postgres evaluates a policy expression as
+-- the calling user, so revoking it makes every read fail with
+-- "permission denied for function is_meeting_participant". Granting costs
+-- nothing: the schema is what hides it, and the function only ever answers about
+-- its own caller.
+grant execute on function private.is_meeting_participant(uuid) to authenticated;
 
--- meeting_participants: your own rows, plus everyone in a meeting you were in.
-create policy "read own participation" on public.meeting_participants
-  for select using (user_id = auth.uid());
-
-create policy "read co-participants" on public.meeting_participants
-  for select using (public.is_meeting_participant(meeting_id));
+-- meeting_participants: every row in a meeting you took part in — which already
+-- includes your own rows, since a row of yours IS proof you were in that meeting.
+-- A separate "read own participation" policy would be a strict subset, and
+-- Postgres evaluates every permissive policy on every candidate row.
+create policy "read participation in meetings you joined" on public.meeting_participants
+  for select to authenticated
+  using ((select private.is_meeting_participant(meeting_id)));
 
 -- meetings: only those you took part in.
 create policy "read joined meetings" on public.meetings
-  for select using (public.is_meeting_participant(id));
+  for select to authenticated
+  using ((select private.is_meeting_participant(id)));
+
+-- profiles: your own.
+create policy "read own profile" on public.profiles
+  for select to authenticated
+  using ((select auth.uid()) = id);
 ```
+
+`auth.uid()` is wrapped in a subselect everywhere. Bare, Postgres re-evaluates it
+once per candidate row; wrapped, it evaluates once for the whole query.
 
 There are no `insert`, `update`, or `delete` policies on either table. All writes go
 through `supabaseAdmin`, which bypasses RLS — guests have no JWT to write with, so
@@ -648,7 +672,9 @@ export function apiError(code: string, message: string, status: number) {
 - `/api/token` loads the meeting by code and refuses unless `ended_at is null and now() < expires_at`; a syntactically valid code is never sufficient to mint a token.
 - Every write to `meetings` and `meeting_participants` happens inside a route handler using `supabaseAdmin`; no browser code writes to Postgres.
 - `meeting_participants.is_guest` is a generated column and is never included in an insert or update.
-- No RLS policy on a table contains a subquery against that same table; co-participant checks go through the `is_meeting_participant` `security definer` function.
+- No RLS policy on a table contains a subquery against that same table; co-participant checks go through the `private.is_meeting_participant` `security definer` function.
+- Every `security definer` function lives in the `private` schema, never `public`, and sets `search_path = ''` with fully-qualified relations. `private` is not exposed by PostgREST, so nothing in it has an HTTP surface.
+- Every RLS policy wraps `auth.uid()` in a subselect and names its role with `to authenticated`.
 - Every decrypted chat payload is validated with `ChatPlaintextSchema` before use; a bare `JSON.parse` result is never treated as a message.
 - RLS is enabled on every table in the `public` schema, and every table has an explicit `select` policy scoped through `auth.uid()`.
 - Every history query is scoped to the current user's `auth.uid()` in the query itself, not only by RLS.

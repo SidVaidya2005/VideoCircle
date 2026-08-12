@@ -18,8 +18,8 @@ progress, and what is next.
 ## Current Status
 
 **Phase:** Phase 0 — Foundation
-**Last completed:** 02 Design tokens and UI primitives — 70 tokens mirrored and guarded three ways, shell + `/tokens` rendering
-**Next:** 03 Supabase project and schema
+**Last completed:** 03 Supabase project and schema — RLS verified against a live database, zero security advisories
+**Next:** Phase checkpoint — verify Phase 0 is stable, then compact `build-journal.md`
 
 ---
 
@@ -29,7 +29,7 @@ progress, and what is next.
 
 - [x] 01 Project scaffold and tooling
 - [x] 02 Design tokens and UI primitives
-- [ ] 03 Supabase project and schema
+- [x] 03 Supabase project and schema
 - [ ] Phase checkpoint — verify Phase 0 — Foundation is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
 
 ### Phase 1 — Identity and entry
@@ -87,6 +87,9 @@ progress, and what is next.
 
 ## Key Decisions
 
+- **RLS helpers live in `private` and keep `EXECUTE` for `authenticated`** — the schema is what hides them; revoking the grant breaks every policy read. (F03)
+- **The expiry sweep has a 2-hour grace period**, resolving a contradiction in `architecture.md` between "closes open rows" and "skips meetings with open rows". (F03)
+- **One participation policy, not two** — "read own" was a strict subset of "read co-participants", and Postgres evaluates every permissive policy per row. (F03)
 - **`_verify.mjs` now compares three copies of the token mirror** — kit, `library-docs.md`, and `globals.css`. The copy that ships was previously the one nothing checked. (F02)
 - **The shell is a `(shell)` route group**, so `/room/[code]` cannot inherit a footer into the call by forgetting to opt out. (F02)
 - **~70 tokens mirrored into `:root`, `@theme inline` is pure `var()`** — the radii, type scale, tracking and easings were previously unguarded literals. The 16-hue chromatic palette stays out until a feature earns a stop. (F02)
