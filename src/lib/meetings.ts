@@ -13,14 +13,17 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
  * pages call this function instead of reaching for the service-role client
  * themselves, which keeps the boundary in `architecture.md` intact.
  *
- * Existence only, deliberately: `/api/token` re-reads the row at join time for
- * `ended_at` and `expires_at`, because a meeting can be closed by its last
- * participant between this page rendering and someone pressing Join.
+ * Returns the joinability columns alongside the id. The page uses existence only;
+ * `/api/token` re-reads this same row at join time and decides on `ended_at` and
+ * `expires_at`, because a meeting can be closed by its last participant between
+ * the page rendering and someone pressing Join.
  */
-export async function findMeetingByCode(code: string): Promise<{ id: string } | null> {
+export async function findMeetingByCode(
+  code: string,
+): Promise<{ id: string; ended_at: string | null; expires_at: string } | null> {
   const { data, error } = await supabaseAdmin
     .from('meetings')
-    .select('id')
+    .select('id, ended_at, expires_at')
     .eq('code', code)
     .maybeSingle();
 
