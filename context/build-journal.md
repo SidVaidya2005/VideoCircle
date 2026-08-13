@@ -63,3 +63,31 @@ At that phase's checkpoint, the whole phase collapses to:
 - **Automation artifacts cost real time across all three features.** The first synthetic click after each navigation is absorbed activating the window, which produced a convincing false negative — an apparently dead COPY button that had simply never received the click. Attaching a listener and asserting `isTrusted` distinguishes a missed click from a broken handler in one step. (F04–F06)
 - **Prettier drift leaked into three consecutive features** because formatting was not enforced. Closed at this checkpoint: `prettier --check` now runs inside `npm run lint`, `globals.css` is ignored as a mirror of the kit, and the gate was proven to fail before being trusted. (checkpoint)
 - **`middleware.ts` became `proxy.ts`** per Next 16's rename — a pure rename, deferred out of F04 as out of scope and cleared here. (checkpoint)
+
+
+## Phase 2 — Lobby
+
+### 2026-08-13 — 07 Media permissions and self-preview
+
+**Decisions**
+
+- **Two acquisition shapes, chosen by permission state.** A flat timeout on `getUserMedia` is wrong, because the promise does not settle until the permission prompt is answered — so the timer fires on someone who simply took a while to find Allow, turning the most ordinary path in the product into a rendered failure. Permission state decides instead: already granted means no prompt is coming, so each device is asked for separately, in parallel, each timed; undecided means one combined untimed request, one prompt, answered at the person's own pace. Falls back to the untimed path wherever `permissions.query` rejects, which is Firefox and older Safari for these names — the fallback that cannot produce a false failure.
+- **The page verifies the code before the lobby mounts.** Shape, then existence through `findMeetingByCode`, `notFound()` on either. A dead link now fails before anyone is asked for a camera rather than after. Joinability stayed with F09 on purpose: a meeting can close while someone sits in the lobby, so that check has to happen at join, and the two are not duplicates.
+- **`findMeetingByCode` uses `supabaseAdmin`, and lives in `src/lib`.** RLS on `meetings` admits only an authenticated participant, so the anon client would make every valid code look unknown to the very guest opening its link. Putting it behind a lib function keeps the service-role client out of `src/app`, where the boundary in `architecture.md` does not allow it.
+- **No Join control shipped.** The entry asked for "a path to join anyway", but Join belongs to F08 and joining to F09. Shipping a disabled button for two features reads as broken; the guarantee kept instead is that no failure state dead-ends the page.
+- **`idle` dropped, `timeout` added.** Nothing can produce `idle` when the hook requests on mount — and ESLint's `react-hooks/set-state-in-effect` rejects the synchronous `setState` that moving out of it required. `timeout` earned its place empirically, below.
+
+**Gotchas**
+
+- **`getUserMedia` can hang instead of rejecting, and it happens on real hardware.** On this machine `{video: true}` opens normally while `{audio: true}` never settles at all — so the combined request never settles either, and the lobby sat on "Waiting for camera and microphone" forever. Found because the E2E suite failed, not because anything was reviewed. This is the same failure the clipboard hit in F06, in a different API: a call that neither succeeds nor fails is worse than one that fails.
+- **`MediaDeviceFailure.getFailure` throws on a primitive.** It tests `'name' in error`, and `in` raises a TypeError on a string or null. `throw 'string'` is legal JavaScript, so the classifier could itself throw and strand the lobby. Caught by the unit test on its first run, from the case that existed only for completeness.
+- **`next/dynamic` with `ssr: false` is rejected in a Server Component.** The plan called for it to code-split the room tree; Next errors on it. Not needed anyway — the route is the split point, verified by serving the production build and confirming Home requests no chunk carrying the SDK.
+- **Playwright's default headless build has no working audio capture here,** and the fake-device flags auto-grant permission, so the denied, no-device, and in-use states are unreachable from the suite as configured.
+
+**Verified**
+
+- `npm run lint` (0 errors, 3 pre-existing warnings), `npm run typecheck`, `npm run build`, `npm run test` (84 passing), `npx playwright test` (all specs).
+- 5 new E2E specs: a real code renders a live preview with frames arriving (`readyState >= 2`, non-zero `videoWidth`); unknown and malformed codes both 404 with no video element; exactly one live camera track, which is what catches an orphaned acquisition; no horizontal overflow at 360px.
+- 8 unit assertions over the classifier, covering both spellings of each DOMException, an unrecognised one, and non-object throws.
+- Bundle claim checked by serving the production build: Home requests no chunk containing SDK symbols; its only `livekit` match is the `NEXT_PUBLIC_LIVEKIT_URL` value. Home's first load measures ~341 kB gzipped against a 200 kB target — pre-existing, recorded as a follow-up for F22.
+- **Not verified:** the denied, no-device, and in-use states in a real browser. Recorded as a follow-up.

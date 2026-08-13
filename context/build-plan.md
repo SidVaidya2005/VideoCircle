@@ -205,18 +205,27 @@ the module in F05.
 
 **UI:**
 
-- Live self-preview video, mirrored, with a graceful letterbox at any aspect ratio
-- Pre-permission state explaining why camera and microphone are being requested
-- Permission-denied state with per-browser instructions to re-enable, and a path to join anyway
-- No-camera-found and no-microphone-found states
+- Live self-preview video, mirrored, letterboxed with `object-contain` so any aspect ratio fits
+- Requesting state while the browser decides
+- Permission-denied state with instructions to re-enable
+- No-camera-found, no-microphone-found, device-in-use, and unresponsive-device states
+- A failed device never dead-ends the page. **No Join control here** — it belongs to F08, so "a path to join anyway" means the lobby stays usable, not that a button ships
 
 **Logic:**
 
+- The page resolves the code server-side before the lobby mounts: shape, then existence via `findMeetingByCode`, `notFound()` on either. Joinability stays with F09 — a meeting can close while someone sits in the lobby
 - `createLocalTracks` for the preview, attached to a video element
-- Track cleanup on unmount and before join
-- Discriminated-union state: `idle | requesting | ready | denied | no-device`
+- Track cleanup on unmount, including tracks that arrive after their request was abandoned
+- Discriminated-union state: `requesting | ready | denied | no-device | in-use | timeout | error`
+- `ready` carries partial success — a working microphone and a dead webcam is ready, with `cameraFailure` set
+- Acquisition strategy depends on whether a permission prompt can still appear: **granted** → both devices requested separately and in parallel, each timed, so a hung microphone costs nothing; **not yet decided** → one combined untimed request, so there is a single prompt and the person answers at their own pace
 
-**Verify:** Deny permission in the browser and confirm the denied state renders and joining audio-off/video-off still works.
+**Two things the build changed from this entry, and why:**
+
+- **`idle` was dropped from the union.** The hook requests on mount, so no mounted lobby is ever not-yet-requesting. It was also unbuildable: ESLint's `react-hooks/set-state-in-effect` rejects the synchronous `setState` that moving out of `idle` required.
+- **`timeout` was added.** `getUserMedia` can hang instead of rejecting — reproduced on the development machine, where audio never returned while the camera opened normally. Without it the lobby waits forever, which is the one thing a failure path must not do.
+
+**Verify:** Automated — a real code renders a live preview, an unknown and a malformed code both 404, only one live track exists per device, and the lobby has no horizontal overflow at 360px. Manual, in a real browser — block the camera in site settings and confirm the denied state renders with usable instructions; the fake-device flags auto-grant, so this path cannot be reached from the E2E suite as configured.
 
 ### 08 Lobby controls
 

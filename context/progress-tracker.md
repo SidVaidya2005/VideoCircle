@@ -17,11 +17,9 @@ progress, and what is next.
 
 ## Current Status
 
-**Phase:** Phase 1 — Identity and entry
-**Last completed:** 04 Google sign-in and session — verified end to end against a real Google account: sign in, session surviving reload and a tab close, sign out, and `profiles.display_name` holding a real name
-**Last completed:** 05 Home page — join-by-code verified in a browser: a bare code and a pasted uppercase link both navigate, the `#k=` fragment arrives byte-identical, and a malformed code fires no request at all
-**Last completed:** Phase 1 checkpoint — gates green from a clean build, phase diff reviewed, `middleware` → `proxy` migrated, formatting now enforced by `npm run lint`, journal compacted and binding decisions promoted
-**Next:** 07 Media permissions and self-preview — the first feature that needs a real camera
+**Phase:** Phase 2 — Lobby
+**Last completed:** 07 Media permissions and self-preview — `/room/[code]` exists and resolves its code server-side; preview, failure states, and track cleanup verified by 5 E2E specs and 8 unit assertions. The denied state still needs a human with a real browser, which the fake-device flags make unreachable from the suite
+**Next:** 08 Lobby controls — mic/camera toggles, device pickers, display name, and the Join control F07 deliberately left out
 
 ---
 
@@ -43,7 +41,7 @@ progress, and what is next.
 
 ### Phase 2 — Lobby
 
-- [ ] 07 Media permissions and self-preview
+- [x] 07 Media permissions and self-preview
 - [ ] 08 Lobby controls
 - [ ] 09 Join handoff
 - [ ] Phase checkpoint — verify Phase 2 — Lobby is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
@@ -89,9 +87,13 @@ progress, and what is next.
 
 ## Follow-ups
 
-Open work carried out of Phase 0. Cleared as the feature that needs each arrives.
+Open work carried forward. Cleared as the feature that needs each arrives.
 
-- **`SUPABASE_SERVICE_ROLE_KEY` is blank in `.env.local`** — paste it from Project Settings → API Keys → service_role. Nothing imports it until F06, so the app builds and runs without it. **Blocks F06.**
+- **Home's first-load JS is ~341 kB gzipped, against a 200 kB target** in `code-standards.md` → Targets. Pre-existing and not from F07 — `livekit-client` is confirmed absent from Home's chunks, whose only `livekit` match is the `NEXT_PUBLIC_LIVEKIT_URL` string. Measured by summing the gzipped chunks Home requests from a production `next start`, since Next 16 no longer prints the size table. **Belongs to F22.**
+- **The denied, no-device, and in-use states have no automated coverage.** `--use-fake-ui-for-media-stream` auto-grants and the fake device is always present, so none of the three is reachable from the suite as configured. Reaching them needs a second Playwright project launched without the fake-UI flag. **F26 owns this**; until then they are verified by hand.
+- **A device that hangs on a first visit still leaves the lobby waiting.** The timeout only runs once permission is known granted, because a pending prompt is a person thinking, not a fault. Reloading recovers, since permission is granted by then. Fixable by watching `PermissionStatus.onchange` and starting the timer when the state flips — worth doing only if it is seen in the wild. (F07)
+- **`SectionOverline` is duplicated as inline markup in the lobby.** `src/components/home/section-overline.tsx` is the original; the lobby and its not-found page repeat the three-line pattern rather than importing across surfaces. Promote it to a shared component when a third surface needs it. (F07)
+
 - **Add the Render URL to Supabase's Redirect URLs at F25.** The localhost callback is configured and the Google round trip works; the deployed origin needs the same entry, plus `NEXT_PUBLIC_SITE_URL` pointed at it. **Blocks F25.**
 - **Check whether the email/password provider is enabled on the Supabase project, and disable it if so.** `architecture.md` says Google OAuth is *the only* sign-in method, but nothing in the code enforces that — an enabled email provider is a live account-creation surface reachable straight from the Auth API, outside every route handler here. The security advisor's one finding (`auth_leaked_password_protection`) is about password auth and is moot either way once email is off.
 - **LiveKit credentials are configured locally** — key, secret, and a `wss://…livekit.cloud` URL are all in `.env.local` as of F06. Nothing imports the secrets until F09 creates their `server-only` module; the URL is already parsed by `env.ts`. Render still needs all three set in its dashboard at F25.
@@ -100,6 +102,7 @@ Open work carried out of Phase 0. Cleared as the feature that needs each arrives
 
 ## Key Decisions
 
+- **A media request is only timed out when it cannot be waiting on a person.** `getUserMedia` does not settle until the permission prompt is answered, so a flat timeout fires on someone who took a moment to find the Allow button — a false failure on the most ordinary path in the product. Permission state decides the shape: granted means no prompt is coming, so each device is requested separately and timed; undecided means one combined untimed request. (F07)
 - **Secrets are parsed per service, not all in one schema.** `env.server.ts` parsed all three at module load, so `/api/meetings` — which never calls LiveKit — could not build while the LiveKit keys were blank. The same coupling would take meeting creation down during a LiveKit key rotation in production. (F06)
 - **A fragment is never case-normalised.** `parseRoomCodeInput` lowercases the room code but splits the fragment off first: the chat key is base64url and case-sensitive, so normalising the whole pasted string would silently decode to the wrong bytes. Now an invariant in `architecture.md` → Encryption. (F05)
 - **The session is read server-side in the `(shell)` layout**, which makes Home and Call History dynamic. A client-side read would keep Home static at the cost of showing a signed-out header on every load before correcting — worst on exactly the cold free-tier load this project already fights. (F04)
@@ -109,4 +112,3 @@ Open work carried out of Phase 0. Cleared as the feature that needs each arrives
 - **`_verify.mjs` now compares three copies of the token mirror** — kit, `library-docs.md`, and `globals.css`. The copy that ships was previously the one nothing checked. (F02)
 - **The shell is a `(shell)` route group**, so `/room/[code]` cannot inherit a footer into the call by forgetting to opt out. (F02)
 - **~70 tokens mirrored into `:root`, `@theme inline` is pure `var()`** — the radii, type scale, tracking and easings were previously unguarded literals. The 16-hue chromatic palette stays out until a feature earns a stop. (F02)
-- **shadcn primitives arrive per feature, not up front** — only `button` exists, restyled to the kit. (F02)

@@ -61,6 +61,7 @@ feature. The feature refs below point at where each one will be applied.*
 
 ## Design system
 
+- **shadcn primitives arrive per feature, never up front.** Each one is restyled to the kit on arrival, so generating a set "to have them" creates unreviewed components carrying the six things the kit forbids. (F02)
 - **`src/components/ui/button.tsx` is restyled and a plain `shadcn add button` will revert it.** The generated source ships six things this project forbids: `dark:` variants, `shadow-xs` on `outline`, `rounded-md` (0.4rem is the button radius), `font-medium` (only 400 and 700 are loaded, so 500 synthesizes), `ring-[3px]` (an arbitrary value), and 36px hit areas. The `xs` and `icon-xs` sizes were removed outright — at 24px they cannot clear the 44px floor. Re-apply all of this after any regeneration. (F02)
 - **Home may loop animation; the call may not.** Home is not encoding video, so continuous CSS keyframes are fine there, and `animejs` is unnecessary — the kit's own site components use `@keyframes` plus staggered `animation-delay`. Every loop must still collapse under `prefers-reduced-motion`, which the block in `globals.css` handles by forcing `animation-iteration-count: 1`. (F02)
 - **Section containers are `max-w-5xl`, prose is capped at `max-w-2xl`.** Header and footer match the sections so everything aligns on one measure. The line-length rule governs text, not card grids. (F02)
