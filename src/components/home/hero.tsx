@@ -1,6 +1,6 @@
 import { CallPreview } from '@/components/home/call-preview';
 import { JoinForm } from '@/components/home/join-form';
-import { SectionOverline } from '@/components/home/section-overline';
+import { SectionOverline } from '@/components/ui/section-overline';
 import { StartMeeting } from '@/components/home/start-meeting';
 import { Wordmark } from '@/components/shell/wordmark';
 

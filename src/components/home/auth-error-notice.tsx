@@ -1,4 +1,4 @@
-import { SectionOverline } from '@/components/home/section-overline';
+import { SectionOverline } from '@/components/ui/section-overline';
 
 /**
  * Shown when `/auth/callback` could not complete the exchange and sent the user

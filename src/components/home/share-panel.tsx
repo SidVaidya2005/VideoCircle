@@ -1,12 +1,12 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
-import { SectionOverline } from '@/components/home/section-overline';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { COPIED_RESET_MS } from '@/lib/constants';
+import { SectionOverline } from '@/components/ui/section-overline';
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { env } from '@/lib/env';
 
 interface SharePanelProps {
@@ -17,21 +17,10 @@ interface SharePanelProps {
 
 const COPY_FAILED = 'Could not reach the clipboard. The link is selected — copy it by hand.';
 
-/**
- * `navigator.clipboard.writeText` can hang instead of rejecting — observed on a
- * trusted click in a secure context with permission already granted, where the
- * promise simply never settles. Awaiting it forever leaves the button showing
- * neither success nor failure, which is the one outcome a copy control must never
- * produce. A slow clipboard is indistinguishable from a broken one, so treat both
- * the same and fall back to manual copy.
- */
-const COPY_TIMEOUT_MS = 1_500;
-
 export function SharePanel({ code, chatKey }: SharePanelProps) {
   const router = useRouter();
   const linkRef = useRef<HTMLInputElement>(null);
-  const [copied, setCopied] = useState(false);
-  const [copyFailed, setCopyFailed] = useState(false);
+  const { copied, failed: copyFailed, copy } = useCopyToClipboard();
 
   // Both derived here so the link that gets copied and the one that gets navigated
   // to cannot drift apart. Built from NEXT_PUBLIC_SITE_URL rather than
@@ -40,35 +29,11 @@ export function SharePanel({ code, chatKey }: SharePanelProps) {
   const roomPath = `/room/${code}#k=${chatKey}`;
   const shareLink = `${env.NEXT_PUBLIC_SITE_URL}${roomPath}`;
 
+  // Select the text when the clipboard could not be reached, so the manual path
+  // is one keystroke. The hook owns whether it failed; this owns the recovery.
   useEffect(() => {
-    if (!copied) return;
-
-    const timer = setTimeout(() => setCopied(false), COPIED_RESET_MS);
-    return () => clearTimeout(timer);
-  }, [copied]);
-
-  async function copyLink() {
-    setCopyFailed(false);
-
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    try {
-      const timeout = new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error('Clipboard write timed out')), COPY_TIMEOUT_MS);
-      });
-
-      await Promise.race([navigator.clipboard.writeText(shareLink), timeout]);
-      setCopied(true);
-    } catch {
-      // Refused, unavailable, or hung — a control that says COPIED when nothing
-      // was copied is worse than one that admits it. Select the text so the
-      // manual path is one keystroke.
-      setCopyFailed(true);
-      linkRef.current?.select();
-    } finally {
-      clearTimeout(timer);
-    }
-  }
+    if (copyFailed) linkRef.current?.select();
+  }, [copyFailed]);
 
   return (
     <div className="border-line/60 bg-card flex w-full max-w-md flex-col gap-4 rounded-lg border p-5 text-left">
@@ -83,7 +48,7 @@ export function SharePanel({ code, chatKey }: SharePanelProps) {
           onFocus={(event) => event.currentTarget.select()}
           className="sm:flex-1"
         />
-        <Button type="button" onClick={copyLink} className="sm:flex-none">
+        <Button type="button" onClick={() => copy(shareLink)} className="sm:flex-none">
           {copied ? 'COPIED' : 'COPY'}
         </Button>
       </div>

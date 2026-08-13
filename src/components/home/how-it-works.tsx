@@ -1,4 +1,4 @@
-import { SectionOverline } from '@/components/home/section-overline';
+import { SectionOverline } from '@/components/ui/section-overline';
 
 const STEPS = [
   {
