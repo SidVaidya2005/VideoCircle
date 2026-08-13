@@ -3,6 +3,7 @@
 import { useLocalParticipant } from '@livekit/components-react';
 import {
   Hand,
+  Link as LinkIcon,
   MessageSquare,
   Mic,
   MicOff,
@@ -17,6 +18,7 @@ import {
 import { useCallback, useState } from 'react';
 
 import { ControlButton, controlVariants } from '@/components/room/control-button';
+import { InviteDialog } from '@/components/room/invite-dialog';
 import { LeaveControl } from '@/components/room/leave-control';
 import { ReactionMenu } from '@/components/room/reaction-menu';
 import { useReactions } from '@/components/room/reactions-provider';
@@ -29,6 +31,9 @@ import {
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useCallShortcuts } from '@/hooks/use-call-shortcuts';
 import { useIsScreenShareSupported } from '@/hooks/use-is-screen-share-supported';
+import { readChatKeyFromHash } from '@/lib/crypto/chat-key';
+import { env } from '@/lib/env';
+import { buildInviteLink } from '@/lib/invite-link';
 import { REACTION_LABELS } from '@/lib/reactions';
 import { cn } from '@/lib/utils';
 
@@ -36,6 +41,8 @@ export type CallPanelName = 'participants';
 
 interface ControlBarProps {
   onLeave: () => void;
+  /** The room code, for the invite link. */
+  code: string;
   openPanel: CallPanelName | null;
   onTogglePanel: (panel: CallPanelName) => void;
   /** Everyone in the call, you included. Shown on the participants control. */
@@ -73,6 +80,7 @@ const PENDING_CONTROLS: readonly SecondaryControl[] = [
 
 export function ControlBar({
   onLeave,
+  code,
   openPanel,
   onTogglePanel,
   participantCount,
@@ -86,6 +94,24 @@ export function ControlBar({
   // The bar owns this, not the Leave control: pressing anything else has to
   // disarm it, and only the bar knows that happened.
   const [leaveArmed, setLeaveArmed] = useState(false);
+  // A modal, not a side panel, so it is deliberately not part of `openPanel` —
+  // conflating them would let a panel and a dialog fight for the same state.
+  //
+  // The link is captured when the dialog opens rather than held from mount: the
+  // fragment can change, `window` does not exist during the server render, and a
+  // click handler is where the standards put a `window` read.
+  const [invite, setInvite] = useState({ open: false, link: '', hasKey: false });
+
+  function openInvite() {
+    disarmLeave();
+    const hash = window.location.hash;
+    setInvite({
+      open: true,
+      link: buildInviteLink(env.NEXT_PUBLIC_SITE_URL, code, hash),
+      // Presence only. The key itself is never read out, logged, or sent.
+      hasKey: readChatKeyFromHash(hash) !== null,
+    });
+  }
 
   // Stable identity, so the confirm timeout is not restarted every time a device
   // toggle re-renders the bar.
@@ -144,6 +170,13 @@ export function ControlBar({
         disarmLeave();
         onTogglePanel('participants');
       },
+    },
+    {
+      key: 'invite',
+      label: 'Invite others',
+      icon: LinkIcon,
+      pressed: invite.open,
+      onClick: openInvite,
     },
     ...PENDING_CONTROLS,
   ];
@@ -248,6 +281,13 @@ export function ControlBar({
         <ReactionMenu onInteract={disarmLeave} className="hidden sm:inline-flex" />
 
         <span aria-hidden="true" className="w-3 flex-none" />
+
+        <InviteDialog
+          link={invite.link}
+          hasKey={invite.hasKey}
+          open={invite.open}
+          onOpenChange={(open) => setInvite((current) => ({ ...current, open }))}
+        />
 
         <LeaveControl
           armed={leaveArmed}

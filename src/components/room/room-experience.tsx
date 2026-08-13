@@ -88,7 +88,7 @@ export function RoomExperience({ code, profileName }: RoomExperienceProps) {
           // Leaving returns Home, which is what project-overview.md describes.
           onDisconnected={() => router.push('/')}
         >
-          <CallStage />
+          <CallStage code={code} />
         </RoomShell>
       </main>
     );

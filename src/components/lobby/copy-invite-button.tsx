@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { env } from '@/lib/env';
+import { buildInviteLink } from '@/lib/invite-link';
 
 interface CopyInviteButtonProps {
   code: string;
@@ -23,7 +24,7 @@ export function CopyInviteButton({ code }: CopyInviteButtonProps) {
    * the canonical origin even if this person reached the app on another host.
    */
   function shareLink(): string {
-    return `${env.NEXT_PUBLIC_SITE_URL}/room/${code}${window.location.hash}`;
+    return buildInviteLink(env.NEXT_PUBLIC_SITE_URL, code, window.location.hash);
   }
 
   return (

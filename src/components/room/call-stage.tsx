@@ -18,7 +18,12 @@ import { VideoGrid } from '@/components/room/video-grid';
  * subscriptions from nothing once the signal came back — a transient blip
  * rendered as a full rejoin.
  */
-export function CallStage() {
+interface CallStageProps {
+  /** The room code, for the invite link. Passed rather than read off the Room. */
+  code: string;
+}
+
+export function CallStage({ code }: CallStageProps) {
   const room = useRoomContext();
   const participants = useParticipants();
 
@@ -56,6 +61,7 @@ export function CallStage() {
           controls are reached for. */}
         <ControlBar
           onLeave={() => void room.disconnect()}
+          code={code}
           openPanel={openPanel}
           onTogglePanel={togglePanel}
           participantCount={participants.length}
