@@ -58,6 +58,7 @@ filled in by the feature that needs it. Built so far:
 - **F09** — `src/app/api/token/`, `src/lib/env.livekit.server.ts`, `src/lib/meeting-state.ts`, `src/lib/livekit/{token,token-ttl,room-options,request-token}.ts`, `src/components/room/{room-shell,connected-panel}.tsx`, `src/components/lobby/join-failure-notice.tsx`. First consumers of `livekit-server-sdk` and `@livekit/components-react`
 - **F10** — `src/components/room/{call-stage,video-grid,participant-tile,participant-count}.tsx` and `src/lib/{room-grid,initials}.ts`. `connected-panel.tsx` was deleted, its status strip and Leave absorbed into `call-stage.tsx`. The grid is ours rather than `GridLayout`/`ParticipantTile` — see `library-docs.md` → Rendering the participant grid
 - **F11** — `src/components/room/{control-bar,control-button,leave-control}.tsx`, `src/hooks/use-call-shortcuts.ts`, `src/lib/keyboard.ts`, and the `tooltip` primitive. First consumer of `lucide-react`
+- **F12** — `src/components/room/call-status.tsx` (the status strip, moved out of `call-stage.tsx` so the sharing banner and the connection line it replaces sit together) and `src/hooks/use-is-screen-share-supported.ts`. `video-grid.tsx` gained the `ScreenShare` source and `room-grid.ts` the `orderCallTiles` sort
 
 Not yet built: `api/livekit/webhook`, `lib/livekit/webhook.ts`,
 `lib/crypto/chat-message.ts`, `types/meeting.ts`, the `history` page, and
@@ -114,15 +115,15 @@ VideoCircle/
     │   │                                notice, lobby controls
     │   ├── room/                      → room-experience (hosts lobby then call), room-shell
     │   │                                (<LiveKitRoom>), call-stage (status / grid / controls),
-    │   │                                video-grid, participant-tile, participant-count,
-    │   │                                control-bar, control-button, leave-control, and later
-    │   │                                the panels and reactions
+    │   │                                call-status, video-grid, participant-tile,
+    │   │                                participant-count, control-bar, control-button,
+    │   │                                leave-control, and later the panels and reactions
     │   ├── chat/                      → encrypted chat panel, composer, message list
     │   └── history/                   → history table, empty state
     ├── hooks/                         → use-media-preview (owns the lobby's tracks),
     │                                    use-media-devices, use-copy-to-clipboard,
-    │                                    use-call-shortcuts, use-chat-key,
-    │                                    use-encrypted-chat, …
+    │                                    use-call-shortcuts, use-is-screen-share-supported,
+    │                                    use-chat-key, use-encrypted-chat, …
     ├── lib/
     │   ├── auth/
     │   │   ├── sign-in.ts             → signInWithGoogle + the chat-key fragment stash
@@ -145,8 +146,9 @@ VideoCircle/
     │   ├── media/
     │   │   ├── classify-media-error.ts → getUserMedia rejection → a renderable state
     │   │   └── preferences.ts         → validated localStorage for device choices
-    │   ├── room-grid.ts               → pure headcount → column classes, and the visible/
-    │   │                                 overflow split against MAX_VISIBLE_TILES
+    │   ├── room-grid.ts               → pure headcount → column classes, tile ordering
+    │   │                                 (shares first), and the visible/overflow split
+    │   │                                 against MAX_VISIBLE_TILES
     │   ├── keyboard.ts                 → pure typing-target and bare-keypress predicates
     │   ├── initials.ts                 → pure display name → up to two characters
     │   ├── meeting-state.ts           → pure joinability decision (open/ended/expired)

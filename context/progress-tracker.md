@@ -18,8 +18,8 @@ progress, and what is next.
 ## Current Status
 
 **Phase:** Phase 3 — The call
-**Last completed:** 11 In-call control bar — the full bar to the kit's control recipe, with chat/participants/reactions disabled until their features land, screen share absent until F12, `d`/`e` shortcuts, and Leave confirming in place. Caught and fixed an F10 memo bug that kept a dead `<video>` on a tile after its camera was turned off. 45 e2e and 134 unit tests pass
-**Next:** 12 Screen sharing — adds the one control F11 deliberately left off the bar
+**Last completed:** 12 Screen sharing — capability-gated control, share tiles promoted ahead of every camera so the cap cannot hide them, the sharer's own share visible and never mirrored, and the banner replacing the connection line in the status strip. 50 e2e and 138 unit tests pass
+**Next:** 13 Speaker and spotlight view — turns F12's promoted share tile into a real focused layout with a filmstrip
 
 ---
 
@@ -50,7 +50,7 @@ progress, and what is next.
 
 - [x] 10 Room connection and video grid
 - [x] 11 In-call control bar
-- [ ] 12 Screen sharing
+- [x] 12 Screen sharing
 - [ ] 13 Speaker and spotlight view
 - [ ] 14 Participant list panel
 - [ ] 15 Reactions and raise hand
@@ -97,12 +97,15 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 - **Add the Render URL to Supabase's Redirect URLs at F25.** The localhost callback is configured and the Google round trip works; the deployed origin needs the same entry, plus `NEXT_PUBLIC_SITE_URL` pointed at it. **Blocks F25.**
 - **Check whether the email/password provider is enabled on the Supabase project, and disable it if so.** `architecture.md` says Google OAuth is *the only* sign-in method, but nothing in the code enforces that — an enabled email provider is a live account-creation surface reachable straight from the Auth API, outside every route handler here. The security advisor's one finding (`auth_leaked_password_protection`) is about password auth and is moot either way once email is off.
 - **LiveKit credentials are live locally and proven end to end** — F09 mints tokens against them and joins real rooms. Render still needs all three set in its dashboard at F25. **Blocks F25.**
+- **A real desktop share has never been received on a real phone.** The suite stubs the picker and proves the publish path, the capability gate, and the remote tile — but the build plan's own verify line asks for a phone as receiver, and that stays manual. Worth doing at **F22**, alongside the mobile pass. (F12)
+- **Pressing the share control during the connect handshake silently does nothing.** The bar renders as soon as the room tree mounts, which is before `Connected`, so a share requested in that window is published into a room that is not there and immediately unpublished. The window is one to three seconds and the person has just pressed Join, so it is unlikely to be reached — revisit at **F24** with the other edge states. (F12)
 - **The speaking ring has never been seen firing.** `useIsSpeaking` drives it and the styling is audited in source — `ring-active`, white, never a colour — but Chromium's fake audio device does not produce speech that trips LiveKit's active-speaker detection, so no test and no screenshot has shown the ring on. It needs two real microphones to confirm, alongside the other manual mic checks **F26 owns**. (F10)
 - **The wordmark's tittle sits ~3.5px off during the `next/font` swap window**, because the generated fallback matches advance and ascent but not glyph shapes. First paint only, on a cold load. Accepted at F02 rather than trading it for a flash of invisible text; revisit only if it looks wrong on the deployed instance.
 - **`/tokens` still ships its markup in the production bundle** even though it returns 404 there. A few kB of static swatches; revisit at F22 if the Home budget is tight.
 
 ## Key Decisions
 
+- **We hold no mirrored sharing state, and that is what makes the hard case free.** `useLocalParticipant` re-emits on `LocalTrackUnpublished`, so a share ended from Chrome's own stop bar syncs the control and banner with no listener of ours. The build plan's "no stale UI state" requirement is met by having no state that could go stale. (F12)
 - **A memo comparator must read only immutable facts.** `ParticipantTile` compared `publication.isMuted`, which LiveKit mutates in place — both sides of the comparison resolved to the same live value, so a camera turned off mid-call left a dead `<video>` on every other screen. Mute state now comes from `useIsMuted`, whose own state re-renders the tile regardless of what the memo decides. (F11)
 - **The prebuilt LiveKit grid was rejected, not overlooked.** `GridLayout` lays out nothing without `@livekit/components-styles`, an unapproved dependency, and `ParticipantTile` ships four pieces of chrome the design system contradicts. Ours is built on the unstyled primitives — `useTracks`, `VideoTrack`, `useIsSpeaking`, `useIsMuted`, `useVisualStableUpdate`. (F10)
 - **Pure decision modules exist because `server-only` throws under Node.** Joinability and the token TTL cap are free of it so every branch is testable without a database or the LiveKit secrets; the route handler does the IO around them. (F09)
@@ -112,4 +115,3 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 - **Secrets are parsed per service, not all in one schema.** `env.server.ts` parsed all three at module load, so `/api/meetings` — which never calls LiveKit — could not build while the LiveKit keys were blank. The same coupling would take meeting creation down during a LiveKit key rotation in production. (F06)
 - **A fragment is never case-normalised.** `parseRoomCodeInput` lowercases the room code but splits the fragment off first: the chat key is base64url and case-sensitive, so normalising the whole pasted string would silently decode to the wrong bytes. Now an invariant in `architecture.md` → Encryption. (F05)
 - **The session is read server-side in the `(shell)` layout**, which makes Home and Call History dynamic. A client-side read would keep Home static at the cost of showing a signed-out header on every load before correcting — worst on exactly the cold free-tier load this project already fights. (F04)
-- **RLS helpers live in `private` and keep `EXECUTE` for `authenticated`** — the schema is what hides them; revoking the grant breaks every policy read. (F03)

@@ -358,8 +358,21 @@ reconnecting.
 - Capability detection driving whether the control renders
 - Handle the user cancelling the browser's own share picker without leaving stale UI state
 - Detect share-ended-from-browser-UI and sync our state
+- **We hold no sharing state of our own.** `useLocalParticipant`'s observer re-emits on `LocalTrackUnpublished`, so a share ended from Chrome's own "Stop sharing" bar updates `isScreenShareEnabled` without a listener here. A mirrored boolean is precisely the thing that would go stale, so the requirement is met by not having one
+- **Share tiles sort ahead of every camera tile**, so the thing everyone is looking at can never be the one `MAX_VISIBLE_TILES` hides. One sort step, not a layout — F13 still owns spotlight, focus resolution and the filmstrip. Without it a share started in a nine-person call is invisible to everyone while its owner believes it is up
+- **You see your own share tile**, like everyone else: one code path, and it is how the sharer catches the most common mistake, which is sharing the wrong window
+- **A share tile suppresses three things the camera tile has** — the mirror (only a self-*camera* is a mirror), the mute dot and the speaking ring (both belong to the person, on their camera tile). Its label is the sharer's name plus `— SCREEN`
+- **The control is gated on capability, never on width** (`code-standards.md` → Responsive), so it is absent on every phone and present inside MORE on a narrow desktop window. Absence keeps one meaning: your device cannot do this
+- **`NotAllowedError` is a normal cancel**, not a fault: no toast, and never logged as an error. Since nothing is set optimistically, the bar returns to rest on its own
 
-**Verify:** Share from desktop and confirm the tile appears for a mobile participant, and that the mobile participant has no share button at all.
+**Verify:** The suite stubs `getDisplayMedia` with a canvas-captured stream — that
+replaces the browser's picker only, so LiveKit publishes a real track and the SFU
+relays it and the remote assertions are genuine. It proves the capability gate in
+both directions, the share tile reaching the other participant promoted to first
+position, the banner and its stop, a dismissed picker changing nothing, and a
+track stopped from outside our UI syncing without a reload. **A real desktop share
+received on a real phone stays a manual check** — recorded as a follow-up rather
+than claimed.
 
 ### 13 Speaker and spotlight view
 

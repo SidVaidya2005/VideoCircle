@@ -130,3 +130,34 @@ Ctrl-D do not. Leave takes two presses and pressing the mic disarms it. At 360px
 the bar keeps mic, camera, MORE and Leave, every control in `main` clears 44px on
 both axes, and nothing overflows. Screenshots confirm the muted-mic red, the
 neutral camera-off, the dimmed stubs, and the phone collapse.
+
+### 12 Screen sharing — 2026-08-13
+
+**Decisions**
+
+- **Share tiles sort ahead of every camera tile.** One sort step in a pure function, not a layout — F13 still owns spotlight, focus resolution and the filmstrip. Without it a share started in a busy call lands past `MAX_VISIBLE_TILES` and is invisible to everyone while its owner believes it is up.
+- **No mirrored sharing state, which is what makes the hard requirement free.** `useLocalParticipant` re-emits on `LocalTrackUnpublished`, so a share ended from Chrome's own stop bar syncs the control and the banner with no listener of ours. "No stale UI state" is met by having no state that could go stale.
+- **The banner replaces the connection line** rather than sitting beside it: a call you are presenting to is a call that is connected, so the strip stays one line at 360px. The status strip moved into `call-status.tsx` so the banner and the line it replaces live together, which also keeps the stage from re-rendering on local track events.
+- **The sharer sees their own share, and it is never mirrored.** Only a self-*camera* is a mirror; a flipped spreadsheet is unreadable. Seeing it is how you catch the most common screen-share mistake, which is sharing the wrong window.
+- **`useSyncExternalStore` for the capability, not an effect.** The room tree is server-rendered despite being a Client Component, and this is the shape React provides for a value the server cannot see. The lint rule that bars `setState` in an effect caught the first attempt.
+
+**Gotchas**
+
+- **Three hours went into a test failure that was a race, not a bug.** The control bar renders as soon as the room tree mounts, well before `ConnectionState.Connected`, so the spec's `joinAs` — which waited on the Leave button — was clicking Share mid-handshake. LiveKit published the track into a room that was not there and immediately unpublished it. The spec now waits for `Connected`; the product window is real but one to three seconds, and is recorded as a follow-up for F24 rather than papered over.
+- **`livekit-client` clones the track from the picker and stops the original.** Every diagnostic that read `readyState` on what `getDisplayMedia` returned said `ended` while the share was perfectly healthy — a red herring that cost most of the debugging. The SDK listens for `ended` on its clone, so the test helper wraps `clone()` to keep hold of the right track.
+- **A `CanvasCaptureMediaStreamTrack` ends on its own** a second or two after publishing, whether or not the canvas is retained and repainted. The stub now sources from Chromium's fake camera device, which is what every camera assertion in the suite already runs on.
+- **`delete navigator.mediaDevices.getDisplayMedia` is a no-op** — the method lives on `MediaDevices.prototype`, so removing the capability means shadowing it with `undefined` on the instance.
+- **`getByRole('button', { name: 'Stop' })` matched two controls** once "Stop sharing your screen" existed. Substring matching is the default; `exact: true` was the fix.
+- **One F11 spec asserted screen share was absent** and failed the moment it existed. Updated to the new contract — absence still means exactly one thing, and `screen-share.spec.ts` now proves it by removing the capability.
+- **The banner's STOP was a 16px-tall text link** on first write, which the F11 hit-area sweep would have failed. A text action in a status strip is exactly where the 44px floor quietly goes missing.
+
+**Verified:** 50 e2e specs and 138 unit tests pass; `lint`, `typecheck` and `build`
+clean. Two contexts prove a share reaching the other participant as the first tile,
+labelled `— screen`, with the sharer seeing their own copy unmirrored; the banner
+appears and its stop ends the share on both sides; a dismissed picker changes
+nothing and surfaces no alert; and a track ended from outside our UI returns the
+bar and banner to rest without a reload. The capability gate is proven in both
+directions, including that the control is not hiding in MORE. Screenshots confirm
+the promoted share tile, the unmirrored share beside the mirrored self-camera, and
+screen share sitting in MORE on a narrow window while remaining on the bar at
+`sm:` and up.
