@@ -8,8 +8,27 @@ export const MALFORMED_CODE = 'abc-0i23-xyz';
 export const MOBILE = { width: 360, height: 740 };
 export const MIN_HIT_AREA = 44;
 
+/**
+ * Creates a meeting, retrying once on a *transport* failure only.
+ *
+ * `next dev` intermittently resets a connection when four Playwright workers hit
+ * it at once — seen as `read ECONNRESET` before any handler runs. Across four
+ * fully logged suite runs the handler itself logged nothing, so this is the dev
+ * server, not the endpoint. CI builds and runs a production server, where it has
+ * never appeared.
+ *
+ * The retry covers the thrown network error and nothing else: a non-201 still
+ * fails immediately, so a genuine 500 from the handler stays as loud as it was.
+ */
 export async function createMeeting(request: APIRequestContext): Promise<string> {
-  const response = await request.post('/api/meetings');
+  let response;
+
+  try {
+    response = await request.post('/api/meetings');
+  } catch {
+    response = await request.post('/api/meetings');
+  }
+
   expect(response.status()).toBe(201);
 
   const { code } = (await response.json()) as { code: string };

@@ -109,9 +109,9 @@ VideoCircle/
     │       ├── token/route.ts         → POST: mint a LiveKit AccessToken
     │       └── livekit/webhook/route.ts → POST: LiveKit participant/room events
     ├── components/
-    │   ├── ui/                        → shadcn primitives (button, dialog, dropdown-menu, input,
-    │   │                                popover, sheet, tooltip;
-    │   │                                added per feature) plus section-overline, the brand's own
+    │   ├── ui/                        → shadcn primitives, added per feature (button, dialog,
+    │   │                                dropdown-menu, input, popover, sheet, tooltip),
+    │   │                                plus section-overline, the brand's own
     │   ├── shell/                     → wordmark, site header, site footer, auth menu
     │   ├── home/                      → hero, call preview, how-it-works, feature grid, join-by-code
     │   │                                form, start-meeting + share panel, auth-error notice
@@ -154,15 +154,15 @@ VideoCircle/
     │   │   ├── classify-media-error.ts → getUserMedia rejection → a renderable state
     │   │   └── preferences.ts         → validated localStorage for device choices
     │   ├── room-grid.ts               → pure headcount → column classes, tile ordering
-    │   │                                 (shares first), and the visible/overflow split
-    │   │                                 against MAX_VISIBLE_TILES
-    │   ├── keyboard.ts                 → pure typing-target and bare-keypress predicates
-    │   ├── room-focus.ts               → pure focus resolution (pin, then share, then grid)
-    │   │                                 and the focused/filmstrip split
-    │   ├── participants.ts             → pure roster ordering: you first, then join order
-    │   ├── reactions.ts                → the fixed label set, the Zod-validated wire
-    │   │                                 payload, and the pure rate-limit decision
-    │   ├── invite-link.ts              → pure share-link construction, fragment verbatim
+    │   │                                (shares first), and the visible/overflow split
+    │   │                                against MAX_VISIBLE_TILES
+    │   ├── keyboard.ts                → pure typing-target and bare-keypress predicates
+    │   ├── room-focus.ts              → pure focus resolution (pin, then share, then grid)
+    │   │                                and the focused/filmstrip split
+    │   ├── participants.ts            → pure roster ordering: you first, then join order
+    │   ├── reactions.ts               → the fixed label set, the Zod-validated wire
+    │   │                                payload, and the pure rate-limit decision
+    │   ├── invite-link.ts             → pure share-link construction, fragment verbatim
     │   ├── initials.ts                 → pure display name → up to two characters
     │   ├── meeting-state.ts           → pure joinability decision (open/ended/expired)
     │   ├── env.livekit.server.ts      → Zod-parsed LiveKit secrets, server-only

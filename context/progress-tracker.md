@@ -18,8 +18,8 @@ progress, and what is next.
 ## Current Status
 
 **Phase:** Phase 3 — The call
-**Last completed:** 16 Copy invite link in call — a centred dialog showing the link in a read-only field selected on focus, with distinct copy for a keyless link, and a shared pure builder that finally puts a test behind the never-normalise-the-fragment rule. 71 e2e and 173 unit tests pass
-**Next:** Phase 3 checkpoint — run the gates, walk the phase diff against `architecture.md`, compact `build-journal.md` and promote Phase 3's binding decisions into `constraints.md`
+**Last completed:** Phase 3 checkpoint — gates green from a clean build, phase diff walked against every invariant with no violations, `architecture.md` reconciled, journal compacted 274→90 lines and Phase 3's binding decisions promoted into a new `constraints.md` → The call section. The intermittent `/api/meetings` failure was diagnosed as `next dev` resetting connections under four workers, not the handler
+**Next:** 17 Chat key handling — opens Phase 4, the encrypted chat
 
 ---
 
@@ -55,7 +55,7 @@ progress, and what is next.
 - [x] 14 Participant list panel
 - [x] 15 Reactions and raise hand
 - [x] 16 Copy invite link in call
-- [ ] Phase checkpoint — verify Phase 3 — The call is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
+- [x] Phase checkpoint — verify Phase 3 — The call is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
 
 ### Phase 4 — Encrypted chat
 
@@ -89,7 +89,7 @@ progress, and what is next.
 
 Open work carried forward. Cleared as the feature that needs each arrives.
 
-- **`POST /api/meetings` returns 500 occasionally under parallel test load.** Seen across F15 and F16, always transient and always in a test that then passes alone; the handler logs `[api/meetings] failed to create meeting`. Most likely Supabase refusing a burst of concurrent inserts from four workers, but the error body has never been read. **Worth ten minutes at the Phase 3 checkpoint** — if it is a real rate limit, production would meet it too. (F15, F16)
+- **~~`POST /api/meetings` 500s under parallel test load~~ — diagnosed at the Phase 3 checkpoint and closed.** It is `next dev` resetting connections when four Playwright workers hit it at once, surfacing as `read ECONNRESET` *before* any handler runs: across four fully logged suite runs the handler logged nothing, and twelve concurrent requests by hand never reproduced it. `createMeeting` now retries once on a thrown transport error only — a non-201 still fails immediately, so a genuine 500 stays as loud as it was. CI builds and runs a production server, where this has never appeared. (checkpoint)
 - **Home's first-load JS is ~341 kB gzipped, against a 200 kB target** in `code-standards.md` → Targets. Pre-existing and not from F07 — `livekit-client` is confirmed absent from Home's chunks, whose only `livekit` match is the `NEXT_PUBLIC_LIVEKIT_URL` string. Measured by summing the gzipped chunks Home requests from a production `next start`, since Next 16 no longer prints the size table. **Belongs to F22.**
 - **The denied, no-device, and in-use states have no automated coverage.** `--use-fake-ui-for-media-stream` auto-grants and the fake device is always present, so none of the three is reachable from the suite as configured. Reaching them needs a second Playwright project launched without the fake-UI flag. **F26 owns this**; until then they are verified by hand.
 - **A device that hangs on a first visit still leaves the lobby waiting.** The timeout only runs once permission is known granted, because a pending prompt is a person thinking, not a fault. Reloading recovers, since permission is granted by then. Fixable by watching `PermissionStatus.onchange` and starting the timer when the state flips — worth doing only if it is seen in the wild. (F07)

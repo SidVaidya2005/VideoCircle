@@ -59,6 +59,25 @@ feature. The feature refs below point at where each one will be applied.*
 - **The room code is generated server-side only.** The collision path regenerates in the route handler, so a client navigating to the code *it* sent would land in a room it does not own — a bug visible only on a collision, which at 50 bits means never in testing and eventually in production. (F06)
 - **Keys imported from a link are non-extractable.** Only the key generated in-browser is extractable, and only long enough to put it in the URL. (F06)
 
+## The call
+
+*Promoted from `build-journal.md` at the Phase 3 checkpoint. The rules themselves
+are invariants in `architecture.md`; what follows is the reasoning and the
+non-obvious library behaviour behind them.*
+
+- **The prebuilt LiveKit layouts are not used, and this is not reversible cheaply.** `GridLayout` renders `lk-*` markup that lays out nothing without `@livekit/components-styles`, an unapproved dependency, and `ParticipantTile` ships a name chip, mute icon, quality dot and focus button that each contradict `Design/README.md` → Participant tiles. The grid, tile, filmstrip and control bar are ours, on the unstyled primitives. (F10)
+- **A memo comparator must read only immutable facts.** LiveKit mutates publication objects in place, so comparing `isMuted` compares the new value against itself and the change is structurally invisible — a camera turned off mid-call left a dead `<video>` on every other screen. Mute and speaking state come from hooks, which re-render regardless of what a memo decides. The same defect reappeared at F13 when `pinned` and `size` were added and not compared. (F11, F13)
+- **Ephemeral and durable state take different transports.** Reactions ride the unreliable data channel because losing one costs nothing. A raised hand rides a participant attribute, because an unreliable packet can drop and a data-channel message reaches nobody who joins afterwards — both failures silent. That is why the grant carries `canUpdateOwnMetadata`. (F15)
+- **Your own raised hand is local state, everyone else's is read from their attribute.** LiveKit does not echo an attribute change back to the participant who made it while they are alone in the room. Reading your own back left the badge *and the button label* unchanged until somebody arrived. Safe to mirror here because nothing but that toggle can change it. (F15)
+- **A room with one participant behaves differently from a room with two, in two unrelated places** — a screen share published into an empty room is unpublished again within about a second roughly half the time (not `dynacast`; measured off), and attributes do not echo as above. Suspect this shape first when something works with an audience and not without one. (F13, F15)
+- **`livekit-client` clones the track from the screen-share picker and stops the original.** Anything holding what `getDisplayMedia` returned sees a healthy share read as `ended`. Cost a debugging pass twice. (F12)
+- **Never gate a video element on `isSubscribed`.** `adaptiveStream` decides what to subscribe to from the visibility of attached `<video>` elements, so a tile that renders no element until it is subscribed is never subscribed. Gate on mute state alone. (F10)
+- **Speech never moves the layout.** `resolveFocusKey` takes no speaker argument, so it cannot: a layout following whoever talks flips several times a minute in an ordinary conversation. Grid is the resting state; spotlight is entered only by a share or a pin. (F13)
+- **A share requested before `Connected` is published into nothing and immediately unpublished.** The control bar renders as soon as the room tree mounts, well before the handshake finishes. (F12)
+- **One responsive decision in the call is made in JavaScript, and only one.** Everything else is a Tailwind variant so nothing measures the viewport in the call tree. A Radix dialog traps focus, locks scroll and hides the page from assistive tech the moment it opens, and its content is portaled beyond any wrapper class — so sheet-versus-inline has to be a real decision, not a `lg:hidden`. (F14)
+- **An `aria-label` on a button overrides its contents**, so a badge inside one is unreachable to a screen reader whatever it holds. Counts go in the label. (F14)
+- **The 44px floor has two axes.** `+1` as a reaction chip measured 41px wide at full height; padding alone does not carry a short label. And `animate-tile-in`'s `scale(0.96)` makes everything inside a freshly mounted tile measure fractionally small, so hit-area sweeps poll rather than measure once. (F13, F15)
+
 ## Media and devices
 
 *The rules themselves are invariants in `architecture.md` → Media. What follows is
