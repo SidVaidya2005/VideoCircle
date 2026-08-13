@@ -18,8 +18,8 @@ progress, and what is next.
 ## Current Status
 
 **Phase:** Phase 3 — The call
-**Last completed:** 15 Reactions and raise hand — five CAPS chips and a hand toggle behind one control, reactions over the unreliable data channel and the hand on a participant attribute so it survives a dropped packet and reaches late joiners, marked neutrally rather than red. 65 e2e and 167 unit tests pass
-**Next:** 16 Copy invite link in call — the last feature of Phase 3, then the checkpoint
+**Last completed:** 16 Copy invite link in call — a centred dialog showing the link in a read-only field selected on focus, with distinct copy for a keyless link, and a shared pure builder that finally puts a test behind the never-normalise-the-fragment rule. 71 e2e and 173 unit tests pass
+**Next:** Phase 3 checkpoint — run the gates, walk the phase diff against `architecture.md`, compact `build-journal.md` and promote Phase 3's binding decisions into `constraints.md`
 
 ---
 
@@ -54,7 +54,7 @@ progress, and what is next.
 - [x] 13 Speaker and spotlight view
 - [x] 14 Participant list panel
 - [x] 15 Reactions and raise hand
-- [ ] 16 Copy invite link in call
+- [x] 16 Copy invite link in call
 - [ ] Phase checkpoint — verify Phase 3 — The call is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
 
 ### Phase 4 — Encrypted chat
@@ -89,6 +89,7 @@ progress, and what is next.
 
 Open work carried forward. Cleared as the feature that needs each arrives.
 
+- **`POST /api/meetings` returns 500 occasionally under parallel test load.** Seen across F15 and F16, always transient and always in a test that then passes alone; the handler logs `[api/meetings] failed to create meeting`. Most likely Supabase refusing a burst of concurrent inserts from four workers, but the error body has never been read. **Worth ten minutes at the Phase 3 checkpoint** — if it is a real rate limit, production would meet it too. (F15, F16)
 - **Home's first-load JS is ~341 kB gzipped, against a 200 kB target** in `code-standards.md` → Targets. Pre-existing and not from F07 — `livekit-client` is confirmed absent from Home's chunks, whose only `livekit` match is the `NEXT_PUBLIC_LIVEKIT_URL` string. Measured by summing the gzipped chunks Home requests from a production `next start`, since Next 16 no longer prints the size table. **Belongs to F22.**
 - **The denied, no-device, and in-use states have no automated coverage.** `--use-fake-ui-for-media-stream` auto-grants and the fake device is always present, so none of the three is reachable from the suite as configured. Reaching them needs a second Playwright project launched without the fake-UI flag. **F26 owns this**; until then they are verified by hand.
 - **A device that hangs on a first visit still leaves the lobby waiting.** The timeout only runs once permission is known granted, because a pending prompt is a person thinking, not a fault. Reloading recovers, since permission is granted by then. Fixable by watching `PermissionStatus.onchange` and starting the timer when the state flips — worth doing only if it is seen in the wild. (F07)
@@ -106,6 +107,7 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 
 ## Key Decisions
 
+- **The privacy claim is now tested, not only structured.** The chat key never leaving the browser was defended by invariants and code review; `tests/e2e/invite.spec.ts` records every request made while the invite dialog is open and copying, and asserts none carries the fragment. Showing the key in a dialog is exactly the change that could have broken it. (F16)
 - **Ephemeral and durable state get different transports, and the build plan had them the same.** A reaction rides the unreliable data channel because losing one costs nothing; a raised hand rides a participant attribute because losing one is a real failure — an unreliable packet can drop, and a data-channel message reaches nobody who joins afterwards. The cost is one extra token claim, `canUpdateOwnMetadata`, pinned by the grant spec. (F15)
 - **One responsive decision in the call is made in JavaScript, and only one.** Everything else is a Tailwind variant so nothing measures the viewport in the call tree — but a Radix dialog traps focus, locks scroll and hides the page from assistive tech the moment it opens, and its content is portaled out of reach of any wrapper class. Choosing sheet-versus-inline in CSS would leave an invisible dialog holding focus on every desktop, so `use-media-query` exists for that case alone. (F14)
 - **Speech never moves the layout.** `resolveFocusKey` takes no speaker argument at all, so it cannot: a layout that follows whoever is talking flips several times a minute in an ordinary conversation. Active speakers order the filmstrip and ring their own tile, which is what the build plan's "active-speaker detection" is actually for. (F13)
@@ -115,4 +117,3 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 - **Pure decision modules exist because `server-only` throws under Node.** Joinability and the token TTL cap are free of it so every branch is testable without a database or the LiveKit secrets; the route handler does the IO around them. (F09)
 - **A valid-looking room code is never authorization.** `/api/token` re-reads the meeting and refuses unless `ended_at is null and now() < expires_at`, even though the page already checked existence at render: the endpoint is directly callable, and a meeting can close while someone sits in the lobby deciding. (F09)
 - **In the lobby, off releases the device — it never mutes.** A preview reading OFF while the camera light stays lit is what breaks trust in a lobby. It also keeps the SDK's muted-track trap out of reach: `setDeviceId` sets `pendingDeviceChange` and returns early on a muted track, so a device picker would appear to do nothing until the track was unmuted. (F08)
-- **Secrets are parsed per service, not all in one schema.** `env.server.ts` parsed all three at module load, so `/api/meetings` — which never calls LiveKit — could not build while the LiveKit keys were blank. The same coupling would take meeting creation down during a LiveKit key rotation in production. (F06)

@@ -58,6 +58,7 @@ filled in by the feature that needs it. Built so far:
 - **F09** — `src/app/api/token/`, `src/lib/env.livekit.server.ts`, `src/lib/meeting-state.ts`, `src/lib/livekit/{token,token-ttl,room-options,request-token}.ts`, `src/components/room/{room-shell,connected-panel}.tsx`, `src/components/lobby/join-failure-notice.tsx`. First consumers of `livekit-server-sdk` and `@livekit/components-react`
 - **F10** — `src/components/room/{call-stage,video-grid,participant-tile,participant-count}.tsx` and `src/lib/{room-grid,initials}.ts`. `connected-panel.tsx` was deleted, its status strip and Leave absorbed into `call-stage.tsx`. The grid is ours rather than `GridLayout`/`ParticipantTile` — see `library-docs.md` → Rendering the participant grid
 - **F11** — `src/components/room/{control-bar,control-button,leave-control}.tsx`, `src/hooks/use-call-shortcuts.ts`, `src/lib/keyboard.ts`, and the `tooltip` primitive. First consumer of `lucide-react`
+- **F16** — `src/components/room/invite-dialog.tsx`, `src/lib/invite-link.ts`, and the `dialog` primitive. The lobby's copy button adopted the shared builder
 - **F15** — `src/components/room/{reactions-provider,reaction-menu}.tsx`, `src/hooks/use-raise-hand.ts`, `src/lib/reactions.ts`, and the `popover` primitive. The token grant gained `canUpdateOwnMetadata`, which is what lets a client write its own raise-hand attribute
 - **F14** — `src/components/room/{call-panel,participant-list}.tsx`, `src/hooks/use-media-query.ts`, `src/lib/participants.ts`, and the `sheet` primitive. `participant-count.tsx` was deleted — the headcount moved onto the participants control as a badge
 - **F13** — `src/components/room/{focus-layout,tile-menu}.tsx` and `src/lib/room-focus.ts`. `participant-tile.tsx` gained the pin gesture, the menu, a `size` variant and the pinned marker; `video-grid.tsx` now chooses between grid and spotlight and owns the pin
@@ -108,8 +109,8 @@ VideoCircle/
     │       ├── token/route.ts         → POST: mint a LiveKit AccessToken
     │       └── livekit/webhook/route.ts → POST: LiveKit participant/room events
     ├── components/
-    │   ├── ui/                        → shadcn primitives (button, dropdown-menu, input, popover,
-    │   │                                sheet, tooltip;
+    │   ├── ui/                        → shadcn primitives (button, dialog, dropdown-menu, input,
+    │   │                                popover, sheet, tooltip;
     │   │                                added per feature) plus section-overline, the brand's own
     │   ├── shell/                     → wordmark, site header, site footer, auth menu
     │   ├── home/                      → hero, call preview, how-it-works, feature grid, join-by-code
@@ -123,7 +124,7 @@ VideoCircle/
     │   │                                participant-tile, tile-menu, call-panel,
     │   │                                participant-list, control-bar, control-button,
     │   │                                leave-control, reactions-provider, reaction-menu,
-    │   │                                and later the chat panel
+    │   │                                invite-dialog, and later the chat panel
     │   ├── chat/                      → encrypted chat panel, composer, message list
     │   └── history/                   → history table, empty state
     ├── hooks/                         → use-media-preview (owns the lobby's tracks),
@@ -161,6 +162,7 @@ VideoCircle/
     │   ├── participants.ts             → pure roster ordering: you first, then join order
     │   ├── reactions.ts                → the fixed label set, the Zod-validated wire
     │   │                                 payload, and the pure rate-limit decision
+    │   ├── invite-link.ts              → pure share-link construction, fragment verbatim
     │   ├── initials.ts                 → pure display name → up to two characters
     │   ├── meeting-state.ts           → pure joinability decision (open/ended/expired)
     │   ├── env.livekit.server.ts      → Zod-parsed LiveKit secrets, server-only
@@ -759,7 +761,7 @@ export function apiError(code: string, message: string, status: number) {
 - Every payload published to the `vc.chat` data-channel topic is the `Uint8Array` returned by `encryptChatMessage()`; plaintext is never passed to `publishData`.
 - Every payload received on `vc.reaction` is validated against the fixed label set before anything is rendered. Arriving over our own topic proves the sender is in the room, not that they sent something well-formed, and a reaction is drawn as text over someone's video.
 - Chat message contents are never persisted — not to Postgres, not to `localStorage`, not to `sessionStorage`.
-- A fragment is never case-normalised. The key is base64url and case-sensitive, so any code that lowercases or uppercases a string is responsible for splitting the fragment off first — see `parseRoomCodeInput`, which normalises the room code and leaves the fragment untouched. This failure is silent: the call still works and only chat is unreadable.
+- A fragment is never case-normalised. The key is base64url and case-sensitive, so any code that lowercases or uppercases a string is responsible for splitting the fragment off first — see `parseRoomCodeInput`, which normalises the room code and leaves the fragment untouched, and `buildInviteLink`, which carries it verbatim. This failure is silent: the call still works and only chat is unreadable. `tests/unit/lib/invite-link.test.ts` and `tests/e2e/invite.spec.ts` pin it, the latter also asserting the key appears in no request URL or body while the invite dialog is open and copying.
 - `crypto.subtle` is called only from files under `src/lib/crypto/`.
 - Cryptographic and room-code randomness comes from `crypto.getRandomValues` or `crypto.randomUUID`; `Math.random()` is never used to produce a code, key, nonce, or identity.
 

@@ -473,6 +473,20 @@ The grant spec pins `canUpdateOwnMetadata` true and the three admin claims false
 
 - Reconstruct the link from `NEXT_PUBLIC_SITE_URL`, the code, and the current fragment
 - Clipboard fallback (select-and-copy) for browsers that block `navigator.clipboard`
+- **A centred `dialog`, not the sheet or the popover.** A sheet reads as ongoing content rather than a short thing you act on and dismiss, and an anchored popover has nowhere to go at 360px
+- **The link sits in a read-only input, selected on focus.** `navigator.clipboard.writeText` has been seen in this project hanging on a trusted click in a secure context with permission granted, which is why `use-copy-to-clipboard` already races it against a timeout. When that path fails a selected field is one keystroke away; telling someone to find the address bar mid-call on a phone is not a fallback
+- **Two states, two notes.** With a key, the note says the link carries it and anyone holding it can read chat. Without one, it says plainly that this link gives no chat access — otherwise someone who arrived through a stripped link passes the same broken link on, and nothing about the call looks wrong
+- **Link construction lives in `src/lib/invite-link.ts`**, pure and taking the hash as an argument so `window` stays in the event handler. The lobby's copy button uses it too, and it is where the rule that a fragment is never case-normalised finally gets a test rather than only a comment
+- **This makes eight controls on the `sm:`-and-up bar**, one past the seven the control-states specimen draws. The 440px figure in `code-standards.md` is a phone constraint, and on a phone this collapses into MORE with the rest of the secondary group; eight is comfortable on a desktop viewport. Named here rather than silently exceeded
+
+**Verify:** The dialog shows the live link with the current fragment carried
+verbatim, copy confirms, and a stubbed clipboard rejection surfaces the fallback
+with the field's text selected. Joining through a URL with no fragment shows the
+no-chat-access note and not the key warning. Every request made while the dialog is
+open and copying is recorded and asserted to carry no part of the fragment — the
+product's central privacy claim, defended structurally until now but never tested.
+Unit tests cover the builder, including a mixed-case key and an origin that differs
+from `NEXT_PUBLIC_SITE_URL`.
 
 ---
 

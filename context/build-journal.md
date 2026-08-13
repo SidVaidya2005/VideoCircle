@@ -247,3 +247,28 @@ claims false.
 been observed, was caught firing in a screenshot and then confirmed
 programmatically — Chromium's fake audio device does trip LiveKit's active-speaker
 detection after all. The follow-up is removed rather than left as a false open item.
+
+### 16 Copy invite link in call — 2026-08-13
+
+**Decisions**
+
+- **A centred `dialog`, the fourth primitive of the phase.** A sheet reads as ongoing content rather than something you act on and dismiss, and an anchored popover has nowhere to go at 360px.
+- **The link sits in a read-only input, selected on focus.** `navigator.clipboard.writeText` has been seen in this project hanging on a trusted click in a secure context — the hook already races it against a timeout. When that path fails a selected field is one keystroke away; telling someone to find the address bar mid-call on a phone is not a fallback.
+- **Two states, two notes.** A keyless link says so plainly rather than warning about a key that is not there. Someone who arrived through a stripped link would otherwise pass the same broken link on, with nothing about the call looking wrong.
+- **`buildInviteLink` is pure and shared with the lobby**, taking the hash as an argument so `window` stays in the event handler. It is also where the never-normalise-the-fragment rule finally gets a test instead of only a comment.
+- **Eight controls on the `sm:` bar**, one past what the specimen draws. The 440px figure in `code-standards.md` is a phone constraint, and on a phone this collapses into MORE with the rest. Named in the build plan rather than silently exceeded.
+
+**Gotchas**
+
+- **The first draft read `window` in an effect and set state on open**, which the lint rule caught as a render pass spent correcting the previous one. Moving the read into the click handler that opens the dialog is both what the standards prescribe and simpler — the dialog became purely presentational.
+- **Chromium refuses `navigator.clipboard.writeText` without an explicit `clipboard-write` grant**, and because the project's own hook treats a refusal and a hang identically, the failure is silent by design. It read as a broken copy button until the permission was added to the spec.
+- **The screenshot proved the canonical-origin decision live**: the suite runs on port 3100 and the dialog shows a `localhost:3000` link, because the origin comes from `NEXT_PUBLIC_SITE_URL` and not from wherever this person happens to be.
+
+**Verified:** 71 e2e specs and 173 unit tests pass; `lint`, `typecheck` and `build`
+clean. The dialog shows the live link with the fragment carried verbatim including
+mixed case; a keyless link shows the no-chat-access note and not the key warning;
+copying confirms; a stubbed clipboard rejection surfaces the fallback with the
+field's text selected and the key inside the selection. Every request made while
+the dialog is open and copying is recorded and asserted to carry no part of the
+fragment. At 360px the dialog is reached through MORE, does not overflow, and every
+control in it clears 44px.
