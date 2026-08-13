@@ -134,9 +134,10 @@ test('controls whose panels do not exist yet say they are unavailable', async ({
     await expect(page.getByRole('button', { name, disabled: true })).toBeVisible();
   }
 
-  // Screen share is absent rather than disabled: absence means "your device
-  // cannot do this", and a second meaning would cost that rule its clarity.
-  await expect(page.getByRole('button', { name: /screen/i })).toHaveCount(0);
+  // Screen share is the one secondary control that acts, since F12. Absence still
+  // means exactly one thing — your device cannot do this — which screen-share.spec
+  // proves by removing the capability.
+  await expect(page.getByRole('button', { name: 'Share your screen' })).toBeEnabled();
 });
 
 test('the phone bar keeps mic, camera, MORE and Leave', async ({ page, request }) => {

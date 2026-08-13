@@ -6,6 +6,8 @@ import {
   MessageSquare,
   Mic,
   MicOff,
+  MonitorOff,
+  MonitorUp,
   MoreHorizontal,
   Users,
   Video,
@@ -24,6 +26,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useCallShortcuts } from '@/hooks/use-call-shortcuts';
+import { useIsScreenShareSupported } from '@/hooks/use-is-screen-share-supported';
 import { cn } from '@/lib/utils';
 
 interface ControlBarProps {
@@ -34,6 +37,10 @@ interface SecondaryControl {
   key: string;
   label: string;
   icon: LucideIcon;
+  /** Absent until the feature that gives this control something to open. */
+  onClick?: () => void;
+  /** Engaged — a white fill, never red. Several controls can be engaged at once. */
+  pressed?: boolean;
 }
 
 /**
@@ -49,14 +56,18 @@ interface SecondaryControl {
  * this"; adding a second meaning would cost the rule its clarity. F12 adds it
  * behind the capability check.
  */
-const SECONDARY_CONTROLS: readonly SecondaryControl[] = [
+const PENDING_CONTROLS: readonly SecondaryControl[] = [
   { key: 'chat', label: 'Open chat', icon: MessageSquare },
   { key: 'participants', label: 'Show participants', icon: Users },
   { key: 'reactions', label: 'Raise hand', icon: Hand },
 ];
 
 export function ControlBar({ onLeave }: ControlBarProps) {
-  const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
+  const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } =
+    useLocalParticipant();
+  // Capability, not width: absent on every phone, present inside MORE on a narrow
+  // desktop window. Absence keeps one meaning — your device cannot do this.
+  const screenShareSupported = useIsScreenShareSupported();
   // The bar owns this, not the Leave control: pressing anything else has to
   // disarm it, and only the bar knows that happened.
   const [leaveArmed, setLeaveArmed] = useState(false);
@@ -75,7 +86,38 @@ export function ControlBar({ onLeave }: ControlBarProps) {
     void localParticipant.setCameraEnabled(!isCameraEnabled);
   }
 
+  async function toggleScreenShare() {
+    disarmLeave();
+    try {
+      await localParticipant.setScreenShareEnabled(!isScreenShareEnabled);
+    } catch (error) {
+      // NotAllowedError is what every browser throws when the picker is
+      // dismissed — by far the common case — and also what Chrome Android 72–88
+      // and Firefox Android 66–79 threw despite exposing the method. Cancelling a
+      // share is a normal action, so it is neither surfaced nor logged as an
+      // error. Nothing was set optimistically, so the bar is already at rest.
+      if (error instanceof DOMException && error.name === 'NotAllowedError') return;
+      console.warn('[room/control-bar] screen share failed', error);
+    }
+  }
+
   useCallShortcuts({ onToggleMicrophone: toggleMicrophone, onToggleCamera: toggleCamera });
+
+  // Screen share leads the secondary group, as in the control-states specimen.
+  const secondaryControls: readonly SecondaryControl[] = [
+    ...(screenShareSupported
+      ? [
+          {
+            key: 'screen',
+            label: isScreenShareEnabled ? 'Stop sharing your screen' : 'Share your screen',
+            icon: isScreenShareEnabled ? MonitorOff : MonitorUp,
+            pressed: isScreenShareEnabled,
+            onClick: () => void toggleScreenShare(),
+          },
+        ]
+      : []),
+    ...PENDING_CONTROLS,
+  ];
 
   return (
     <TooltipProvider>
@@ -99,12 +141,15 @@ export function ControlBar({ onLeave }: ControlBarProps) {
         />
 
         {/* Inline from sm: up. Below that the same three live in the menu. */}
-        {SECONDARY_CONTROLS.map((control) => (
+        {secondaryControls.map((control) => (
           <ControlButton
             key={control.key}
             label={control.label}
             icon={control.icon}
-            disabled
+            pressed={control.pressed}
+            toggled={control.onClick ? control.pressed : undefined}
+            disabled={!control.onClick}
+            onClick={control.onClick}
             className="hidden sm:inline-flex"
           />
         ))}
@@ -125,8 +170,12 @@ export function ControlBar({ onLeave }: ControlBarProps) {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="center" side="top">
-            {SECONDARY_CONTROLS.map((control) => (
-              <DropdownMenuItem key={control.key} disabled>
+            {secondaryControls.map((control) => (
+              <DropdownMenuItem
+                key={control.key}
+                disabled={!control.onClick}
+                onSelect={control.onClick}
+              >
                 <control.icon aria-hidden="true" className="size-4" />
                 {control.label}
               </DropdownMenuItem>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { MAX_VISIBLE_TILES } from '@/lib/constants';
-import { gridColumnsClass, splitVisibleTiles } from '@/lib/room-grid';
+import { gridColumnsClass, orderCallTiles, splitVisibleTiles } from '@/lib/room-grid';
 
 describe('gridColumnsClass', () => {
   it('gives a lone participant the whole grid', () => {
@@ -58,6 +58,50 @@ describe('gridColumnsClass', () => {
         expect(name).toMatch(/^(sm:|lg:)?grid-cols-[1-4]$/);
       }
     }
+  });
+});
+
+describe('orderCallTiles', () => {
+  it('puts shares first, then you, then everyone else', () => {
+    expect(
+      orderCallTiles({
+        shares: ['share'],
+        localCameras: ['me'],
+        remoteCameras: ['them', 'other'],
+      }),
+    ).toEqual(['share', 'me', 'them', 'other']);
+  });
+
+  it('keeps the grid unchanged when nobody is sharing', () => {
+    expect(orderCallTiles({ shares: [], localCameras: ['me'], remoteCameras: ['them'] })).toEqual([
+      'me',
+      'them',
+    ]);
+  });
+
+  it('orders several shares ahead of every camera', () => {
+    expect(
+      orderCallTiles({
+        shares: ['share-a', 'share-b'],
+        localCameras: ['me'],
+        remoteCameras: ['them'],
+      }),
+    ).toEqual(['share-a', 'share-b', 'me', 'them']);
+  });
+
+  it('survives the cap even in a full call', () => {
+    // The reason shares lead at all: sorted naturally, a share in a busy call
+    // lands past the cap and is invisible to everyone while the person sharing
+    // believes it is up.
+    const remotes = Array.from({ length: 20 }, (_, index) => `remote-${index}`);
+    const ordered = orderCallTiles({
+      shares: ['share'],
+      localCameras: ['me'],
+      remoteCameras: remotes,
+    });
+
+    expect(splitVisibleTiles(ordered).visible).toContain('share');
+    expect(splitVisibleTiles(ordered).visible[0]).toBe('share');
   });
 });
 

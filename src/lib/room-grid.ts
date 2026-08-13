@@ -38,6 +38,26 @@ export function gridColumnsClass(tileCount: number): string {
   return COLUMNS_BY_COUNT.large;
 }
 
+/**
+ * Grid order: every screen share first, then you, then everyone else.
+ *
+ * Shares lead because the cap is applied after this — a share sorted into its
+ * natural position can land past `MAX_VISIBLE_TILES` in a busy call and be
+ * invisible to everyone while the person sharing believes it is up. This is a
+ * sort, not a layout: the focused view, the filmstrip and manual pinning are
+ * feature 13's, and none of them has to unpick this.
+ *
+ * You come second so the cap can never hide you from yourself, which is why the
+ * caller stable-sorts only the remote cameras.
+ */
+export function orderCallTiles<T>(groups: {
+  shares: readonly T[];
+  localCameras: readonly T[];
+  remoteCameras: readonly T[];
+}): T[] {
+  return [...groups.shares, ...groups.localCameras, ...groups.remoteCameras];
+}
+
 export interface TileSplit<T> {
   /** The tiles that get rendered, capped at `MAX_VISIBLE_TILES`. */
   visible: T[];

@@ -5,30 +5,39 @@ import { Track } from 'livekit-client';
 
 import { ParticipantTile } from '@/components/room/participant-tile';
 import { MAX_VISIBLE_TILES } from '@/lib/constants';
-import { gridColumnsClass, splitVisibleTiles } from '@/lib/room-grid';
+import { gridColumnsClass, orderCallTiles, splitVisibleTiles } from '@/lib/room-grid';
 import { cn } from '@/lib/utils';
 
-/** Local always holds the first tile, so the rest compete for what is left. */
-const MAX_REMOTE_TILES = MAX_VISIBLE_TILES - 1;
-
 export function VideoGrid() {
-  // withPlaceholder keeps a tile for anyone whose camera is off. Without it,
-  // muting your camera deletes you from everyone's grid instead of showing your
-  // name — the difference between "camera off" and "left the call".
-  const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], {
-    onlySubscribed: false,
-  });
+  // withPlaceholder on the camera keeps a tile for anyone whose camera is off.
+  // Without it, muting your camera deletes you from everyone's grid instead of
+  // showing your name — the difference between "camera off" and "left the call".
+  //
+  // A screen share never gets a placeholder: unlike a camera it has no off state
+  // to represent. If the reference exists, the share is live.
+  const tracks = useTracks(
+    [
+      { source: Track.Source.Camera, withPlaceholder: true },
+      { source: Track.Source.ScreenShare, withPlaceholder: false },
+    ],
+    { onlySubscribed: false },
+  );
 
-  const local = tracks.filter((track) => track.participant.isLocal);
-  const remotes = tracks.filter((track) => !track.participant.isLocal);
+  const shares = tracks.filter((track) => track.source === Track.Source.ScreenShare);
+  const cameras = tracks.filter((track) => track.source === Track.Source.Camera);
+  const localCameras = cameras.filter((track) => track.participant.isLocal);
+  const remoteCameras = cameras.filter((track) => !track.participant.isLocal);
 
   // Promotes whoever is speaking onto the visible page and holds everyone else
   // still, so tiles do not shuffle under the cursor every time someone mutes.
-  // Applied to remotes only: you are pinned first and can never be the one the
-  // cap hides.
-  const stableRemotes = useVisualStableUpdate(remotes, MAX_REMOTE_TILES);
+  // Applied to remote cameras only: shares and you are placed ahead of them and
+  // can never be what the cap hides. The budget shrinks by whatever they take.
+  const remoteBudget = Math.max(1, MAX_VISIBLE_TILES - shares.length - localCameras.length);
+  const stableRemotes = useVisualStableUpdate(remoteCameras, remoteBudget);
 
-  const { visible, hiddenCount } = splitVisibleTiles([...local, ...stableRemotes]);
+  const { visible, hiddenCount } = splitVisibleTiles(
+    orderCallTiles({ shares, localCameras, remoteCameras: stableRemotes }),
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">

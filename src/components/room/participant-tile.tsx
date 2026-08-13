@@ -25,6 +25,7 @@ const LOCAL_LABEL = 'You';
 function ParticipantTileImpl({ trackRef }: ParticipantTileProps) {
   const { participant } = trackRef;
   const isLocal = participant.isLocal;
+  const isScreenShare = trackRef.source === Track.Source.ScreenShare;
 
   const micPublication = participant.getTrackPublication(Track.Source.Microphone);
   // The hook reads an absent publication as unmuted, which is backwards for a
@@ -34,10 +35,13 @@ function ParticipantTileImpl({ trackRef }: ParticipantTileProps) {
     useIsMuted({ participant, source: Track.Source.Microphone, publication: micPublication }) ||
     micPublication === undefined;
 
-  const isSpeaking = useIsSpeaking(participant);
+  // Suppressed on a share: the ring and the mute dot say something about the
+  // person, and the person already has a camera tile of their own to say it on.
+  const isSpeaking = useIsSpeaking(participant) && !isScreenShare;
 
   const name = participant.name?.trim() || (isLocal ? LOCAL_LABEL : UNNAMED);
-  const label = isLocal ? LOCAL_LABEL : name;
+  const personLabel = isLocal ? LOCAL_LABEL : name;
+  const label = isScreenShare ? `${personLabel} — screen` : personLabel;
 
   // Read through the hook, never off `trackRef.publication.isMuted` directly.
   // LiveKit mutates the publication in place, so a component memoised on that
@@ -68,15 +72,21 @@ function ParticipantTileImpl({ trackRef }: ParticipantTileProps) {
           // object-contain, not cover: a 4:3 webcam letterboxes into the frame
           // rather than losing the top of someone's head. Mirrored for the local
           // participant only — a self-view is a mirror, a remote tile is not.
-          className={cn('size-full object-contain', isLocal && '-scale-x-100')}
+          // Never mirrored on a share: only a self-*camera* is a mirror, and a
+          // flipped spreadsheet is unreadable.
+          className={cn('size-full object-contain', isLocal && !isScreenShare && '-scale-x-100')}
         />
       ) : (
         <div className="bg-raised absolute inset-0 flex items-center justify-center">
-          {/* Initials on the elevation ladder. No generated avatar, no illustration.
+          {/* Initials stand in for a camera that is off. A share has no off state —
+              if its reference exists the share is live — so on the rare frame
+              before its track attaches, the label alone carries the tile.
               Hidden from assistive tech: the name sits directly below it. */}
-          <span aria-hidden="true" className="text-muted text-2xl font-bold">
-            {toInitials(name)}
-          </span>
+          {isScreenShare ? null : (
+            <span aria-hidden="true" className="text-muted text-2xl font-bold">
+              {toInitials(name)}
+            </span>
+          )}
         </div>
       )}
 
@@ -90,7 +100,7 @@ function ParticipantTileImpl({ trackRef }: ParticipantTileProps) {
       />
 
       <p className="absolute inset-x-2 bottom-2 flex items-center gap-1.5 text-xs tracking-wide uppercase">
-        {micMuted ? (
+        {micMuted && !isScreenShare ? (
           <>
             {/* Red marks your own muted mic and nothing else. Twelve red badges on a
                 twelve-person grid would destroy the signal exactly when Leave needs it. */}

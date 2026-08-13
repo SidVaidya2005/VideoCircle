@@ -44,3 +44,82 @@ export function liveTrackCounts(page: Page): Promise<{ video: number; audio: num
     };
   });
 }
+
+/**
+ * Replaces the browser's screen-share picker with a canvas the page paints itself.
+ *
+ * Only the picker is stubbed. LiveKit still publishes a real `MediaStreamTrack`,
+ * the SFU still relays it, and the receiving browser still decodes it — so every
+ * assertion about what the *other* participant sees is genuine. Chromium cannot
+ * be driven through a real OS capture prompt headlessly, and stubbing our own code
+ * or the SFU would test the mock instead of the thing that breaks.
+ *
+ * The most recent track is exposed as `window.__shareTrack` so a test can end it
+ * the way Chrome's own "Stop sharing" bar does.
+ */
+export async function stubDisplayMedia(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    // Sourced from the fake camera device rather than a canvas: a
+    // CanvasCaptureMediaStreamTrack ends on its own shortly after publishing, and
+    // a stub that stops mid-test is worse than no stub. Chromium's fake device is
+    // what every camera assertion in this suite already runs on.
+    //
+    // Only the picker is replaced. LiveKit still publishes a real track, the SFU
+    // still relays it, and the receiving browser still decodes it.
+    navigator.mediaDevices.getDisplayMedia = async () => {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const track = stream.getVideoTracks()[0];
+      const target = window as unknown as { __shareTrack?: MediaStreamTrack };
+      target.__shareTrack = track;
+
+      // livekit-client clones the track it is handed and stops the original, so
+      // the reference a test needs — the one the SDK is actually listening to for
+      // `ended` — is the clone, not what came out of the picker.
+      if (track) {
+        const clone = track.clone.bind(track);
+        track.clone = () => {
+          const cloned = clone();
+          target.__shareTrack = cloned;
+          return cloned;
+        };
+      }
+
+      return stream;
+    };
+  });
+}
+
+/** Makes the picker refuse, exactly as it does when someone dismisses it. */
+export async function dismissDisplayMedia(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    navigator.mediaDevices.getDisplayMedia = async () => {
+      throw new DOMException('Permission denied', 'NotAllowedError');
+    };
+  });
+}
+
+/** A browser that cannot share at all — every mobile one, and this is how we prove it. */
+export async function blockDisplayMedia(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    // Defined on MediaDevices.prototype, not the instance, so `delete` on the
+    // instance is a no-op. Shadowing it with undefined is what actually hides it.
+    Object.defineProperty(navigator.mediaDevices, 'getDisplayMedia', {
+      value: undefined,
+      configurable: true,
+    });
+  });
+}
+
+/** Ends the shared track from outside our UI, as Chrome's own stop bar does. */
+export function stopShareFromBrowser(page: Page): Promise<void> {
+  return page.evaluate(() => {
+    const track = (window as unknown as { __shareTrack?: MediaStreamTrack }).__shareTrack;
+    if (!track) throw new Error('no shared track to stop — was stubDisplayMedia installed?');
+
+    track.stop();
+    // `stop()` deliberately does not fire `ended` on the track that called it,
+    // but Chrome does fire it when the user stops the capture from its own bar —
+    // and `ended` is what livekit-client listens for to unpublish.
+    track.dispatchEvent(new Event('ended'));
+  });
+}
