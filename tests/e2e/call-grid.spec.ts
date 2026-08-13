@@ -41,8 +41,10 @@ test('two people in one room see each other', async ({ page, browser, request })
     await expect(tiles(guest).first()).toContainText('You');
     await expect(tiles(guest).nth(1)).toContainText('Ada Lovelace');
 
-    // The headcount agrees with the grid.
-    await expect(page.getByText('2 in call')).toBeVisible();
+    // The headcount agrees with the grid. It lives on the participants control
+    // since F14 — the status strip's own count was removed rather than kept as a
+    // second source that could disagree.
+    await expect(page.getByRole('button', { name: 'Show participants (2)' })).toBeVisible();
   } finally {
     await second.close();
   }
@@ -66,7 +68,7 @@ test('a participant who leaves stops holding a tile', async ({ page, browser, re
     // Down to one tile, and back to the alone state — a tile left behind for
     // someone who has gone is indistinguishable from a frozen call.
     await expect(tiles(page)).toHaveCount(1, { timeout: 20_000 });
-    await expect(page.getByText('Only you')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Show participants (1)' })).toBeVisible();
   } finally {
     await second.close();
   }

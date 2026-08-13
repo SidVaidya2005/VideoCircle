@@ -199,6 +199,10 @@
   --animate-level: vc-level 900ms var(--ease-in-out-quint) infinite;
   --animate-live-dot: vc-live-dot 2s var(--ease-in-out-quint) infinite;
 
+  /* The participants and chat panels, below lg: where they open as a sheet.
+     One-shot on open: Radix unmounts on close, so there is no exit to animate. */
+  --animate-sheet-in: vc-sheet-in 250ms var(--ease-out-quint);
+
   /* Chrome motion — the header's dropdown. Not Home-only, but still outside the
      call, where JS-driven animation is banned and CSS is the only option anyway.
      One-shot on open: Radix unmounts on close, so there is no exit to animate. */
@@ -355,6 +359,18 @@ html {
    the CSS variable Radix sets on the content element. Replaces shadcn's generated
    `animate-in fade-in-0 zoom-in-95`, which are `tw-animate-css` utilities this
    project does not import and which therefore did nothing. */
+/* A panel arriving from the right edge it is anchored to. */
+@keyframes vc-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateX(1.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @keyframes vc-menu-in {
   from {
     opacity: 0;

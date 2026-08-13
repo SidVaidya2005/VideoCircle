@@ -29,8 +29,14 @@ import { useCallShortcuts } from '@/hooks/use-call-shortcuts';
 import { useIsScreenShareSupported } from '@/hooks/use-is-screen-share-supported';
 import { cn } from '@/lib/utils';
 
+export type CallPanelName = 'participants';
+
 interface ControlBarProps {
   onLeave: () => void;
+  openPanel: CallPanelName | null;
+  onTogglePanel: (panel: CallPanelName) => void;
+  /** Everyone in the call, you included. Shown on the participants control. */
+  participantCount: number;
 }
 
 interface SecondaryControl {
@@ -41,6 +47,8 @@ interface SecondaryControl {
   onClick?: () => void;
   /** Engaged — a white fill, never red. Several controls can be engaged at once. */
   pressed?: boolean;
+  /** Rendered as a small count on the control. Participants only, for now. */
+  badge?: number;
 }
 
 /**
@@ -58,11 +66,15 @@ interface SecondaryControl {
  */
 const PENDING_CONTROLS: readonly SecondaryControl[] = [
   { key: 'chat', label: 'Open chat', icon: MessageSquare },
-  { key: 'participants', label: 'Show participants', icon: Users },
   { key: 'reactions', label: 'Raise hand', icon: Hand },
 ];
 
-export function ControlBar({ onLeave }: ControlBarProps) {
+export function ControlBar({
+  onLeave,
+  openPanel,
+  onTogglePanel,
+  participantCount,
+}: ControlBarProps) {
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } =
     useLocalParticipant();
   // Capability, not width: absent on every phone, present inside MORE on a narrow
@@ -116,6 +128,20 @@ export function ControlBar({ onLeave }: ControlBarProps) {
           },
         ]
       : []),
+    {
+      key: 'participants',
+      // The count rides in the label because the badge itself is aria-hidden: an
+      // aria-label overrides a button's contents, so a screen reader never reaches
+      // the number unless it is written here.
+      label: `${openPanel === 'participants' ? 'Hide' : 'Show'} participants (${participantCount})`,
+      icon: Users,
+      pressed: openPanel === 'participants',
+      badge: participantCount,
+      onClick: () => {
+        disarmLeave();
+        onTogglePanel('participants');
+      },
+    },
     ...PENDING_CONTROLS,
   ];
 
@@ -150,6 +176,7 @@ export function ControlBar({ onLeave }: ControlBarProps) {
             toggled={control.onClick ? control.pressed : undefined}
             disabled={!control.onClick}
             onClick={control.onClick}
+            badge={control.badge}
             className="hidden sm:inline-flex"
           />
         ))}
@@ -178,6 +205,9 @@ export function ControlBar({ onLeave }: ControlBarProps) {
               >
                 <control.icon aria-hidden="true" className="size-4" />
                 {control.label}
+                {control.badge === undefined ? null : (
+                  <span className="text-muted ml-auto">{control.badge}</span>
+                )}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>

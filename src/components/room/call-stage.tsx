@@ -1,10 +1,12 @@
 'use client';
 
-import { useRoomContext } from '@livekit/components-react';
+import { useParticipants, useRoomContext } from '@livekit/components-react';
+import { useState } from 'react';
 
+import { CallPanel } from '@/components/room/call-panel';
 import { CallStatus } from '@/components/room/call-status';
-import { ControlBar } from '@/components/room/control-bar';
-import { ParticipantCount } from '@/components/room/participant-count';
+import { ControlBar, type CallPanelName } from '@/components/room/control-bar';
+import { ParticipantList } from '@/components/room/participant-list';
 import { VideoGrid } from '@/components/room/video-grid';
 
 /**
@@ -17,19 +19,45 @@ import { VideoGrid } from '@/components/room/video-grid';
  */
 export function CallStage() {
   const room = useRoomContext();
+  const participants = useParticipants();
+
+  // One value, so only one panel can ever be open — the only workable behaviour
+  // on a phone, and it keeps two panels from competing for the right column on a
+  // desktop. Feature 19 adds a variant here, not a mechanism.
+  const [openPanel, setOpenPanel] = useState<CallPanelName | null>(null);
+
+  function togglePanel(panel: CallPanelName) {
+    setOpenPanel((current) => (current === panel ? null : panel));
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 pb-3">
       <div className="flex flex-none items-center justify-between gap-4">
         <CallStatus />
-        <ParticipantCount />
       </div>
 
-      <VideoGrid />
+      <div className="flex min-h-0 flex-1 gap-3">
+        {/* The panel takes the right column and the filmstrip falls back to
+            horizontal, so only one column of chrome occupies that edge. */}
+        <VideoGrid sidePanelOpen={openPanel !== null} />
+
+        <CallPanel
+          title="Participants"
+          open={openPanel === 'participants'}
+          onClose={() => setOpenPanel(null)}
+        >
+          <ParticipantList />
+        </CallPanel>
+      </div>
 
       {/* Nothing here is disabled while reconnecting — that is exactly when the
           controls are reached for. */}
-      <ControlBar onLeave={() => void room.disconnect()} />
+      <ControlBar
+        onLeave={() => void room.disconnect()}
+        openPanel={openPanel}
+        onTogglePanel={togglePanel}
+        participantCount={participants.length}
+      />
     </div>
   );
 }

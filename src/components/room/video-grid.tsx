@@ -25,7 +25,12 @@ function tileKey(trackRef: TrackReferenceOrPlaceholder): string {
   return `${trackRef.participant.identity}:${trackRef.source}`;
 }
 
-export function VideoGrid() {
+interface VideoGridProps {
+  /** While a panel holds the right column, the filmstrip stays horizontal. */
+  sidePanelOpen?: boolean;
+}
+
+export function VideoGrid({ sidePanelOpen = false }: VideoGridProps) {
   const [pinnedKey, setPinnedKey] = useState<string | null>(null);
 
   function togglePin(key: string) {
@@ -74,7 +79,7 @@ export function VideoGrid() {
 
   return (
     <TooltipProvider>
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
         {focused ? (
           <FocusLayout
             focused={focused.trackRef}
@@ -82,6 +87,7 @@ export function VideoGrid() {
             tileKey={tileKey}
             pinnedKey={pinnedKey}
             onTogglePin={togglePin}
+            stripHorizontal={sidePanelOpen}
           />
         ) : (
           <ul

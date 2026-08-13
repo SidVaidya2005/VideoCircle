@@ -65,6 +65,8 @@ interface ControlButtonProps extends VariantProps<typeof controlVariants> {
   icon: LucideIcon;
   /** Omitted for controls that act rather than toggle, like Leave. */
   toggled?: boolean;
+  /** A small count on the control. Neutral, never the engaged white fill. */
+  badge?: number;
   disabled?: boolean;
   onClick?: () => void;
   className?: string;
@@ -76,6 +78,7 @@ export function ControlButton({
   tone,
   pressed,
   toggled,
+  badge,
   disabled,
   onClick,
   className,
@@ -91,9 +94,26 @@ export function ControlButton({
           aria-pressed={toggled}
           disabled={disabled}
           onClick={onClick}
-          className={cn(controlVariants({ tone, pressed }), className)}
+          className={cn('relative', controlVariants({ tone, pressed }), className)}
         >
           <Icon aria-hidden="true" />
+          {badge === undefined ? null : (
+            // Neutral, never the engaged white fill: the fill already means "this
+            // panel is open", and a white badge would compete with it.
+            //
+            // aria-hidden because an aria-label on the button overrides its
+            // contents outright — a screen reader would never reach this node. The
+            // count is written into that label instead, by the caller.
+            <span
+              aria-hidden="true"
+              className={cn(
+                'bg-raised text-ink-2 border-line/60 absolute -top-1 -right-1 min-w-5 rounded-full border px-1 text-xs leading-4',
+                pressed && 'bg-canvas',
+              )}
+            >
+              {badge}
+            </span>
+          )}
         </button>
       </TooltipTrigger>
       {/* Pointer affordance only; aria-label is the accessible name for everyone
