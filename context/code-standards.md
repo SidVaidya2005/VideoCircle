@@ -29,7 +29,7 @@ The AI agent on this project operates as a senior engineer. This means:
 
 - `strict: true`, plus `noUncheckedIndexedAccess` and `noImplicitOverride`. Never relax a compiler flag to make an error go away.
 - `any` is banned. Use `unknown` at boundaries and narrow it. When a third-party type is genuinely wrong, write a narrow local type and a one-line comment explaining why.
-- Non-null assertions (`!`) are banned outside `src/lib/env.ts`, where Zod has already guaranteed presence. Narrow with a guard instead.
+- Non-null assertions (`!`) are banned outside two files. `src/lib/env.ts`, where Zod has already guaranteed presence; and `src/lib/supabase/proxy.ts`, which cannot import that module — it runs in the Edge runtime under a bundle-size budget and importing the Zod-parsed env would pull Zod in with it. Both values it asserts are `NEXT_PUBLIC_`, inlined at build time, and already validated at boot by every other module that imports `env.ts`. Everywhere else, narrow with a guard instead.
 - `as` casts are allowed only for `JSON.parse` results that are immediately validated, and for `satisfies`-style widening. Never cast to silence the compiler.
 - Prefer `interface` for object shapes that are extended or implemented, `type` for unions, intersections, and function types.
 - All exported functions declare an explicit return type. Local helpers may infer.

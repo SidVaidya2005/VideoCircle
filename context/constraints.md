@@ -59,6 +59,25 @@ feature. The feature refs below point at where each one will be applied.*
 - **The room code is generated server-side only.** The collision path regenerates in the route handler, so a client navigating to the code *it* sent would land in a room it does not own — a bug visible only on a collision, which at 50 bits means never in testing and eventually in production. (F06)
 - **Keys imported from a link are non-extractable.** Only the key generated in-browser is extractable, and only long enough to put it in the URL. (F06)
 
+## Media and devices
+
+*The rules themselves are invariants in `architecture.md` → Media. What follows is
+only the reasoning and the non-obvious library behaviour behind them, which that
+file does not carry.*
+
+- **`getUserMedia` is not guaranteed to settle.** It can hang indefinitely instead of rejecting — observed here, where audio never returned while the camera on the same machine opened normally. That is why acquisition is bounded by a timeout, and why the timeout never runs while a permission prompt may still be open: the person deciding is not a fault condition, and a flat timer turns the most ordinary path in the product into a rendered failure. (F07)
+- **Per-run effect state must never be hoisted into a shared ref.** React double-invokes effects in development: the first run's cleanup clears a shared flag, the second sets it again, and the first request then adopts its track alongside the second's — two live cameras, one owned by nothing. Use a `cancelled` local per effect run. (F08)
+- **Side effects never go inside a `setState` updater.** Updaters are double-invoked and must be pure; a `track.stop()` in one fires twice, against whatever snapshot each invocation happens to see. (F08)
+- **A remembered `deviceId` is passed bare, never as `{exact}`.** A bare value is an *ideal* constraint, so a device that has been unplugged — or whose id the browser rotated when site permissions were reset — falls back to the system default instead of failing the request. (F08)
+- **Device labels are empty until permission is granted**, which is why enumeration runs after acquisition rather than on mount. Enumerating early fills the pickers with blank rows that never repopulate. (F08)
+- **`<LiveKitRoom>` re-creates its `Room` whenever its `options` object changes identity.** Carrying the lobby's device ids makes that object dynamic, so it must be memoised or the call reconnects on every render — a failure that presents as a network fault rather than a code one. (F09)
+
+## Testing
+
+- **`server-only` throws when imported under Node**, so anything importing it cannot be unit-tested. Logic worth testing exhaustively — the joinability decision, the token TTL cap, error classification — lives in pure modules that do not import it, with the IO shell around them. (F09)
+- **The fake-media Playwright config cannot reach the failure paths.** `--use-fake-ui-for-media-stream` auto-grants and the fake device is always present, so denied, no-device and in-use are unreachable; audio capture also hangs on this machine, so every microphone path is manual. Closing this needs a second Playwright project launched without the fake-UI flag. (F07, F08)
+- **Next injects a `role="alert"` route announcer**, so an unscoped `getByRole('alert')` matches two elements. Scope to `main`. (F09)
+
 ## Design system
 
 - **The shell is a `(shell)` route group.** Keeping the exclusion structural is what stops `/room/[code]` acquiring a header and footer into the call by someone forgetting to opt out. (F02)
@@ -78,6 +97,7 @@ feature. The feature refs below point at where each one will be applied.*
 - **ESLint is pinned to 9.x, not 10.** `eslint-plugin-react`, vendored inside `eslint-config-next`, calls the pre-10 rule context API and dies with `contextOrFilename.getFilename is not a function` on ESLint 10. Independent of the TypeScript pin above. (F01)
 - **The Playwright web server runs on port 3100, not 3000.** With `reuseExistingServer`, anything already holding the dev port gets reused — a leftover `next start`, or an editor's port-forwarding helper — and the suite then tests something other than what it built. That happened once and turned five unrelated specs red. Do not move it back. (F02)
 - **The environment must stay split across `env.ts` (public) and `env.server.ts` (secrets), and merging them breaks the browser build.** Next replaces non-public `process.env` reads with `undefined` client-side, so one schema covering both throws the moment any Client Component imports it — including `src/lib/supabase/client.ts`. Mechanism and the variable table live in `code-standards.md` → Environment Variables. (F01)
+- **`_verify.mjs` compares three copies of the token mirror** — the kit, `library-docs.md`, and `globals.css`. The copy that actually ships was previously the one nothing checked. (F02)
 - **`_verify.mjs` runs inside `npm run lint`**, wired in at feature 01 rather than 02 — it already passed then, so context-drift guarding has been on since the first commit. Anything that breaks the token mirror or the context-doc shape fails `lint`, not review. (F01)
 - **`turbopack.root` is pinned in `next.config.ts`.** Turbopack otherwise walks up looking for a lockfile and can settle on a directory above the repository, changing what it resolves. (F01)
 - **`z.url()` alone is not a URL check worth trusting.** It accepts `localhost:3000`, parsing it as a URL whose scheme is `localhost`. Any environment URL that must be reachable over a specific scheme carries the `protocol` option — see `library-docs.md` → Zod 4. (F01)

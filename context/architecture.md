@@ -108,9 +108,11 @@ VideoCircle/
     │   ├── home/                      → hero, call preview, how-it-works, feature grid, join-by-code
     │   │                                form, start-meeting + share panel, auth-error notice
     │   ├── lobby/                     → self-preview, media-state notice, device toggles and
-    │   │                                pickers, display-name field, copy-invite, lobby controls
-    │   ├── room/                      → room-experience (hosts lobby then call), grid, tiles,
-    │   │                                control bar, panels, reactions
+    │   │                                pickers, display-name field, copy-invite, join-failure
+    │   │                                notice, lobby controls
+    │   ├── room/                      → room-experience (hosts lobby then call), room-shell
+    │   │                                (<LiveKitRoom>), connected panel, and later the grid,
+    │   │                                tiles, control bar, panels, reactions
     │   ├── chat/                      → encrypted chat panel, composer, message list
     │   └── history/                   → history table, empty state
     ├── hooks/                         → use-media-preview (owns the lobby's tracks),

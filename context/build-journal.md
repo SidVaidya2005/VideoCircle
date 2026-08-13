@@ -65,81 +65,13 @@ At that phase's checkpoint, the whole phase collapses to:
 - **`middleware.ts` became `proxy.ts`** per Next 16's rename — a pure rename, deferred out of F04 as out of scope and cleared here. (checkpoint)
 
 
-## Phase 2 — Lobby
+## Phase 2 — Lobby *(compacted 2026-08-13)*
 
-### 2026-08-13 — 07 Media permissions and self-preview
-
-**Decisions**
-
-- **Two acquisition shapes, chosen by permission state.** A flat timeout on `getUserMedia` is wrong, because the promise does not settle until the permission prompt is answered — so the timer fires on someone who simply took a while to find Allow, turning the most ordinary path in the product into a rendered failure. Permission state decides instead: already granted means no prompt is coming, so each device is asked for separately, in parallel, each timed; undecided means one combined untimed request, one prompt, answered at the person's own pace. Falls back to the untimed path wherever `permissions.query` rejects, which is Firefox and older Safari for these names — the fallback that cannot produce a false failure.
-- **The page verifies the code before the lobby mounts.** Shape, then existence through `findMeetingByCode`, `notFound()` on either. A dead link now fails before anyone is asked for a camera rather than after. Joinability stayed with F09 on purpose: a meeting can close while someone sits in the lobby, so that check has to happen at join, and the two are not duplicates.
-- **`findMeetingByCode` uses `supabaseAdmin`, and lives in `src/lib`.** RLS on `meetings` admits only an authenticated participant, so the anon client would make every valid code look unknown to the very guest opening its link. Putting it behind a lib function keeps the service-role client out of `src/app`, where the boundary in `architecture.md` does not allow it.
-- **No Join control shipped.** The entry asked for "a path to join anyway", but Join belongs to F08 and joining to F09. Shipping a disabled button for two features reads as broken; the guarantee kept instead is that no failure state dead-ends the page.
-- **`idle` dropped, `timeout` added.** Nothing can produce `idle` when the hook requests on mount — and ESLint's `react-hooks/set-state-in-effect` rejects the synchronous `setState` that moving out of it required. `timeout` earned its place empirically, below.
-
-**Gotchas**
-
-- **`getUserMedia` can hang instead of rejecting, and it happens on real hardware.** On this machine `{video: true}` opens normally while `{audio: true}` never settles at all — so the combined request never settles either, and the lobby sat on "Waiting for camera and microphone" forever. Found because the E2E suite failed, not because anything was reviewed. This is the same failure the clipboard hit in F06, in a different API: a call that neither succeeds nor fails is worse than one that fails.
-- **`MediaDeviceFailure.getFailure` throws on a primitive.** It tests `'name' in error`, and `in` raises a TypeError on a string or null. `throw 'string'` is legal JavaScript, so the classifier could itself throw and strand the lobby. Caught by the unit test on its first run, from the case that existed only for completeness.
-- **`next/dynamic` with `ssr: false` is rejected in a Server Component.** The plan called for it to code-split the room tree; Next errors on it. Not needed anyway — the route is the split point, verified by serving the production build and confirming Home requests no chunk carrying the SDK.
-- **Playwright's default headless build has no working audio capture here,** and the fake-device flags auto-grant permission, so the denied, no-device, and in-use states are unreachable from the suite as configured.
-
-**Verified**
-
-- `npm run lint` (0 errors, 3 pre-existing warnings), `npm run typecheck`, `npm run build`, `npm run test` (84 passing), `npx playwright test` (all specs).
-- 5 new E2E specs: a real code renders a live preview with frames arriving (`readyState >= 2`, non-zero `videoWidth`); unknown and malformed codes both 404 with no video element; exactly one live camera track, which is what catches an orphaned acquisition; no horizontal overflow at 360px.
-- 8 unit assertions over the classifier, covering both spellings of each DOMException, an unrecognised one, and non-object throws.
-- Bundle claim checked by serving the production build: Home requests no chunk containing SDK symbols; its only `livekit` match is the `NEXT_PUBLIC_LIVEKIT_URL` value. Home's first load measures ~341 kB gzipped against a 200 kB target — pre-existing, recorded as a follow-up for F22.
-- **Not verified:** the denied, no-device, and in-use states in a real browser. Recorded as a follow-up.
-
-### 2026-08-13 — 08 Lobby controls
-
-**Decisions**
-
-- **Off releases the device; it never mutes.** A preview reading OFF while the camera light stays lit is the thing that destroys trust in a lobby, so the toggle calls `track.stop()` and drops the reference. It also keeps the SDK's muted-track trap unreachable: `setDeviceId` sets `pendingDeviceChange` and returns early on a muted track, so a device picker would appear to do nothing until the track was unmuted. The cost — re-acquisition can be slow or fail — is already covered by F07's timeout and failure classification.
-- **Switching uses `track.setDeviceId()` while on, and only records the choice while off.** The SDK restarts capture in place rather than republishing, which is why the preview does not flicker and the page never reloads.
-- **Preferences are honoured before any device is touched.** Someone who left with the camera off must not have it opened again on the way back in, so the stored set is read first and a device nobody asked for is never acquired. Validated with Zod on read, because `localStorage` is user-editable like any other boundary.
-- **A stale device id is harmless by construction.** The stored id is passed as a bare `deviceId`, which is an *ideal* constraint rather than `{exact}`, so an unplugged webcam falls back to the system default instead of failing the request. `resolveDeviceId` exists only so the picker does not show a selection the browser is not honouring.
-- **No Join control, and no speaker picker.** Join belongs to F09 with the token that makes it work; the speaker picker belongs where remote audio exists, since in the lobby it would change nothing observable and silently do nothing on Firefox and iOS. Both are the same call made for F07: every control that ships does something when pressed.
-- **Two extractions rather than two copies.** The lobby is the third surface needing the overline and the second needing clipboard handling with its hang timeout, so `SectionOverline` moved to `ui/` and `useCopyToClipboard` came out of `share-panel.tsx`.
-
-**Gotchas**
-
-- **Reworking the hook reintroduced a track leak the F07 suite caught immediately.** F07 used a `cancelled` flag local to each effect run; the rework replaced it with a shared `mounted` ref. Under React's development double-mount the first run's cleanup sets that ref false and the second run sets it true again, so the first request sees "still mounted" when it resolves and holds its track alongside the second's — two live cameras, one owned by nothing. The lesson is that per-run state must not be hoisted to a ref shared across runs.
-- **`Room.getLocalDevices` raises a permission prompt by default.** Its second argument defaults to requesting permission, which would have produced a second prompt from an enumeration. Passing `false` explicitly is required, and was found by reading the signature rather than by the code failing.
-- **ESLint's `react-hooks/set-state-in-effect` rejected two shapes.** The copy button's mount-time `window.location.hash` read became a read at click time, which is better anyway — no state, and correct if the hash changes. The device enumeration needed its `setState` moved inside a nested async IIFE rather than a traced `useCallback`.
-- **A locator matched two elements** because the preview placeholder and the toggle both read "Camera off". Scoped to the paragraph, or the assertion would have passed on the button while the preview frame said nothing.
-- **One unexplained E2E failure, recorded rather than dismissed.** "Turning the camera back on re-acquires exactly one track" failed once under four-worker load and did not reproduce in ten subsequent runs; the artifact was overwritten by the passing runs, so what it asserted is unknown. Reviewing that path for a cause turned up a real defect regardless — `release()`, which stops a track, was being called *inside* a `setState` updater. React double-invokes updaters in development and they must be pure, so the stop was firing twice against whatever snapshot each invocation saw. Moved outside the updater. That is a plausible cause but an unproven one, and the flake should be treated as open until it either recurs with an artifact or stays gone.
-
-**Verified**
-
-- `npm run lint` (0 errors, 3 pre-existing warnings), `npm run typecheck`, `npm run build`, `npm run test` (95 passing), `npm run test:e2e` (20 passing).
-- 7 new E2E specs: camera off drops live tracks to **zero** rather than muting; on again returns to exactly one and never two; the picker lists a labelled device; switching keeps the same document instance; preferences survive a reload; the name caps at `MAX_DISPLAY_NAME_LENGTH`; every control clears 44px at 360px with no overflow.
-- 11 new unit assertions over `preferences.ts` — malformed JSON, wrong types, missing fields, storage that throws on read, storage that throws on write, and a device id that no longer exists.
-- **Not verified:** every microphone path, because audio capture hangs on this machine. The camera equivalents exercise the same acquisition code. Recorded as a follow-up.
-
-### 2026-08-13 — 09 Join handoff
-
-**Decisions**
-
-- **F09 connects for real rather than stopping at the token.** A JWT that decodes correctly but is refused by the SFU is exactly the bug a token-only feature hides, and it would have been the third feature running whose primary action did nothing when pressed. The connected state is deliberately minimal — status, headcount, Leave — and feature 10 replaces it with the grid without touching the token path.
-- **Leave ships now.** Connecting with no way out is a trap: the only escape would be closing the tab, which also strands the meeting's `room_finished` bookkeeping behind a timeout.
-- **Preview tracks are released before connecting, never after.** A live preview track holds the camera the room is about to ask for, and on some devices that blocks the room acquiring it at all. `stopPreview` also bumps both acquisition generations, so a request still in flight is stopped on arrival instead of being adopted into a lobby that has already handed off.
-- **The joinability decision and the TTL cap are pure modules.** `server-only` throws under Node — verified, not assumed — so anything importing it cannot be unit-tested at all, and `token.ts` additionally cannot be imported without the LiveKit secrets present. Splitting the two decisions out means every branch of "can this be joined" and "how long may this token live" is tested directly rather than through a live database.
-- **`ended` is reported before `expired`.** A meeting that finished and then sat past its expiry is both; "this meeting has ended" is what actually happened, and the reverse order would tell someone their link expired when the call simply finished without them.
-- **Failures split by what the person can do next.** Unknown, ended and expired offer a way to start a new meeting, because a retry cannot help; everything else offers a retry. The copy is written once, in the route, and the client branches on the code — so the two cannot drift into describing the same failure differently.
-
-**Gotchas**
-
-- **`<LiveKitRoom>`'s `options` object must be memoised.** It re-creates its `Room` whenever that object's identity changes, so building it inline — which is the natural way to carry the lobby's device ids — reconnects the call on every render. The symptom would look like a network fault, not a code one.
-- **`server-only` throws when imported under Node**, which is what forced the pure-module split above. Checked directly rather than discovered through a failing test.
-- **Two library-docs snippets read LiveKit secrets from `src/lib/env.ts`,** the public module that by design cannot hold them — following either would have shipped a signing key to every visitor or, more likely, thrown at import. The same section still showed the merged `env.server.ts` that feature 06 undid. Both corrected here; this is the drift the checkpoint reconciliation exists to catch, found early only because the feature happened to read that section.
-- **Next injects its own `role="alert"` route announcer,** so an unscoped `getByRole('alert')` matches two elements. The test was scoped to `main`; unscoped it would have been ambiguous rather than wrong, but the same locator elsewhere could pass against the announcer while the real notice said nothing.
-
-**Verified**
-
-- `npm run lint` (0 errors, 3 pre-existing warnings), `npm run typecheck`, `npm run build`, `npm run test` (104 passing), `npm run test:e2e` (31 passing).
-- The two security criteria directly: a well-formed code that was never created returns 404 with nothing token-shaped anywhere in the body, and a decoded grant names exactly one room with `roomAdmin`, `roomCreate` and `roomList` all absent. Token expiry asserted against the one-hour cap rather than the meeting's 24-hour window.
-- 9 new unit assertions over `meetingJoinability` and `tokenTtlSeconds`, including the exact-expiry boundary and the both-ended-and-expired case.
-- 11 new E2E: real connection to LiveKit Cloud, Leave returning Home, the preview released before connecting, ended-versus-transient failure handling, and Join disabled until a name is entered.
-- The audio-acquisition hang on this machine did **not** block connecting: the room connects and the connected state renders regardless.
+- **The lobby's hardest problem was not media, it was promises that never settle.** `getUserMedia` can hang rather than reject, and the first fix for it was wrong: a flat timeout fires on someone who merely took a while to press Allow, turning the most ordinary path in the product into a rendered failure. The shipped design picks its shape from permission state — granted means no prompt is coming, so each device is requested separately and timed; undecided means one combined untimed request. This is the same failure the clipboard hit in F06, in a different API. (F07)
+- **Three track leaks, each found by a test rather than by reading.** Per-run effect state hoisted into a shared ref, so React's double-mount made the first request adopt its track alongside the second's. A `track.stop()` placed inside a `setState` updater, which React double-invokes and which must be pure. And an acquisition abandoned mid-flight whose track arrived with nothing left to own it. All three now have named guards. (F07, F08)
+- **Off releases the device rather than muting it**, which also keeps the SDK's muted-track trap unreachable — `setDeviceId` defers silently on a muted track, so a picker would appear to do nothing. The headline test asserts *zero* live tracks, because a mute would still read as one. (F08)
+- **Scope was cut three times to the same rule: every control that ships does something when pressed.** Join was deferred out of F07 and F08 to F09, where the token that makes it work arrives; the speaker picker moved to where remote audio exists. A disabled primary action for two features reads as broken. (F07–F09)
+- **Two API defaults would have been silently wrong.** `Room.getLocalDevices` requests permission unless passed `false`, which would have raised a second prompt from an enumeration. `<LiveKitRoom>` re-creates its `Room` when its options object changes identity, so carrying the lobby's device ids inline would have reconnected the call every render. Both found by reading signatures and docs, not by failing. (F08, F09)
+- **`server-only` throws under Node, which shaped the module layout.** The joinability decision and the TTL cap are pure modules precisely so every branch is testable without a database or the LiveKit secrets; the route handler does the IO around them. (F09)
+- **The context docs drifted in two places that would have caused real bugs**, both found while reading a section for the feature that needed it rather than at this checkpoint: `library-docs.md` had LiveKit secrets being read from the public env module, and still showed the merged `env.server.ts` that F06 undid. (F09)
+- **One E2E flake remains open and unexplained.** It failed once under parallel load and has not reproduced in more than ten runs; the artifact was overwritten before it could be read. A real purity defect found in the same path was fixed and is a plausible but unproven cause. (F08)

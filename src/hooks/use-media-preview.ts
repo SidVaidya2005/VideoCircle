@@ -225,6 +225,13 @@ export function useMediaPreview(): MediaPreviewController {
       const granted = await permissionAlreadyGranted();
       setLabelsReady(granted);
 
+      // Seeded before any acquisition, and before the both-off early return
+      // below. Without this a lobby that opens with everything off never learns
+      // the remembered devices at all: the pickers would show "system default"
+      // and toggling on would ask for the wrong camera.
+      setCamera((state) => ({ ...state, deviceId: preferences.cameraId }));
+      setMicrophone((state) => ({ ...state, deviceId: preferences.microphoneId }));
+
       const wantCamera = preferences.cameraOn;
       const wantMic = preferences.microphoneOn;
 
@@ -253,7 +260,16 @@ export function useMediaPreview(): MediaPreviewController {
         // One combined request so the browser raises a single prompt covering
         // both devices, answered at the person's own pace. Untimed for the same
         // reason.
-        const combined = await acquire({ audio: true, video: true }, false);
+        // The remembered devices go into the combined request too. Passing bare
+        // `true` here would honour the stored choice on the already-granted path
+        // and silently drop it on this one.
+        const combined = await acquire(
+          {
+            audio: { deviceId: preferences.microphoneId },
+            video: { deviceId: preferences.cameraId },
+          },
+          false,
+        );
 
         if (!combined.failure) {
           cameraResult = { track: findVideo(combined.tracks), failure: null };
@@ -316,7 +332,10 @@ export function useMediaPreview(): MediaPreviewController {
         enabled: wantCamera,
         busy: false,
         failure: cameraResult.failure,
-        deviceId: cameraResult.track?.mediaStreamTrack.getSettings().deviceId,
+        // Falls back to the remembered id when nothing was acquired, so a
+        // transient failure does not also wipe the device choice for the session.
+        deviceId:
+          cameraResult.track?.mediaStreamTrack.getSettings().deviceId ?? preferences.cameraId,
       }));
       setMicrophone((state) => ({
         ...state,
@@ -324,7 +343,8 @@ export function useMediaPreview(): MediaPreviewController {
         enabled: wantMic,
         busy: false,
         failure: micResult.failure,
-        deviceId: micResult.track?.mediaStreamTrack.getSettings().deviceId,
+        deviceId:
+          micResult.track?.mediaStreamTrack.getSettings().deviceId ?? preferences.microphoneId,
       }));
     })();
 
