@@ -59,7 +59,9 @@ test('a participant who leaves stops holding a tile', async ({ page, browser, re
     await joinAs(guest, code, 'Grace Hopper');
     await expect(tiles(page)).toHaveCount(2, { timeout: 20_000 });
 
-    await guest.getByRole('button', { name: 'Leave' }).click();
+    // Two presses since F11: the first arms the control, the second disconnects.
+    await guest.getByRole('button', { name: 'Leave the meeting' }).click();
+    await guest.getByRole('button', { name: 'Confirm leaving the meeting' }).click();
 
     // Down to one tile, and back to the alone state — a tile left behind for
     // someone who has gone is indistinguishable from a frozen call.
@@ -96,6 +98,10 @@ test('a dropped connection reconnects without tearing down the call', async ({
   context,
   request,
 }) => {
+  // Two offline transitions against a real SFU; the default budget is not enough
+  // once the suite is running these in parallel.
+  test.setTimeout(90_000);
+
   const code = await createMeeting(request);
   await joinAs(page, code, 'Ada Lovelace');
   await expect(page.getByText('Connected')).toBeVisible();

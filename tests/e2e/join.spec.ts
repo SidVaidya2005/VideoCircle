@@ -42,9 +42,13 @@ test('Leave returns to Home', async ({ page, request }) => {
   await page.getByLabel('Your name').fill('Leaver');
   await page.getByRole('button', { name: 'Join now' }).click();
 
-  const leave = page.getByRole('button', { name: 'Leave' });
+  const leave = page.getByRole('button', { name: 'Leave the meeting' });
   await expect(leave).toBeVisible({ timeout: 20_000 });
+
+  // Two presses since F11: the first arms the control, the second disconnects.
+  // A misfired tap on a phone must not end the call.
   await leave.click();
+  await page.getByRole('button', { name: 'Confirm leaving the meeting' }).click();
 
   await page.waitForURL('/');
   await expect(page.getByRole('heading', { name: 'VideoCircle' })).toBeVisible();

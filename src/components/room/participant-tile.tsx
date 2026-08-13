@@ -39,11 +39,18 @@ function ParticipantTileImpl({ trackRef }: ParticipantTileProps) {
   const name = participant.name?.trim() || (isLocal ? LOCAL_LABEL : UNNAMED);
   const label = isLocal ? LOCAL_LABEL : name;
 
+  // Read through the hook, never off `trackRef.publication.isMuted` directly.
+  // LiveKit mutates the publication in place, so a component memoised on that
+  // field compares the new value against itself and never sees the change — the
+  // camera goes off and the tile keeps rendering a dead <video>. The hook holds
+  // its own state and re-renders regardless of what the memo decides.
+  const cameraMuted = useIsMuted(trackRef);
+
   // Muted is the only camera-off signal worth gating on. Waiting for
   // `isSubscribed` would deadlock adaptiveStream: it decides what to subscribe to
   // from the visibility of attached <video> elements, so a tile that renders no
   // element until it is subscribed is never subscribed and never renders one.
-  const showsVideo = isTrackReference(trackRef) && !trackRef.publication.isMuted;
+  const showsVideo = isTrackReference(trackRef) && !cameraMuted;
 
   return (
     <li
@@ -109,12 +116,17 @@ function ParticipantTileImpl({ trackRef }: ParticipantTileProps) {
  * speaking, a quality change — and a tile that re-rendered on each of those would
  * do so twelve times over. Mute and speaking state arrive through this tile's own
  * hooks, so they still update while the props stay equal.
+ *
+ * The comparator reads only immutable facts. `isMuted` was compared here once and
+ * could never differ: LiveKit mutates the publication object in place, so both
+ * sides of the comparison resolve to the same live value. `trackSid` is safe
+ * because it changes only when the publication itself is replaced or removed,
+ * which is exactly the transition the memo must not swallow.
  */
 export const ParticipantTile = memo(
   ParticipantTileImpl,
   (previous, next) =>
     previous.trackRef.participant.identity === next.trackRef.participant.identity &&
     previous.trackRef.participant.name === next.trackRef.participant.name &&
-    previous.trackRef.publication?.trackSid === next.trackRef.publication?.trackSid &&
-    previous.trackRef.publication?.isMuted === next.trackRef.publication?.isMuted,
+    previous.trackRef.publication?.trackSid === next.trackRef.publication?.trackSid,
 );

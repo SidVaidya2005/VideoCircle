@@ -3,9 +3,9 @@
 import { useConnectionState, useRoomContext } from '@livekit/components-react';
 import { ConnectionState } from 'livekit-client';
 
+import { ControlBar } from '@/components/room/control-bar';
 import { ParticipantCount } from '@/components/room/participant-count';
 import { VideoGrid } from '@/components/room/video-grid';
-import { Button } from '@/components/ui/button';
 
 /**
  * What the status strip reads in each connection state.
@@ -58,17 +58,9 @@ export function CallStage() {
 
       <VideoGrid />
 
-      {/* Feature 11 replaces this with the control bar. Something has to lead out
-          of the call before then: closing the tab instead strands the meeting's
-          room_finished bookkeeping behind a timeout, and a surface a person cannot
-          leave is worse than one that looks unfinished.
-
-          Never disabled while reconnecting — that is exactly when it is reached for. */}
-      <div className="flex flex-none justify-center">
-        <Button type="button" variant="destructive" onClick={() => room.disconnect()}>
-          Leave
-        </Button>
-      </div>
+      {/* Nothing here is disabled while reconnecting — that is exactly when the
+          controls are reached for. */}
+      <ControlBar onLeave={() => void room.disconnect()} />
     </div>
   );
 }
