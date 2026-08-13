@@ -8,61 +8,56 @@ import {
   type LocalTrack,
   type LocalVideoTrack,
 } from 'livekit-client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useMediaDevices, type MediaDeviceLists } from '@/hooks/use-media-devices';
 import { classifyMediaError, type MediaFailure } from '@/lib/media/classify-media-error';
+import { DEFAULT_PREFERENCES, readPreferences, writePreferences } from '@/lib/media/preferences';
 
 /**
- * The lobby's view of the local devices.
+ * One device's worth of lobby state.
  *
- * `ready` covers partial success as well as full: a participant with a working
- * microphone and a dead webcam is ready, with `cameraFailure` set. The five
- * terminal statuses mean *both* devices failed.
+ * `enabled` is what the person asked for; `track` is what they got. The two
+ * disagree whenever a device is switched on and fails, and the UI needs both to
+ * show a toggle in its on position above an explanation of why nothing appeared.
  */
-export type MediaPreviewState =
-  // No `idle`: the hook asks for the devices on mount, so there is no moment at
-  // which a mounted lobby is not yet requesting them. A state nothing can produce
-  // is a branch every reader has to rule out by hand.
-  | { status: 'requesting' }
-  | {
-      status: 'ready';
-      video: LocalVideoTrack | null;
-      audio: LocalAudioTrack | null;
-      cameraFailure: MediaFailure | null;
-      micFailure: MediaFailure | null;
-    }
-  | { status: 'denied' }
-  | { status: 'no-device' }
-  | { status: 'in-use' }
-  | { status: 'timeout' }
-  | { status: 'error' };
+export interface TrackState<T extends LocalTrack> {
+  track: T | null;
+  enabled: boolean;
+  /** An acquire or a switch is in flight. Controls disable rather than queue. */
+  busy: boolean;
+  failure: MediaFailure | null;
+  deviceId: string | undefined;
+}
 
-interface Acquisition {
-  state: MediaPreviewState;
-  /** Only the tracks opened by this step — the caller accumulates them. */
-  tracks: LocalTrack[];
+export interface MediaPreviewController {
+  camera: TrackState<LocalVideoTrack>;
+  microphone: TrackState<LocalAudioTrack>;
+  /** Set only when the first acquisition failed for both devices at once. */
+  blockingFailure: MediaFailure | null;
+  devices: MediaDeviceLists;
+  setCameraEnabled: (enabled: boolean) => void;
+  setMicrophoneEnabled: (enabled: boolean) => void;
+  selectCamera: (deviceId: string) => void;
+  selectMicrophone: (deviceId: string) => void;
 }
 
 /**
  * How long to wait for a device that cannot be waiting on a person.
  *
- * `getUserMedia` is not guaranteed to settle: it can hang indefinitely rather
- * than reject. Reproduced on the development machine, where an audio request
- * never returned while the camera on the same machine opened normally. A promise
- * that never settles leaves the lobby on "waiting" forever, which is the one
- * outcome a failure path must never produce.
+ * `getUserMedia` is not guaranteed to settle — reproduced on the development
+ * machine, where an audio request never returns while the camera opens normally.
+ * A promise that never settles leaves the lobby waiting forever.
  *
- * This timer is only ever started once permission is known to be granted — see
- * `permissionAlreadyGranted`. While a permission prompt may still be open the
- * request is waiting on a human, and no timeout applies: someone who takes
- * fifteen seconds to find the Allow button has not experienced a failure.
+ * Only ever started once permission is known granted. While a prompt may still
+ * be open the request is waiting on a human, and someone who takes fifteen
+ * seconds to find Allow has not experienced a failure.
  */
 const ACQUIRE_TIMEOUT_MS = 8_000;
 
 /**
  * TypeScript's `PermissionName` omits `camera` and `microphone`, although both
- * are in the Permissions API registry and queryable in Chromium. Narrow local
- * type, declared once, rather than a cast at each call site.
+ * are in the Permissions API registry and queryable in Chromium.
  */
 type MediaPermissionName = 'camera' | 'microphone';
 
@@ -124,7 +119,7 @@ async function withTimeout(options: CreateLocalTracksOptions): Promise<LocalTrac
   }
 }
 
-async function acquireOne(
+async function acquire(
   options: CreateLocalTracksOptions,
   timed: boolean,
 ): Promise<{ tracks: LocalTrack[]; failure: MediaFailure | null }> {
@@ -143,134 +138,330 @@ async function acquireOne(
 }
 
 /**
- * Asks for the devices, and works out what actually failed if something did.
+ * Owns the lobby's local tracks: acquiring them, switching them, releasing them.
  *
- * Two paths, because the right shape depends on whether a permission prompt is
- * still possible:
- *
- * - **Permission already granted** — ask for each device separately and in
- *   parallel. No prompt can appear, so there is no double-prompt to avoid, each
- *   request can carry a timeout, and a microphone that hangs costs nothing: the
- *   camera still arrives on time.
- * - **Permission not yet decided** — one combined request, untimed, so the
- *   browser raises a single prompt covering both devices and the person answers
- *   at their own pace. Only if that fails for a reason other than refusal is it
- *   worth asking per device, and by then permission is settled, so those retries
- *   are timed.
- *
- * `publish` is called as results land rather than once at the end, so a working
- * camera appears immediately instead of waiting behind a hanging microphone. It
- * receives only newly opened tracks; the caller accumulates them for cleanup.
+ * **Off means stopped, never muted.** A preview that reads OFF while the camera
+ * light stays lit is the one thing that breaks trust in a lobby. It also keeps
+ * the SDK's muted-track trap out of reach: `setDeviceId` sets `pendingDeviceChange`
+ * and returns early on a muted track, so a picker would appear to do nothing
+ * until the track was unmuted.
  */
-async function acquirePreview(publish: (acquisition: Acquisition) => void): Promise<void> {
-  const granted = await permissionAlreadyGranted();
-
-  if (!granted) {
-    const combined = await acquireOne({ audio: true, video: true }, false);
-
-    if (!combined.failure) {
-      publish({
-        tracks: combined.tracks,
-        state: {
-          status: 'ready',
-          video: findVideo(combined.tracks),
-          audio: findAudio(combined.tracks),
-          cameraFailure: null,
-          micFailure: null,
-        },
-      });
-      return;
-    }
-
-    // A refusal already covers both devices, and asking again only re-prompts
-    // someone who has just said no.
-    if (combined.failure === 'denied') {
-      publish({ tracks: [], state: { status: 'denied' } });
-      return;
-    }
-  }
-
-  // Per-device, either because permission was already settled or because the
-  // combined request failed for a reason worth pinning down. The combined form is
-  // all-or-nothing in a way that hides the truth: one dead camera sinks it and
-  // takes a perfectly good microphone down too.
-  const cameraRequest = acquireOne({ video: true }, true);
-  const micRequest = acquireOne({ audio: true }, true);
-
-  const camera = await cameraRequest;
-  if (camera.tracks.length > 0) {
-    // Published before the microphone settles — that is the whole point of not
-    // awaiting both together.
-    publish({
-      tracks: camera.tracks,
-      state: {
-        status: 'ready',
-        video: findVideo(camera.tracks),
-        audio: null,
-        cameraFailure: null,
-        micFailure: null,
-      },
-    });
-  }
-
-  const mic = await micRequest;
-
-  if (camera.tracks.length === 0 && mic.tracks.length === 0) {
-    // Both failed. The camera's reason leads, since the preview is the visible
-    // half of this screen.
-    publish({ tracks: [], state: { status: camera.failure ?? mic.failure ?? 'error' } });
-    return;
-  }
-
-  publish({
-    tracks: mic.tracks,
-    state: {
-      status: 'ready',
-      video: findVideo(camera.tracks),
-      audio: findAudio(mic.tracks),
-      cameraFailure: camera.failure,
-      micFailure: mic.failure,
-    },
+export function useMediaPreview(): MediaPreviewController {
+  const [camera, setCamera] = useState<TrackState<LocalVideoTrack>>({
+    track: null,
+    enabled: DEFAULT_PREFERENCES.cameraOn,
+    busy: true,
+    failure: null,
+    deviceId: undefined,
   });
-}
+  const [microphone, setMicrophone] = useState<TrackState<LocalAudioTrack>>({
+    track: null,
+    enabled: DEFAULT_PREFERENCES.microphoneOn,
+    busy: true,
+    failure: null,
+    deviceId: undefined,
+  });
+  const [blockingFailure, setBlockingFailure] = useState<MediaFailure | null>(null);
+  const [labelsReady, setLabelsReady] = useState(false);
 
-/**
- * Acquires the lobby's preview tracks, and releases them on unmount.
- *
- * The tracks are owned here for the whole life of the lobby. Nothing else may
- * stop them, and nothing may hand them to a room in this feature — there is no
- * room yet.
- */
-export function useMediaPreview(): MediaPreviewState {
-  const [state, setState] = useState<MediaPreviewState>({ status: 'requesting' });
+  const devices = useMediaDevices(labelsReady);
+
+  // Every track this hook has opened, so unmount can release them without
+  // depending on a state snapshot the cleanup closure may not have.
+  const openTracks = useRef(new Set<LocalTrack>());
+  // Bumped per kind on every request. A result whose generation is stale belongs
+  // to a request the user has already overridden by toggling again.
+  const generation = useRef({ camera: 0, microphone: 0 });
+  const mounted = useRef(true);
+
+  const hold = useCallback((track: LocalTrack | null) => {
+    if (track) openTracks.current.add(track);
+  }, []);
+
+  const release = useCallback((track: LocalTrack | null) => {
+    if (!track) return;
+    track.stop();
+    openTracks.current.delete(track);
+  }, []);
+
+  // Preferences are written from one place, so the stored set can never be a
+  // half-updated mix of two changes.
+  const persist = useCallback(
+    (next: Partial<ReturnType<typeof readPreferences>>) => {
+      writePreferences({
+        cameraOn: camera.enabled,
+        microphoneOn: microphone.enabled,
+        cameraId: camera.deviceId,
+        microphoneId: microphone.deviceId,
+        ...next,
+      });
+    },
+    [camera.enabled, camera.deviceId, microphone.enabled, microphone.deviceId],
+  );
 
   useEffect(() => {
+    // Local to this run of the effect, deliberately, and NOT the shared `mounted`
+    // ref. React double-invokes effects in development: the first run's cleanup
+    // sets a shared flag false, then the second run sets it true again, so the
+    // first request sees "still mounted" when it resolves and holds its track
+    // alongside the second's. That leaks a live camera — two tracks, one of them
+    // owned by nothing.
     let cancelled = false;
-    const acquired: LocalTrack[] = [];
+    mounted.current = true;
+    const tracks = openTracks.current;
 
     void (async () => {
-      await acquirePreview(({ state: next, tracks }) => {
-        acquired.push(...tracks);
+      // Read here rather than in a useState initializer: this runs on the server
+      // too, where localStorage does not exist, and a differing initial value
+      // would be a hydration mismatch.
+      const preferences = readPreferences();
+      const granted = await permissionAlreadyGranted();
+      setLabelsReady(granted);
 
-        if (cancelled) {
-          // React double-invokes effects in development, and the first run's
-          // teardown fires while its request is still in flight — so by the time
-          // these tracks exist, the cleanup that would have stopped them has
-          // already run. Stopping them here is what keeps the camera light from
-          // staying on after the lobby is gone.
-          for (const track of tracks) track.stop();
+      const wantCamera = preferences.cameraOn;
+      const wantMic = preferences.microphoneOn;
+
+      const applyOff = () => {
+        setCamera((state) => ({ ...state, enabled: false, busy: false }));
+        setMicrophone((state) => ({ ...state, enabled: false, busy: false }));
+      };
+
+      if (!wantCamera && !wantMic) {
+        // Someone who left with everything off gets it back that way, and no
+        // device is touched at all — which is the point of turning them off.
+        applyOff();
+        return;
+      }
+
+      let cameraResult: { track: LocalVideoTrack | null; failure: MediaFailure | null } = {
+        track: null,
+        failure: null,
+      };
+      let micResult: { track: LocalAudioTrack | null; failure: MediaFailure | null } = {
+        track: null,
+        failure: null,
+      };
+
+      if (!granted && wantCamera && wantMic) {
+        // One combined request so the browser raises a single prompt covering
+        // both devices, answered at the person's own pace. Untimed for the same
+        // reason.
+        const combined = await acquire({ audio: true, video: true }, false);
+
+        if (!combined.failure) {
+          cameraResult = { track: findVideo(combined.tracks), failure: null };
+          micResult = { track: findAudio(combined.tracks), failure: null };
+        } else if (combined.failure === 'denied') {
+          // A refusal covers both devices, and asking again only re-prompts.
+          if (!cancelled) {
+            setBlockingFailure('denied');
+            setCamera((state) => ({ ...state, enabled: false, busy: false, failure: 'denied' }));
+            setMicrophone((state) => ({
+              ...state,
+              enabled: false,
+              busy: false,
+              failure: 'denied',
+            }));
+          }
           return;
         }
+      }
 
-        setState(next);
-      });
+      // Per device: either permission was already settled, only one device was
+      // wanted, or the combined request failed for a reason worth pinning down.
+      // The combined form is all-or-nothing in a way that hides the truth — one
+      // dead camera sinks it and takes a working microphone down too.
+      // The stored id goes through as a bare `deviceId`, an ideal constraint: a
+      // device that has since been unplugged falls back to the default rather
+      // than failing the request.
+      if (!cameraResult.track && wantCamera) {
+        const result = await acquire({ video: { deviceId: preferences.cameraId } }, granted);
+        cameraResult = { track: findVideo(result.tracks), failure: result.failure };
+      }
+      if (!micResult.track && wantMic) {
+        const result = await acquire({ audio: { deviceId: preferences.microphoneId } }, granted);
+        micResult = { track: findAudio(result.tracks), failure: result.failure };
+      }
+
+      if (cancelled) {
+        // Resolved after this effect run was torn down, so nothing downstream
+        // will ever hold these.
+        release(cameraResult.track);
+        release(micResult.track);
+        return;
+      }
+
+      hold(cameraResult.track);
+      hold(micResult.track);
+      setLabelsReady(granted || Boolean(cameraResult.track) || Boolean(micResult.track));
+
+      // Blocking only when everything asked for failed. One working device means
+      // a usable lobby with an inline note about the other.
+      const everythingFailed =
+        !cameraResult.track && !micResult.track && (cameraResult.failure ?? micResult.failure);
+      if (everythingFailed) {
+        setBlockingFailure(cameraResult.failure ?? micResult.failure);
+      }
+
+      setCamera((state) => ({
+        ...state,
+        track: cameraResult.track,
+        enabled: wantCamera,
+        busy: false,
+        failure: cameraResult.failure,
+        deviceId: cameraResult.track?.mediaStreamTrack.getSettings().deviceId,
+      }));
+      setMicrophone((state) => ({
+        ...state,
+        track: micResult.track,
+        enabled: wantMic,
+        busy: false,
+        failure: micResult.failure,
+        deviceId: micResult.track?.mediaStreamTrack.getSettings().deviceId,
+      }));
     })();
 
     return () => {
       cancelled = true;
-      for (const track of acquired) track.stop();
+      mounted.current = false;
+      for (const track of tracks) track.stop();
+      tracks.clear();
     };
-  }, []);
+  }, [hold, release]);
 
-  return state;
+  const setCameraEnabled = useCallback(
+    (enabled: boolean) => {
+      const mine = (generation.current.camera += 1);
+      persist({ cameraOn: enabled });
+
+      if (!enabled) {
+        // Stopping the track happens here, never inside the updater below. React
+        // double-invokes updaters in development, and an updater that stops a
+        // device is not pure — it would fire the side effect twice, against
+        // whatever snapshot each invocation happened to see.
+        release(camera.track);
+        setCamera((state) => ({
+          ...state,
+          enabled: false,
+          busy: false,
+          track: null,
+          failure: null,
+        }));
+        return;
+      }
+
+      setCamera((state) => ({ ...state, enabled: true, busy: true }));
+
+      void (async () => {
+        const granted = await permissionAlreadyGranted();
+        const result = await acquire({ video: { deviceId: camera.deviceId } }, granted);
+        const track = findVideo(result.tracks);
+
+        if (!mounted.current || generation.current.camera !== mine) {
+          // Toggled again while this was in flight. Whoever won owns the state;
+          // this track has no reader, so it has to be stopped here.
+          release(track);
+          return;
+        }
+
+        hold(track);
+        setLabelsReady(true);
+        setCamera((state) => ({ ...state, track, busy: false, failure: result.failure }));
+      })();
+    },
+    [camera.track, camera.deviceId, hold, release, persist],
+  );
+
+  const setMicrophoneEnabled = useCallback(
+    (enabled: boolean) => {
+      const mine = (generation.current.microphone += 1);
+      persist({ microphoneOn: enabled });
+
+      if (!enabled) {
+        // Outside the updater, for the same reason as the camera above.
+        release(microphone.track);
+        setMicrophone((state) => ({
+          ...state,
+          enabled: false,
+          busy: false,
+          track: null,
+          failure: null,
+        }));
+        return;
+      }
+
+      setMicrophone((state) => ({ ...state, enabled: true, busy: true }));
+
+      void (async () => {
+        const granted = await permissionAlreadyGranted();
+        const result = await acquire({ audio: { deviceId: microphone.deviceId } }, granted);
+        const track = findAudio(result.tracks);
+
+        if (!mounted.current || generation.current.microphone !== mine) {
+          release(track);
+          return;
+        }
+
+        hold(track);
+        setLabelsReady(true);
+        setMicrophone((state) => ({ ...state, track, busy: false, failure: result.failure }));
+      })();
+    },
+    [microphone.track, microphone.deviceId, hold, release, persist],
+  );
+
+  const selectCamera = useCallback(
+    (deviceId: string) => {
+      persist({ cameraId: deviceId });
+      setCamera((state) => ({ ...state, deviceId, busy: Boolean(state.track) }));
+
+      const track = camera.track;
+      // Off means no track to restart, so the choice is simply remembered and
+      // applied by the next acquire.
+      if (!track) return;
+
+      void (async () => {
+        try {
+          // Restarts capture in place rather than republishing — the SDK's own
+          // path for this, and the reason the preview does not flicker.
+          await track.setDeviceId(deviceId);
+        } catch (error) {
+          console.warn('[use-media-preview] could not switch camera', error);
+        }
+        if (mounted.current) setCamera((state) => ({ ...state, busy: false }));
+      })();
+    },
+    [camera.track, persist],
+  );
+
+  const selectMicrophone = useCallback(
+    (deviceId: string) => {
+      persist({ microphoneId: deviceId });
+      setMicrophone((state) => ({ ...state, deviceId, busy: Boolean(state.track) }));
+
+      const track = microphone.track;
+      if (!track) return;
+
+      void (async () => {
+        try {
+          await track.setDeviceId(deviceId);
+        } catch (error) {
+          console.warn('[use-media-preview] could not switch microphone', error);
+        }
+        if (mounted.current) setMicrophone((state) => ({ ...state, busy: false }));
+      })();
+    },
+    [microphone.track, persist],
+  );
+
+  return {
+    camera,
+    microphone,
+    blockingFailure,
+    devices,
+    setCameraEnabled,
+    setMicrophoneEnabled,
+    selectCamera,
+    selectMicrophone,
+  };
 }

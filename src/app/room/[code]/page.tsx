@@ -3,6 +3,41 @@ import { notFound } from 'next/navigation';
 import { RoomExperience } from '@/components/room/room-experience';
 import { findMeetingByCode } from '@/lib/meetings';
 import { isValidRoomCode } from '@/lib/room-code';
+import { createClient } from '@/lib/supabase/server';
+
+/**
+ * The signed-in user's name, for prefilling the lobby's display-name field.
+ *
+ * Read here rather than in the browser so the field is already correct on first
+ * paint — a client fetch would show an empty box and then fill it in, under
+ * someone who may have started typing. Comes from `profiles`, never
+ * `user_metadata`, which is user-editable and free to drift from what call
+ * history shows. Guests get null, which is not an error.
+ */
+async function resolveProfileName(): Promise<string | null> {
+  const supabase = await createClient();
+
+  // getUser(), never getSession(): getUser revalidates against the auth server.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('display_name')
+    .eq('id', user.id) // Explicit scope. RLS enforces the same rule independently.
+    .maybeSingle();
+
+  if (error) {
+    console.error('[room] profile lookup failed', error);
+  }
+
+  // A signed-in user with no profile row still gets a usable lobby; they simply
+  // type a name like a guest.
+  return data?.display_name ?? null;
+}
 
 interface RoomPageProps {
   params: Promise<{ code: string }>;
@@ -34,5 +69,5 @@ export default async function RoomPage({ params }: RoomPageProps) {
     notFound();
   }
 
-  return <RoomExperience code={code} />;
+  return <RoomExperience code={code} profileName={await resolveProfileName()} />;
 }
