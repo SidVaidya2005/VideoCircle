@@ -18,6 +18,8 @@ import { useCallback, useState } from 'react';
 
 import { ControlButton, controlVariants } from '@/components/room/control-button';
 import { LeaveControl } from '@/components/room/leave-control';
+import { ReactionMenu } from '@/components/room/reaction-menu';
+import { useReactions } from '@/components/room/reactions-provider';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +29,7 @@ import {
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useCallShortcuts } from '@/hooks/use-call-shortcuts';
 import { useIsScreenShareSupported } from '@/hooks/use-is-screen-share-supported';
+import { REACTION_LABELS } from '@/lib/reactions';
 import { cn } from '@/lib/utils';
 
 export type CallPanelName = 'participants';
@@ -66,7 +69,6 @@ interface SecondaryControl {
  */
 const PENDING_CONTROLS: readonly SecondaryControl[] = [
   { key: 'chat', label: 'Open chat', icon: MessageSquare },
-  { key: 'reactions', label: 'Raise hand', icon: Hand },
 ];
 
 export function ControlBar({
@@ -80,6 +82,7 @@ export function ControlBar({
   // Capability, not width: absent on every phone, present inside MORE on a narrow
   // desktop window. Absence keeps one meaning — your device cannot do this.
   const screenShareSupported = useIsScreenShareSupported();
+  const { send, handRaised: raised, toggleHand } = useReactions();
   // The bar owns this, not the Leave control: pressing anything else has to
   // disarm it, and only the bar knows that happened.
   const [leaveArmed, setLeaveArmed] = useState(false);
@@ -210,11 +213,40 @@ export function ControlBar({
                 )}
               </DropdownMenuItem>
             ))}
+
+            {/* Below sm: the reactions popover would be a popover inside a menu.
+                The same actions become flat menu items instead — one list, no
+                nesting, and every one of them a 44px row. */}
+            <DropdownMenuItem
+              onSelect={() => {
+                disarmLeave();
+                toggleHand();
+              }}
+            >
+              <Hand aria-hidden="true" className="size-4" />
+              {raised ? 'Lower hand' : 'Raise hand'}
+            </DropdownMenuItem>
+
+            {REACTION_LABELS.map((label) => (
+              <DropdownMenuItem
+                key={label}
+                onSelect={() => {
+                  disarmLeave();
+                  send(label);
+                }}
+              >
+                <span className="tracking-wider uppercase">{label}</span>
+              </DropdownMenuItem>
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
 
         {/* The specimen's gap before Leave: it is the one control you must never
             hit by accident when reaching for the one beside it. */}
+        {/* Its own control rather than a row entry: a popover trigger is not a
+            ControlButton, and the bar is full at seven either way. */}
+        <ReactionMenu onInteract={disarmLeave} className="hidden sm:inline-flex" />
+
         <span aria-hidden="true" className="w-3 flex-none" />
 
         <LeaveControl

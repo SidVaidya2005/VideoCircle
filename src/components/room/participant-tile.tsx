@@ -10,6 +10,7 @@ import {
 import { Track } from 'livekit-client';
 import { memo, useRef } from 'react';
 
+import { useHandRaised, useParticipantReaction } from '@/components/room/reactions-provider';
 import { TileMenu } from '@/components/room/tile-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { toInitials } from '@/lib/initials';
@@ -52,6 +53,12 @@ function ParticipantTileImpl({
   // Suppressed on a share: the ring and the mute dot say something about the
   // person, and the person already has a camera tile of their own to say it on.
   const isSpeaking = useIsSpeaking(participant) && !isScreenShare;
+
+  // Both read this participant only, never the room — the same rule the mute and
+  // speaking state follow. A share tile carries neither: they describe the person,
+  // and the person has a camera tile of their own to carry them.
+  const reaction = useParticipantReaction(participant.identity);
+  const handRaised = useHandRaised(participant) && !isScreenShare;
 
   const name = participant.name?.trim() || (isLocal ? LOCAL_LABEL : UNNAMED);
   const personLabel = isLocal ? LOCAL_LABEL : name;
@@ -163,6 +170,28 @@ function ParticipantTileImpl({
         <span className="text-ink truncate">{label}</span>
         {pinned ? <span className="text-muted flex-none">· pinned</span> : null}
       </p>
+
+      {handRaised ? (
+        // Neutral, not red. A tile's red dot already means "your own mic is
+        // muted"; a second red mark meaning something else on the same tile is
+        // what the red invariant exists to prevent. A raised hand is neither
+        // destructive nor a warning.
+        <p className="bg-active text-canvas absolute top-2 left-2 rounded-xs px-1.5 py-0.5 text-xs tracking-wider uppercase">
+          hand up
+        </p>
+      ) : null}
+
+      {reaction ? (
+        // Keyed by firing, so two of the same label in a row replay rather than
+        // sitting still. CSS only: this is inside <LiveKitRoom>, where JS
+        // animation competes with video encoding for the main thread.
+        <p
+          key={reaction.id}
+          className="animate-reaction text-ink pointer-events-none absolute inset-x-0 bottom-10 text-center text-xl font-bold tracking-wider uppercase"
+        >
+          {reaction.label}
+        </p>
+      ) : null}
 
       {onTogglePin ? (
         <TileMenu participantLabel={label} pinned={pinned} onTogglePin={onTogglePin} />

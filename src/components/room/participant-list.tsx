@@ -3,6 +3,7 @@
 import { useIsMuted, useParticipants } from '@livekit/components-react';
 import { Track, type Participant } from 'livekit-client';
 
+import { useHandRaised } from '@/components/room/reactions-provider';
 import { toInitials } from '@/lib/initials';
 import { sortParticipants } from '@/lib/participants';
 import { cn } from '@/lib/utils';
@@ -26,6 +27,8 @@ function ParticipantRow({ participant }: ParticipantRowProps) {
   const micMuted =
     useIsMuted({ participant, source: Track.Source.Microphone, publication: micPublication }) ||
     micPublication === undefined;
+
+  const handRaised = useHandRaised(participant);
 
   const cameraPublication = participant.getTrackPublication(Track.Source.Camera);
   const cameraOff =
@@ -55,6 +58,7 @@ function ParticipantRow({ participant }: ParticipantRowProps) {
         <span className="text-muted flex items-center gap-2 text-xs tracking-wider uppercase">
           <span className={cn(micMuted && 'text-faint')}>{micMuted ? 'mic off' : 'mic on'}</span>
           <span className={cn(cameraOff && 'text-faint')}>{cameraOff ? 'cam off' : 'cam on'}</span>
+          {handRaised ? <span className="text-ink">hand up</span> : null}
         </span>
       </span>
     </li>

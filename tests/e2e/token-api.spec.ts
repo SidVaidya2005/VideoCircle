@@ -11,6 +11,7 @@ interface VideoGrant {
   canPublish?: boolean;
   canSubscribe?: boolean;
   canPublishData?: boolean;
+  canUpdateOwnMetadata?: boolean;
 }
 
 /** Reads a JWT's claims without verifying it — enough to inspect what we granted. */
@@ -56,6 +57,11 @@ test('the grant names exactly one room and carries no admin claims', async ({ re
   expect(claims.video?.room).toBe(code);
   expect(claims.video?.roomJoin).toBe(true);
   expect(claims.video?.canPublishData).toBe(true);
+
+  // Raise-hand is a participant attribute, which needs this claim. It lets a
+  // client describe *itself* and grants no authority over the room or over
+  // anyone else in it — pinned here so the widening stays deliberate.
+  expect(claims.video?.canUpdateOwnMetadata).toBe(true);
 
   // The three that would turn a join token into a skeleton key.
   expect(claims.video?.roomAdmin).toBeFalsy();

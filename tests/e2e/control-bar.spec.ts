@@ -130,12 +130,11 @@ test('controls whose panels do not exist yet say they are unavailable', async ({
   const code = await createMeeting(request);
   await joinAs(page, code, 'Ada Lovelace');
 
-  // Participants stopped being a stub at F14 and screen share at F12; chat lands
-  // at F19 and raise hand at F15. Each one removes a flag and adds a handler.
-  for (const name of ['Open chat', 'Raise hand']) {
-    await expect(page.getByRole('button', { name, disabled: true })).toBeVisible();
-  }
+  // Chat is the last stub, and F19 claims it. Screen share stopped being one at
+  // F12, participants at F14, reactions and raise hand at F15.
+  await expect(page.getByRole('button', { name: 'Open chat', disabled: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /^show participants/i })).toBeEnabled();
+  await expect(page.getByRole('button', { name: /^Reactions/ })).toBeEnabled();
 
   // Screen share is the one secondary control that acts, since F12. Absence still
   // means exactly one thing — your device cannot do this — which screen-share.spec

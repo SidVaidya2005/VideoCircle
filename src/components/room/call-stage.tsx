@@ -7,6 +7,7 @@ import { CallPanel } from '@/components/room/call-panel';
 import { CallStatus } from '@/components/room/call-status';
 import { ControlBar, type CallPanelName } from '@/components/room/control-bar';
 import { ParticipantList } from '@/components/room/participant-list';
+import { ReactionsProvider } from '@/components/room/reactions-provider';
 import { VideoGrid } from '@/components/room/video-grid';
 
 /**
@@ -31,33 +32,35 @@ export function CallStage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 pb-3">
-      <div className="flex flex-none items-center justify-between gap-4">
-        <CallStatus />
-      </div>
+    <ReactionsProvider>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 pb-3">
+        <div className="flex flex-none items-center justify-between gap-4">
+          <CallStatus />
+        </div>
 
-      <div className="flex min-h-0 flex-1 gap-3">
-        {/* The panel takes the right column and the filmstrip falls back to
+        <div className="flex min-h-0 flex-1 gap-3">
+          {/* The panel takes the right column and the filmstrip falls back to
             horizontal, so only one column of chrome occupies that edge. */}
-        <VideoGrid sidePanelOpen={openPanel !== null} />
+          <VideoGrid sidePanelOpen={openPanel !== null} />
 
-        <CallPanel
-          title="Participants"
-          open={openPanel === 'participants'}
-          onClose={() => setOpenPanel(null)}
-        >
-          <ParticipantList />
-        </CallPanel>
-      </div>
+          <CallPanel
+            title="Participants"
+            open={openPanel === 'participants'}
+            onClose={() => setOpenPanel(null)}
+          >
+            <ParticipantList />
+          </CallPanel>
+        </div>
 
-      {/* Nothing here is disabled while reconnecting — that is exactly when the
+        {/* Nothing here is disabled while reconnecting — that is exactly when the
           controls are reached for. */}
-      <ControlBar
-        onLeave={() => void room.disconnect()}
-        openPanel={openPanel}
-        onTogglePanel={togglePanel}
-        participantCount={participants.length}
-      />
-    </div>
+        <ControlBar
+          onLeave={() => void room.disconnect()}
+          openPanel={openPanel}
+          onTogglePanel={togglePanel}
+          participantCount={participants.length}
+        />
+      </div>
+    </ReactionsProvider>
   );
 }

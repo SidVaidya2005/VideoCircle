@@ -34,7 +34,13 @@ export async function mintAccessToken(params: MintParams): Promise<string> {
     roomJoin: true,
     canPublish: true,
     canSubscribe: true,
-    canPublishData: true, // chat, reactions, raise-hand
+    canPublishData: true, // chat and reactions
+    // Raise-hand is a participant attribute rather than a data-channel message,
+    // because only an attribute is durable: it survives a dropped packet and is
+    // synced to anyone who joins after the hand went up. Writing one needs this
+    // claim. It lets a client describe *itself* and nothing else — it grants no
+    // authority over the room or over anyone else in it.
+    canUpdateOwnMetadata: true,
   };
   at.addGrant(grant);
 

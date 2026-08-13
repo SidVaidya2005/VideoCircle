@@ -199,6 +199,10 @@
   --animate-level: vc-level 900ms var(--ease-in-out-quint) infinite;
   --animate-live-dot: vc-live-dot 2s var(--ease-in-out-quint) infinite;
 
+  /* A reaction rising off a tile and fading. One-shot: the element is removed
+     once its TTL expires, so there is no exit state to animate. */
+  --animate-reaction: vc-reaction 4s var(--ease-out-expo) forwards;
+
   /* The participants and chat panels, below lg: where they open as a sheet.
      One-shot on open: Radix unmounts on close, so there is no exit to animate. */
   --animate-sheet-in: vc-sheet-in 250ms var(--ease-out-quint);
@@ -359,6 +363,28 @@ html {
    the CSS variable Radix sets on the content element. Replaces shadcn's generated
    `animate-in fade-in-0 zoom-in-95`, which are `tw-animate-css` utilities this
    project does not import and which therefore did nothing. */
+/* A reaction rises off the tile it belongs to and fades out. The duration matches
+   REACTION_TTL_MS, which is what removes the element — the two have to agree or a
+   reaction either vanishes mid-flight or lingers invisibly. */
+@keyframes vc-reaction {
+  0% {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(-1.5rem);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-2.5rem);
+  }
+}
+
 /* A panel arriving from the right edge it is anchored to. */
 @keyframes vc-sheet-in {
   from {
