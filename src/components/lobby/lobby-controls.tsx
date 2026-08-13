@@ -4,6 +4,7 @@ import { CopyInviteButton } from '@/components/lobby/copy-invite-button';
 import { DevicePicker } from '@/components/lobby/device-picker';
 import { DeviceToggle } from '@/components/lobby/device-toggle';
 import { DisplayNameField } from '@/components/lobby/display-name-field';
+import { Button } from '@/components/ui/button';
 import type { MediaPreviewController } from '@/hooks/use-media-preview';
 
 interface LobbyControlsProps {
@@ -11,20 +12,18 @@ interface LobbyControlsProps {
   displayName: string;
   onDisplayNameChange: (value: string) => void;
   preview: MediaPreviewController;
+  joining: boolean;
+  onJoin: () => void;
 }
 
-/**
- * Everything the lobby lets you set before joining.
- *
- * No Join control: minting a token and connecting are both the next feature, and
- * a primary action that does nothing when pressed reads as broken. The layout
- * leaves the slot for it at the end.
- */
+/** Everything the lobby lets you set, and the control that acts on it. */
 export function LobbyControls({
   code,
   displayName,
   onDisplayNameChange,
   preview,
+  joining,
+  onJoin,
 }: LobbyControlsProps) {
   const { camera, microphone, devices } = preview;
 
@@ -69,6 +68,14 @@ export function LobbyControls({
       </div>
 
       <DisplayNameField value={displayName} onChange={onDisplayNameChange} />
+
+      {/* Disabled on an empty name only — never on a failed device. Joining with
+          nothing working is the whole point of the states feature 07 built, and
+          the room connects view-only. The name rule matches the min(1) the token
+          route enforces, so the button cannot offer something the server refuses. */}
+      <Button type="button" onClick={onJoin} disabled={joining || displayName.trim().length === 0}>
+        {joining ? 'Joining' : 'Join now'}
+      </Button>
 
       <CopyInviteButton code={code} />
     </div>

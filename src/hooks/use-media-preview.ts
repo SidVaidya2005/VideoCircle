@@ -40,6 +40,13 @@ export interface MediaPreviewController {
   setMicrophoneEnabled: (enabled: boolean) => void;
   selectCamera: (deviceId: string) => void;
   selectMicrophone: (deviceId: string) => void;
+  /**
+   * Releases every preview track, keeping the on/off intent so it can be carried
+   * into the call. Called immediately before connecting: a preview track left
+   * running holds the camera the room is about to ask for, and on some devices
+   * that blocks the room from acquiring it at all.
+   */
+  stopPreview: () => void;
 }
 
 /**
@@ -454,6 +461,20 @@ export function useMediaPreview(): MediaPreviewController {
     [microphone.track, persist],
   );
 
+  const stopPreview = useCallback(() => {
+    // Bumping both generations abandons any acquisition still in flight, so a
+    // track that resolves after this point is stopped on arrival rather than
+    // being adopted into a lobby that has already handed off.
+    generation.current.camera += 1;
+    generation.current.microphone += 1;
+
+    for (const track of openTracks.current) track.stop();
+    openTracks.current.clear();
+
+    setCamera((state) => ({ ...state, track: null, busy: false }));
+    setMicrophone((state) => ({ ...state, track: null, busy: false }));
+  }, []);
+
   return {
     camera,
     microphone,
@@ -463,5 +484,6 @@ export function useMediaPreview(): MediaPreviewController {
     setMicrophoneEnabled,
     selectCamera,
     selectMicrophone,
+    stopPreview,
   };
 }
