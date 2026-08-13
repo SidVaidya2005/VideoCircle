@@ -161,24 +161,31 @@ test('no control shrinks below the hit-area floor at 360px', async ({ page, requ
   const code = await createMeeting(request);
   await joinAs(page, code, 'Ada Lovelace');
 
+  // Polled, not measured once: animate-tile-in runs a 700ms scale(0.96), so every
+  // control inside a freshly mounted tile measures fractionally small while it
+  // plays. Polling waits that out and still fails a genuinely undersized control.
+  //
   // Scoped to main for the same reason the route announcer is: Playwright's role
   // engine pierces shadow DOM, so an unscoped query also measures Next's dev-tools
   // badge, which is 32px and not ours.
-  const boxes = await page
-    .getByRole('main')
-    .getByRole('button')
-    .evaluateAll((nodes) =>
-      nodes.map((node) => {
-        const { width, height } = node.getBoundingClientRect();
-        return { label: node.getAttribute('aria-label') ?? node.textContent, width, height };
-      }),
-    );
+  const undersized = () =>
+    page
+      .getByRole('main')
+      .getByRole('button')
+      .evaluateAll(
+        (nodes, min) =>
+          nodes
+            .map((node) => ({
+              label: node.getAttribute('aria-label') ?? node.textContent?.trim() ?? '',
+              box: node.getBoundingClientRect(),
+            }))
+            .filter(({ box }) => box.height < min || box.width < min)
+            .map(({ label, box }) => `${label} ${Math.round(box.width)}x${Math.round(box.height)}`),
+        MIN_HIT_AREA,
+      );
 
-  expect(boxes.length).toBeGreaterThan(0);
-  for (const box of boxes) {
-    expect.soft(box.width, `${box.label} width`).toBeGreaterThanOrEqual(MIN_HIT_AREA);
-    expect.soft(box.height, `${box.label} height`).toBeGreaterThanOrEqual(MIN_HIT_AREA);
-  }
+  await expect.poll(undersized).toEqual([]);
+  expect(await page.getByRole('main').getByRole('button').count()).toBeGreaterThan(0);
 
   const overflows = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,

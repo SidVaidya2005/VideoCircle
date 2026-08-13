@@ -8,13 +8,22 @@ import {
   type TrackReferenceOrPlaceholder,
 } from '@livekit/components-react';
 import { Track } from 'livekit-client';
-import { memo } from 'react';
+import { memo, useRef } from 'react';
 
+import { TileMenu } from '@/components/room/tile-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { toInitials } from '@/lib/initials';
 import { cn } from '@/lib/utils';
 
+/** How long a press has to hold before it counts as a pin. */
+const LONG_PRESS_MS = 500;
+
 interface ParticipantTileProps {
   trackRef: TrackReferenceOrPlaceholder;
+  /** `focus` is the large tile in spotlight; `strip` is a filmstrip thumbnail. */
+  size?: 'grid' | 'focus' | 'strip';
+  pinned?: boolean;
+  onTogglePin?: () => void;
 }
 
 /** Shown for a remote participant whose token carried no name. Never their identity,
@@ -22,7 +31,12 @@ interface ParticipantTileProps {
 const UNNAMED = 'Guest';
 const LOCAL_LABEL = 'You';
 
-function ParticipantTileImpl({ trackRef }: ParticipantTileProps) {
+function ParticipantTileImpl({
+  trackRef,
+  size = 'grid',
+  pinned = false,
+  onTogglePin,
+}: ParticipantTileProps) {
   const { participant } = trackRef;
   const isLocal = participant.isLocal;
   const isScreenShare = trackRef.source === Track.Source.ScreenShare;
@@ -56,15 +70,49 @@ function ParticipantTileImpl({ trackRef }: ParticipantTileProps) {
   // element until it is subscribed is never subscribed and never renders one.
   const showsVideo = isTrackReference(trackRef) && !cameraMuted;
 
-  return (
+  // A long press is a press that outlasts the timer without moving. Held in a ref
+  // rather than state: nothing renders from it, and a re-render per pointer event
+  // is exactly what this tree cannot afford.
+  const longPress = useRef<number | null>(null);
+
+  function cancelLongPress() {
+    if (longPress.current === null) return;
+    window.clearTimeout(longPress.current);
+    longPress.current = null;
+  }
+
+  function startLongPress() {
+    if (!onTogglePin) return;
+    cancelLongPress();
+    longPress.current = window.setTimeout(() => {
+      longPress.current = null;
+      onTogglePin();
+    }, LONG_PRESS_MS);
+  }
+
+  const tile = (
     <li
       className={cn(
-        'border-line/60 bg-card animate-tile-in relative aspect-video overflow-hidden rounded-lg border',
+        'group border-line/60 bg-card animate-tile-in relative overflow-hidden rounded-lg border',
         // Speaking is a white ring — the kit's engaged state. Never a colour: a
         // coloured border on a tile is reserved for nothing at all.
         'ease-out-quint transition-shadow duration-150',
         isSpeaking && 'ring-active ring-2',
+        // The focused tile fills the space it is given; grid and strip tiles keep
+        // 16:9 so rows stay even and the strip scrolls predictably.
+        size === 'focus' ? 'size-full' : 'aspect-video',
+        size === 'strip' && 'w-40 flex-none lg:w-full',
+        onTogglePin && 'select-none',
       )}
+      onDoubleClick={onTogglePin}
+      onPointerDown={startLongPress}
+      onPointerUp={cancelLongPress}
+      onPointerLeave={cancelLongPress}
+      onPointerCancel={cancelLongPress}
+      onPointerMove={cancelLongPress}
+      // Android's long-press menu and desktop right-click both land here and
+      // would fire over the gesture.
+      onContextMenu={onTogglePin ? (event) => event.preventDefault() : undefined}
     >
       {showsVideo ? (
         <VideoTrack
@@ -113,8 +161,27 @@ function ParticipantTileImpl({ trackRef }: ParticipantTileProps) {
         ) : null}
         {/* text-ink on the scrim, never a muted grey — those are for known backgrounds. */}
         <span className="text-ink truncate">{label}</span>
+        {pinned ? <span className="text-muted flex-none">· pinned</span> : null}
       </p>
+
+      {onTogglePin ? (
+        <TileMenu participantLabel={label} pinned={pinned} onTogglePin={onTogglePin} />
+      ) : null}
     </li>
+  );
+
+  if (!onTogglePin) return tile;
+
+  // Names the gesture, which is otherwise unguessable. Hover-only by nature, so
+  // it reaches desktop and not phones — phones get the always-visible menu button
+  // instead, which is the other half of the same answer.
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{tile}</TooltipTrigger>
+      <TooltipContent side="top">
+        {pinned ? 'Double-click to unpin' : 'Double-click to pin'}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -132,11 +199,19 @@ function ParticipantTileImpl({ trackRef }: ParticipantTileProps) {
  * sides of the comparison resolve to the same live value. `trackSid` is safe
  * because it changes only when the publication itself is replaced or removed,
  * which is exactly the transition the memo must not swallow.
+ *
+ * `pinned` and `size` are compared because they are what the parent changes when
+ * the layout moves — a comparator that ignored them would leave a pinned tile
+ * rendering as unpinned, which is the same defect the `isMuted` comparison had.
+ * `onTogglePin` is deliberately not compared: it is a fresh closure every render
+ * and would defeat the memo outright, while always closing over the correct key.
  */
 export const ParticipantTile = memo(
   ParticipantTileImpl,
   (previous, next) =>
     previous.trackRef.participant.identity === next.trackRef.participant.identity &&
     previous.trackRef.participant.name === next.trackRef.participant.name &&
-    previous.trackRef.publication?.trackSid === next.trackRef.publication?.trackSid,
+    previous.trackRef.publication?.trackSid === next.trackRef.publication?.trackSid &&
+    previous.pinned === next.pinned &&
+    previous.size === next.size,
 );

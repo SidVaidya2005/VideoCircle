@@ -59,23 +59,44 @@ export function liveTrackCounts(page: Page): Promise<{ video: number; audio: num
  */
 export async function stubDisplayMedia(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    // Sourced from the fake camera device rather than a canvas: a
-    // CanvasCaptureMediaStreamTrack ends on its own shortly after publishing, and
-    // a stub that stops mid-test is worse than no stub. Chromium's fake device is
-    // what every camera assertion in this suite already runs on.
+    // A repainted canvas, not a second getUserMedia. Sourcing the stub from the
+    // fake camera device meant two video tracks from the same device in one page,
+    // and under parallel load LiveKit published the share and then unpublished it
+    // a moment later. The canvas has no device to contend for.
     //
     // Only the picker is replaced. LiveKit still publishes a real track, the SFU
     // still relays it, and the receiving browser still decodes it.
     navigator.mediaDevices.getDisplayMedia = async () => {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const canvas = document.createElement('canvas');
+      canvas.width = 1280;
+      canvas.height = 720;
+      canvas.style.position = 'fixed';
+      canvas.style.left = '-10000px';
+      document.body.appendChild(canvas);
+
+      const context = canvas.getContext('2d');
+      let frame = 0;
+      const timer = window.setInterval(() => {
+        if (!context) return;
+        frame += 1;
+        // The fill has to actually change: an unchanged canvas produces one frame
+        // and then nothing, and an encoder with no frames is not a live share.
+        context.fillStyle = frame % 2 === 0 ? '#1d4ed8' : '#2563eb';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+      }, 100);
+
+      const stream = canvas.captureStream(10);
       const track = stream.getVideoTracks()[0];
       const target = window as unknown as { __shareTrack?: MediaStreamTrack };
       target.__shareTrack = track;
 
-      // livekit-client clones the track it is handed and stops the original, so
-      // the reference a test needs — the one the SDK is actually listening to for
-      // `ended` — is the clone, not what came out of the picker.
       if (track) {
+        track.addEventListener('ended', () => window.clearInterval(timer));
+
+        // livekit-client clones the track it is handed and stops the original, so
+        // the reference a test needs — the one the SDK listens to for `ended` — is
+        // the clone. Chasing this the other way cost a debugging pass: a healthy
+        // share reads `ended` on whatever came out of the picker.
         const clone = track.clone.bind(track);
         track.clone = () => {
           const cloned = clone();

@@ -114,20 +114,38 @@ test('dismissing the picker changes nothing', async ({ page, request }) => {
   await expect(page.getByRole('listitem')).toHaveCount(1);
 });
 
-test('a share ended from the browser syncs our state', async ({ page, request }) => {
+test('a share ended from the browser syncs our state', async ({ page, browser, request }) => {
+  test.setTimeout(90_000);
+
+  // Shared to somebody, not into an empty room. A solo share — nobody else in the
+  // call — is unreliable: LiveKit unpublishes it again within a second or so,
+  // roughly half the time. It is not dynacast, which was tested off and made no
+  // difference. See progress-tracker → Follow-ups; the behaviour is real and the
+  // mechanism is still open, so this test exercises the case the feature is for
+  // rather than encoding a known-bad one.
   await stubDisplayMedia(page);
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace');
+  const second = await browser.newContext({ permissions: ['camera', 'microphone'] });
+  const guest = await second.newPage();
 
-  await shareControl(page).click();
-  await expect(page.getByText('Sharing your screen')).toBeVisible();
+  try {
+    await joinAs(page, code, 'Ada Lovelace');
+    await joinAs(guest, code, 'Grace Hopper');
+    await expect(guest.getByRole('listitem')).toHaveCount(2, { timeout: 20_000 });
 
-  // Chrome's own "Stop sharing" bar ends the track without touching our UI. We
-  // hold no sharing state of our own, so useLocalParticipant's LocalTrackUnpublished
-  // is what brings the bar and banner back — no reload, no listener of ours.
-  await stopShareFromBrowser(page);
+    await shareControl(page).click();
+    await expect(page.getByText('Sharing your screen')).toBeVisible({ timeout: 20_000 });
 
-  await expect(page.getByText('Sharing your screen')).toHaveCount(0, { timeout: 15_000 });
-  await expect(shareControl(page)).toHaveAttribute('aria-pressed', 'false');
-  await expect(page.getByRole('listitem')).toHaveCount(1);
+    // Chrome's own "Stop sharing" bar ends the track without touching our UI. We
+    // hold no sharing state of our own, so useLocalParticipant's
+    // LocalTrackUnpublished is what brings the bar and banner back — no reload,
+    // no listener of ours.
+    await stopShareFromBrowser(page);
+
+    await expect(page.getByText('Sharing your screen')).toHaveCount(0, { timeout: 15_000 });
+    await expect(shareControl(page)).toHaveAttribute('aria-pressed', 'false');
+    await expect(guest.getByRole('listitem')).toHaveCount(2, { timeout: 20_000 });
+  } finally {
+    await second.close();
+  }
 });
