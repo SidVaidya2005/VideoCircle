@@ -288,18 +288,31 @@ exactly one room, sets `roomJoin`, and carries no `roomAdmin`, `roomCreate`, or
 **UI:**
 
 - Participant tiles with video, display name, and a muted indicator
-- Camera-off tiles showing an avatar or initials rather than disappearing
+- Camera-off tiles showing initials on `bg-raised` — never a generated avatar
 - Grid reflowing by headcount from 1 to `MAX_VISIBLE_TILES`
 - Connecting, reconnecting, and disconnected states
 - Single-column stack on phones, grid from `sm:` up
+- The local participant is the first tile, mirrored, labelled `YOU`. Mirroring is local-only, as in the lobby preview — a self-view is a mirror, a remote tile is not
 
 **Logic:**
 
 - `<LiveKitRoom>` shell with `<RoomAudioRenderer />`
 - `useTracks` with `withPlaceholder: true` on the camera source
 - `RoomEvent` handling for `Reconnecting`, `Reconnected`, and `Disconnected`
+- **Our own grid and tile, on the unstyled primitives** — `useTracks`, `VideoTrack`, `useIsSpeaking`, `useIsMuted`, `useVisualStableUpdate`. `GridLayout` renders `lk-grid-layout` and lays out nothing without `@livekit/components-styles`, which is not an approved dependency, and `ParticipantTile` ships a name chip, mute icon, quality dot and focus button that each contradict `Design/README.md` → Participant tiles. Adopting them would mean a new dependency plus overriding its CSS everywhere the brand differs
+- **Reflow is pure CSS keyed to headcount**, not a measured container. A lookup maps participant count to whole static Tailwind class strings per breakpoint — never interpolated, or the compiler never emits them. No `ResizeObserver` competing with WebRTC encoding, and the mapping is unit-testable without a browser
+- **Above `MAX_VISIBLE_TILES`, speakers are promoted and the rest are counted.** `useVisualStableUpdate` keeps whoever is talking on the visible page; a `+N MORE` overline states what is hidden. No pager controls — the product is sized for ~12. Audio is unaffected: `RoomAudioRenderer` plays every remote whether or not they hold a tile
+- **Camera-off is a placeholder ref _or_ a muted publication**, and the tile does not distinguish them to the viewer. `isTrackReference` separates the two internally
+- A temporary Leave lives in the status strip until feature 11 lands the control bar. A call surface a person cannot leave strands the meeting's `room_finished` bookkeeping behind a timeout
+- Colour follows `Design/README.md` → Colour in a call: your own muted mic is red, a remote's is `--fg-3`, speaking is a white ring. Nothing else in the grid is coloured
 
-**Verify:** Two browser profiles in the same room see and hear each other; killing wifi on one shows the reconnecting state and recovers.
+**Verify:** Two browser contexts join one code and each sees two tiles carrying the
+other's name — automated in `tests/e2e/call-grid.spec.ts`, since a call that works
+alone has not been tested. Unit tests cover the column mapping across counts 1–13
+and the visible/overflow split. `context.setOffline(true)` then `false` shows the
+reconnecting strip while the tile DOM node persists and Leave stays enabled — the
+room tree must never unmount on a transient disconnect. Audio between two real
+participants is confirmed by hand, being the one claim no assertion reaches.
 
 ### 11 In-call control bar
 

@@ -164,32 +164,40 @@ export function RoomShell({
 
 ### Rendering the participant grid
 
+**`GridLayout` and `ParticipantTile` are not used in this project.** They render
+`lk-*` markup that lays out nothing without `@livekit/components-styles`, which is
+not an approved dependency, and `ParticipantTile` ships a name chip, mute icon,
+quality dot and focus button that each contradict `Design/README.md` → Participant
+tiles. The grid is ours, built on the unstyled primitives below.
+
 ```tsx
 'use client';
 
-import { GridLayout, ParticipantTile, useTracks } from '@livekit/components-react';
+import { useTracks, useVisualStableUpdate } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 
 export function VideoGrid() {
-  const tracks = useTracks(
-    [
-      { source: Track.Source.Camera, withPlaceholder: true },
-      { source: Track.Source.ScreenShare, withPlaceholder: false },
-    ],
-    { onlySubscribed: false },
-  );
+  const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }], {
+    onlySubscribed: false,
+  });
 
-  return (
-    <GridLayout tracks={tracks}>
-      <ParticipantTile />
-    </GridLayout>
-  );
+  // Promotes whoever is speaking onto the visible page and holds the rest still,
+  // so tiles do not shuffle every time someone mutes.
+  const stable = useVisualStableUpdate(tracks, MAX_VISIBLE_TILES);
+
+  return <ul>{/* one <ParticipantTile trackRef={…}/> per reference */}</ul>;
 }
 ```
 
 `withPlaceholder: true` on the camera source keeps a tile for participants whose
 camera is off — without it, muting your camera makes you vanish from everyone's
 grid instead of showing your name.
+
+Inside a tile:
+
+- **`isTrackReference(ref)`** separates a published camera from a placeholder. Show video when the ref is real and its publication is not muted — **never gate on `isSubscribed`**, which deadlocks `adaptiveStream`: it decides what to subscribe to from the visibility of attached `<video>` elements, so a tile that renders no element until subscribed is never subscribed.
+- **`useIsMuted(ref)`** reads an *absent* publication as unmuted. A participant publishing no microphone at all cannot be heard, so treat absent as muted yourself — the hook will not do it for you. It accepts a placeholder ref built inline; its effect keys on a derived id string, so a fresh object per render does not resubscribe.
+- **`useIsSpeaking(participant)`** drives the white ring. Both hooks take the participant explicitly rather than reading context, which is what lets a tile subscribe to its own participant instead of the room.
 
 ### Toggling microphone, camera, and screen share
 

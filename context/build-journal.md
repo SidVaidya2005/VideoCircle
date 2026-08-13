@@ -75,3 +75,31 @@ At that phase's checkpoint, the whole phase collapses to:
 - **`server-only` throws under Node, which shaped the module layout.** The joinability decision and the TTL cap are pure modules precisely so every branch is testable without a database or the LiveKit secrets; the route handler does the IO around them. (F09)
 - **The context docs drifted in two places that would have caused real bugs**, both found while reading a section for the feature that needed it rather than at this checkpoint: `library-docs.md` had LiveKit secrets being read from the public env module, and still showed the merged `env.server.ts` that F06 undid. (F09)
 - **One E2E flake remains open and unexplained.** It failed once under parallel load and has not reproduced in more than ten runs; the artifact was overwritten before it could be read. A real purity defect found in the same path was fixed and is a plausible but unproven cause. (F08)
+
+## Phase 3 — The call
+
+### 10 Room connection and video grid — 2026-08-13
+
+**Decisions**
+
+- **The prebuilt grid was rejected on evidence, not taste.** `GridLayout` renders `className="lk-grid-layout"` and derives its columns from `@livekit/components-styles`, which is not an approved dependency — without it the component lays out nothing at all. `ParticipantTile` additionally ships a name chip, mute icon, connection-quality dot and focus button, each contradicting `Design/README.md` → Participant tiles. Adopting them meant a new dependency plus overriding its CSS everywhere the brand differs, so the grid and tile are ours, on `useTracks`, `VideoTrack`, `useIsSpeaking`, `useIsMuted` and `useVisualStableUpdate`. `library-docs.md` showed the prebuilt path and was corrected in the same feature.
+- **Reflow is keyed to headcount in CSS, not to a measured container.** A lookup returns whole static class strings per breakpoint, so the mapping is unit-testable without a browser and nothing observes a resize inside the tree that shares a main thread with WebRTC encoding.
+- **The local participant is pinned first and excluded from the visible-page cap**, so above twelve people you can never be the one hidden from your own screen. `useVisualStableUpdate` promotes speakers among the remainder.
+
+**Gotchas**
+
+- **`useIsMuted` reads an absent publication as _unmuted_.** Its implementation falls back to `participant.getTrackPublication(source)?.isMuted`, and both being undefined yields `false` — so a participant publishing no microphone at all would have rendered as unmuted. Absent is treated as muted in the tile. Found by reading the shipped implementation after the published `.d.ts` proved too thin to answer the question.
+- **Gating video on `isSubscribed` deadlocks `adaptiveStream`.** It decides what to subscribe to from the visibility of attached `<video>` elements, so a tile that renders no element until it is subscribed is never subscribed and never renders one. The only gate is `isTrackReference` plus the publication's mute state.
+- **`<LiveKitRoom>` renders a container div between the page and the call**, which broke the flex height chain and collapsed a full-height call to the height of its own content. It accepts `className`, so the layout contract lives in `room-shell.tsx`.
+- **Two design rules nearly went the wrong way.** `SectionOverline` leads with the red square, so using it for the `+N MORE` count would have spent the call's red budget on a headcount; and `animate-live-dot` is an infinite keyframe, which `constraints.md` allows on Home and forbids inside a call. Both replaced with plain type and a static dot.
+- **`:root` cannot take a project-only token.** `_verify.mjs` compares that block three ways, so a safe-area token would have failed the gate. The inset is applied as `pb-[env(safe-area-inset-bottom)]` on top of the stage's own `pb-3` — no literal in a class, and additive rather than a `max()`.
+- **The first layout was top-heavy.** `content-start` pinned two tiles to the top of a 1280×720 window with 45% dead space below; tiles are width-constrained at 16:9 and cannot fill it, so the rows are centred instead. Caught by screenshotting a real two-person call, not by any assertion.
+
+**Verified:** 36 e2e specs and 126 unit tests pass; `lint`, `typecheck` and `build`
+clean. Two real browser contexts against LiveKit Cloud see two tiles each, named
+correctly, with the local tile first and mirrored; a participant who leaves drops
+back to one tile and "Only you"; a camera-off join keeps a named tile with no
+`<video>`; `context.setOffline` shows the reconnecting strip while the tile
+persists and Leave stays enabled; no horizontal overflow at 360px. Red appears in
+exactly two places in `src/components/room/`, both audited by grep: the local
+muted dot and the Leave control.

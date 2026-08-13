@@ -56,6 +56,7 @@ filled in by the feature that needs it. Built so far:
 - **F07** — `src/app/room/[code]/{page,not-found}.tsx`, `src/components/room/room-experience.tsx`, `src/components/lobby/{self-preview,media-state-notice}.tsx`, `src/hooks/use-media-preview.ts`, `src/lib/media/classify-media-error.ts`, `src/lib/meetings.ts`. First consumer of `livekit-client`
 - **F08** — the rest of `src/components/lobby/`, `src/hooks/{use-media-devices,use-copy-to-clipboard}.ts`, `src/lib/media/preferences.ts`. `use-media-preview.ts` grew from one-shot acquisition into the lobby's device controller, and `section-overline.tsx` moved from `home/` to `ui/` at its third caller
 - **F09** — `src/app/api/token/`, `src/lib/env.livekit.server.ts`, `src/lib/meeting-state.ts`, `src/lib/livekit/{token,token-ttl,room-options,request-token}.ts`, `src/components/room/{room-shell,connected-panel}.tsx`, `src/components/lobby/join-failure-notice.tsx`. First consumers of `livekit-server-sdk` and `@livekit/components-react`
+- **F10** — `src/components/room/{call-stage,video-grid,participant-tile,participant-count}.tsx` and `src/lib/{room-grid,initials}.ts`. `connected-panel.tsx` was deleted, its status strip and Leave absorbed into `call-stage.tsx`. The grid is ours rather than `GridLayout`/`ParticipantTile` — see `library-docs.md` → Rendering the participant grid
 
 Not yet built: `api/livekit/webhook`, `lib/livekit/webhook.ts`,
 `lib/crypto/chat-message.ts`, `types/meeting.ts`, the `history` page, and
@@ -111,8 +112,9 @@ VideoCircle/
     │   │                                pickers, display-name field, copy-invite, join-failure
     │   │                                notice, lobby controls
     │   ├── room/                      → room-experience (hosts lobby then call), room-shell
-    │   │                                (<LiveKitRoom>), connected panel, and later the grid,
-    │   │                                tiles, control bar, panels, reactions
+    │   │                                (<LiveKitRoom>), call-stage (status / grid / leave),
+    │   │                                video-grid, participant-tile, participant-count, and
+    │   │                                later the control bar, panels, reactions
     │   ├── chat/                      → encrypted chat panel, composer, message list
     │   └── history/                   → history table, empty state
     ├── hooks/                         → use-media-preview (owns the lobby's tracks),
@@ -140,6 +142,9 @@ VideoCircle/
     │   ├── media/
     │   │   ├── classify-media-error.ts → getUserMedia rejection → a renderable state
     │   │   └── preferences.ts         → validated localStorage for device choices
+    │   ├── room-grid.ts               → pure headcount → column classes, and the visible/
+    │   │                                 overflow split against MAX_VISIBLE_TILES
+    │   ├── initials.ts                 → pure display name → up to two characters
     │   ├── meeting-state.ts           → pure joinability decision (open/ended/expired)
     │   ├── env.livekit.server.ts      → Zod-parsed LiveKit secrets, server-only
     │   ├── meetings.ts                → meeting lookup by code, server-only

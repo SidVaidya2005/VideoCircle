@@ -17,9 +17,9 @@ progress, and what is next.
 
 ## Current Status
 
-**Phase:** Phase 2 — Lobby
-**Last completed:** Phase 2 checkpoint — gates green from a clean build, phase diff walked against the invariants, three device-preference bugs found and fixed, journal compacted 160→77 lines and Phase 2's binding decisions promoted
-**Next:** 10 Room connection and video grid — replaces the connected placeholder with the real tile grid
+**Phase:** Phase 3 — The call
+**Last completed:** 10 Room connection and video grid — our own grid and tile on the unstyled LiveKit primitives, CSS reflow keyed to headcount, local participant first and mirrored, speakers promoted above 12. Verified with two real contexts against LiveKit Cloud; all 36 e2e and 126 unit tests pass
+**Next:** 11 In-call control bar — replaces the stage's temporary Leave with the real bar
 
 ---
 
@@ -48,7 +48,7 @@ progress, and what is next.
 
 ### Phase 3 — The call
 
-- [ ] 10 Room connection and video grid
+- [x] 10 Room connection and video grid
 - [ ] 11 In-call control bar
 - [ ] 12 Screen sharing
 - [ ] 13 Speaker and spotlight view
@@ -97,11 +97,13 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 - **Add the Render URL to Supabase's Redirect URLs at F25.** The localhost callback is configured and the Google round trip works; the deployed origin needs the same entry, plus `NEXT_PUBLIC_SITE_URL` pointed at it. **Blocks F25.**
 - **Check whether the email/password provider is enabled on the Supabase project, and disable it if so.** `architecture.md` says Google OAuth is *the only* sign-in method, but nothing in the code enforces that — an enabled email provider is a live account-creation surface reachable straight from the Auth API, outside every route handler here. The security advisor's one finding (`auth_leaked_password_protection`) is about password auth and is moot either way once email is off.
 - **LiveKit credentials are live locally and proven end to end** — F09 mints tokens against them and joins real rooms. Render still needs all three set in its dashboard at F25. **Blocks F25.**
+- **The speaking ring has never been seen firing.** `useIsSpeaking` drives it and the styling is audited in source — `ring-active`, white, never a colour — but Chromium's fake audio device does not produce speech that trips LiveKit's active-speaker detection, so no test and no screenshot has shown the ring on. It needs two real microphones to confirm, alongside the other manual mic checks **F26 owns**. (F10)
 - **The wordmark's tittle sits ~3.5px off during the `next/font` swap window**, because the generated fallback matches advance and ascent but not glyph shapes. First paint only, on a cold load. Accepted at F02 rather than trading it for a flash of invisible text; revisit only if it looks wrong on the deployed instance.
 - **`/tokens` still ships its markup in the production bundle** even though it returns 404 there. A few kB of static swatches; revisit at F22 if the Home budget is tight.
 
 ## Key Decisions
 
+- **The prebuilt LiveKit grid was rejected, not overlooked.** `GridLayout` lays out nothing without `@livekit/components-styles`, an unapproved dependency, and `ParticipantTile` ships four pieces of chrome the design system contradicts. Ours is built on the unstyled primitives — `useTracks`, `VideoTrack`, `useIsSpeaking`, `useIsMuted`, `useVisualStableUpdate`. (F10)
 - **Pure decision modules exist because `server-only` throws under Node.** Joinability and the token TTL cap are free of it so every branch is testable without a database or the LiveKit secrets; the route handler does the IO around them. (F09)
 - **A valid-looking room code is never authorization.** `/api/token` re-reads the meeting and refuses unless `ended_at is null and now() < expires_at`, even though the page already checked existence at render: the endpoint is directly callable, and a meeting can close while someone sits in the lobby deciding. (F09)
 - **In the lobby, off releases the device — it never mutes.** A preview reading OFF while the camera light stays lit is what breaks trust in a lobby. It also keeps the SDK's muted-track trap out of reach: `setDeviceId` sets `pendingDeviceChange` and returns early on a muted track, so a device picker would appear to do nothing until the track was unmuted. (F08)
@@ -111,4 +113,3 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 - **The session is read server-side in the `(shell)` layout**, which makes Home and Call History dynamic. A client-side read would keep Home static at the cost of showing a signed-out header on every load before correcting — worst on exactly the cold free-tier load this project already fights. (F04)
 - **RLS helpers live in `private` and keep `EXECUTE` for `authenticated`** — the schema is what hides them; revoking the grant breaks every policy read. (F03)
 - **The expiry sweep has a 2-hour grace period**, resolving a contradiction in `architecture.md` between "closes open rows" and "skips meetings with open rows". (F03)
-- **One participation policy, not two** — "read own" was a strict subset of "read co-participants", and Postgres evaluates every permissive policy per row. (F03)
