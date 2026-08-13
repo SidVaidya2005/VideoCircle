@@ -214,3 +214,36 @@ badge reads 1 alone, 2 after a join and 1 after a leave. At desktop width the pa
 is a `complementary` with no dialog present; at 360px it is a dialog reached
 through MORE, with no horizontal overflow and every control in it clearing 44px.
 Screenshots confirm both forms and the two-line row.
+
+### 15 Reactions and raise hand — 2026-08-13
+
+**Decisions**
+
+- **Ephemeral and durable state took different transports, against the build plan.** It specified `DATA_TOPIC.HAND` with `reliable: false` for both. A reaction is right on that channel — losing one costs nothing. A raised hand is not: an unreliable packet can drop, leaving a hand up on some screens and down on others, and a data-channel message reaches nobody who joins afterwards. Both failures are silent. Raise-hand became a participant attribute, which LiveKit syncs to late joiners; `DATA_TOPIC.HAND` stays declared and unused as part of the wire-protocol record.
+- **The grant widened by exactly one claim.** `canUpdateOwnMetadata` is what lets a client write its own attribute. It is a claim over itself and nothing else, and the grant spec now pins it alongside the three that must stay false, so the widening cannot drift into something larger unnoticed.
+- **The raised-hand mark is neutral, correcting the build plan.** A tile's red dot already means "your own mic is muted"; a second red mark meaning something else on the same tile is what the red invariant exists to prevent.
+- **One control, one popover.** The bar is full at seven, which measures 440px — an eighth cannot fit a phone. Below `sm:` the popover would be a popover inside a menu, so the same actions become flat items in MORE.
+- **A context for reactions, keyed by identity.** Prop-drilling would thread through three components and hand every memoised tile a new object whenever anyone reacted.
+
+**Gotchas**
+
+- **LiveKit does not echo an attribute change back to the participant who made it while they are alone in the room.** Verified directly: raising a hand solo left the badge *and the button label* unchanged for at least three seconds; the moment a second participant joined, both sides showed it. A control that visibly does nothing when pressed is not shippable, so your own hand is held in local state and only remote hands are read from attributes. That mirror is safe in a way the screen-share one would not have been: nothing but this toggle can change it, so it has nothing to drift against.
+- **This is the second finding of the shape "a room of one behaves differently".** F13 found screen sharing into an empty room unreliable. Worth treating as a pattern the next time something works with an audience and not without one.
+- **`+1` is a 41px hit target.** Padding alone does not make a two-glyph chip clear 44px; it needs `min-w-11` as well. A hit area has two axes, and the narrow labels in a fixed set are exactly where the second one goes missing.
+- **`TextEncoder.encode` returns `Uint8Array<ArrayBufferLike>`**, which `publishData` will not accept — the type admits a `SharedArrayBuffer`. Copied into a plain `ArrayBuffer` rather than cast, which keeps a `as` out of the codebase for a few dozen bytes.
+- **A python string replacement silently did nothing** because Prettier had already reflowed the line it was matching, and the chip fix appeared to be applied while the rendered class list still lacked it. Reading the DOM rather than the source is what caught it.
+
+**Verified:** 65 e2e specs and 167 unit tests pass; `lint`, `typecheck` and `build`
+clean. Two contexts prove a reaction landing on the *sender's* tile and not the
+other, and expiring with nobody touching anything; a raised hand appearing on the
+tile and in the roster on both sides and clearing on both; and a third context
+joining *after* the hand went up still seeing it — the case that motivated the
+transport change. The validator and rate limiter are unit-tested across malformed
+JSON, wrong shapes, unknown labels and a burst. `grep` confirms no `signal` in any
+new component. The grant spec pins `canUpdateOwnMetadata` true and the three admin
+claims false.
+
+**Closed a standing follow-up.** The speaking ring, recorded at F10 as never having
+been observed, was caught firing in a screenshot and then confirmed
+programmatically — Chromium's fake audio device does trip LiveKit's active-speaker
+detection after all. The follow-up is removed rather than left as a false open item.

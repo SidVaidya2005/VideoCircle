@@ -438,15 +438,28 @@ treatment in `context/Design/preview/control-states.html`.
 - A fixed reaction set as CAPS chips: `NICE`, `+1`, `LOL`, `WOW`, `BRB`
 - Chip row styled as the kit's ease-buttons — `rgba(255,255,255,.05)` at rest, `.1` on hover, inverted fill while sending
 - A fired reaction rises over the sender's tile as its CAPS label with a red-dot burst behind it, easing on `ease-out-expo`, fading after `REACTION_TTL_MS`
-- Raised hand shows a persistent badge on the tile and in the participant list, using the red dot as the mark
+- Raised hand shows a persistent badge on the tile and in the participant list, marked **neutrally, not with the red dot**. A tile already uses a red dot for *your own muted mic*; a second red dot meaning something else on the same tile is exactly what `architecture.md`'s red invariant exists to prevent. A raised hand is neither destructive nor a warning
 
 **Logic:**
 
 - Reaction payloads carry a label from the fixed set; unknown labels are dropped rather than rendered, so a malformed peer cannot inject arbitrary text over a tile
-- Publish over `DATA_TOPIC.REACTION` and `DATA_TOPIC.HAND` with `{ reliable: false }`
-- Raise-hand is toggle state and clears on leave
-- Rate-limit reactions per participant so the channel cannot be flooded
+- Publish **reactions** over `DATA_TOPIC.REACTION` with `{ reliable: false }` — losing one costs nothing, which is what makes the unreliable channel right for them
+- **Raise-hand rides a LiveKit participant attribute, not `DATA_TOPIC.HAND`.** A data channel cannot tell a late joiner about a hand raised before they arrived, and `reliable: false` can drop the packet outright, leaving a hand up on some screens and down on others — both failures silent. `setAttributes` is LiveKit's own durable per-participant state and syncs to everyone including late joiners; `useParticipantAttributes` reads it per participant, matching the rule that a tile subscribes to its own participant and nothing wider. `DATA_TOPIC.HAND` stays declared in `constants.ts` as part of the wire-protocol record, unused
+- **This widens the token grant by exactly one claim, `canUpdateOwnMetadata`.** It is outside the forbidden set and only ever lets a client describe itself, but it is a real change to a security-relevant surface, so the grant spec asserts it explicitly alongside the three that must stay false
+- Raise-hand is toggle state and clears on leave — attributes vanish with the participant, so nothing has to clean up
+- Rate-limit reactions **on both sides**: a send-side throttle stops you flooding, a receive-side drop stops a peer flooding you. A peer is untrusted, so the send-side limit alone proves nothing
+- **One control, one popover.** The bar stays at seven controls, which `code-standards.md` measures at 440px — an eighth cannot fit a phone at the 44px floor. The chips and the toggle sit inside it, kept visually distinct because one fires and the other persists
+- **A React context carries reactions only**, keyed by identity, with each tile reading its own. Hands come from attributes per participant, so the provider stays small. Prop-drilling would thread through three components and re-render every memoised tile whenever anyone reacted
 - CSS-only animation — this renders inside the call, where `animejs` is not permitted
+
+**Verify:** Two contexts prove a reaction landing on the *sender's* tile and
+expiring on its own without interaction, and a raised hand appearing as a badge on
+both the tile and the participant row on both sides. A third context joining
+*after* a hand goes up still sees it — the case the data channel cannot serve, and
+the reason for the transport change. The validator and the rate limiter are
+unit-tested; publishing a malformed payload end to end would need a handle on the
+room that production code does not expose, so that gap is stated rather than faked.
+The grant spec pins `canUpdateOwnMetadata` true and the three admin claims false.
 
 ### 16 Copy invite link in call
 

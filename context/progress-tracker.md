@@ -18,8 +18,8 @@ progress, and what is next.
 ## Current Status
 
 **Phase:** Phase 3 — The call
-**Last completed:** 14 Participant list panel — Sheet below `lg:` and an inline right column above, the filmstrip falling back to horizontal while it is open, headcount moved onto the participants control as a badge, and one `openPanel` value on the stage for F19 to widen. 60 e2e and 158 unit tests pass
-**Next:** 15 Reactions and raise hand — claims the last of the control bar's disabled slots except chat
+**Last completed:** 15 Reactions and raise hand — five CAPS chips and a hand toggle behind one control, reactions over the unreliable data channel and the hand on a participant attribute so it survives a dropped packet and reaches late joiners, marked neutrally rather than red. 65 e2e and 167 unit tests pass
+**Next:** 16 Copy invite link in call — the last feature of Phase 3, then the checkpoint
 
 ---
 
@@ -53,7 +53,7 @@ progress, and what is next.
 - [x] 12 Screen sharing
 - [x] 13 Speaker and spotlight view
 - [x] 14 Participant list panel
-- [ ] 15 Reactions and raise hand
+- [x] 15 Reactions and raise hand
 - [ ] 16 Copy invite link in call
 - [ ] Phase checkpoint — verify Phase 3 — The call is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
 
@@ -97,15 +97,16 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 - **Add the Render URL to Supabase's Redirect URLs at F25.** The localhost callback is configured and the Google round trip works; the deployed origin needs the same entry, plus `NEXT_PUBLIC_SITE_URL` pointed at it. **Blocks F25.**
 - **Check whether the email/password provider is enabled on the Supabase project, and disable it if so.** `architecture.md` says Google OAuth is *the only* sign-in method, but nothing in the code enforces that — an enabled email provider is a live account-creation surface reachable straight from the Auth API, outside every route handler here. The security advisor's one finding (`auth_leaked_password_protection`) is about password auth and is moot either way once email is off.
 - **LiveKit credentials are live locally and proven end to end** — F09 mints tokens against them and joins real rooms. Render still needs all three set in its dashboard at F25. **Blocks F25.**
+- **A room with one participant behaves differently from a room with two, in two unrelated places.** Screen sharing into an empty room is unreliable (below), and LiveKit does not echo a participant-attribute change back to the participant who set it while they are alone — found at F15, worked around by holding your own raised hand in local state. Two findings with the same shape is worth treating as a pattern the next time something works with an audience and not without one. (F13, F15)
 - **Screen sharing into an empty room is unreliable, and the mechanism is unknown.** With nobody else in the call, LiveKit publishes the share and unpublishes it again within a second or so, roughly half the time; with even one other participant present it is reliable across many runs. **`dynacast` is not the cause** — it was tested off and the solo case got no better. Our UI is behaving correctly throughout: it holds no sharing state, so it simply follows the unpublish. Reproduce with a single-participant share; the e2e spec deliberately tests the two-participant case instead of encoding a known-bad one. **F24 owns this** with the other edge states. (F13)
 - **A real desktop share has never been received on a real phone.** The suite stubs the picker and proves the publish path, the capability gate, and the remote tile — but the build plan's own verify line asks for a phone as receiver, and that stays manual. Worth doing at **F22**, alongside the mobile pass. (F12)
 - **Pressing the share control during the connect handshake silently does nothing.** The bar renders as soon as the room tree mounts, which is before `Connected`, so a share requested in that window is published into a room that is not there and immediately unpublished. The window is one to three seconds and the person has just pressed Join, so it is unlikely to be reached — revisit at **F24** with the other edge states. (F12)
-- **The speaking ring has never been seen firing.** `useIsSpeaking` drives it and the styling is audited in source — `ring-active`, white, never a colour — but Chromium's fake audio device does not produce speech that trips LiveKit's active-speaker detection, so no test and no screenshot has shown the ring on. It needs two real microphones to confirm, alongside the other manual mic checks **F26 owns**. (F10)
 - **The wordmark's tittle sits ~3.5px off during the `next/font` swap window**, because the generated fallback matches advance and ascent but not glyph shapes. First paint only, on a cold load. Accepted at F02 rather than trading it for a flash of invisible text; revisit only if it looks wrong on the deployed instance.
 - **`/tokens` still ships its markup in the production bundle** even though it returns 404 there. A few kB of static swatches; revisit at F22 if the Home budget is tight.
 
 ## Key Decisions
 
+- **Ephemeral and durable state get different transports, and the build plan had them the same.** A reaction rides the unreliable data channel because losing one costs nothing; a raised hand rides a participant attribute because losing one is a real failure — an unreliable packet can drop, and a data-channel message reaches nobody who joins afterwards. The cost is one extra token claim, `canUpdateOwnMetadata`, pinned by the grant spec. (F15)
 - **One responsive decision in the call is made in JavaScript, and only one.** Everything else is a Tailwind variant so nothing measures the viewport in the call tree — but a Radix dialog traps focus, locks scroll and hides the page from assistive tech the moment it opens, and its content is portaled out of reach of any wrapper class. Choosing sheet-versus-inline in CSS would leave an invisible dialog holding focus on every desktop, so `use-media-query` exists for that case alone. (F14)
 - **Speech never moves the layout.** `resolveFocusKey` takes no speaker argument at all, so it cannot: a layout that follows whoever is talking flips several times a minute in an ordinary conversation. Active speakers order the filmstrip and ring their own tile, which is what the build plan's "active-speaker detection" is actually for. (F13)
 - **We hold no mirrored sharing state, and that is what makes the hard case free.** `useLocalParticipant` re-emits on `LocalTrackUnpublished`, so a share ended from Chrome's own stop bar syncs the control and banner with no listener of ours. The build plan's "no stale UI state" requirement is met by having no state that could go stale. (F12)
@@ -114,5 +115,4 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 - **Pure decision modules exist because `server-only` throws under Node.** Joinability and the token TTL cap are free of it so every branch is testable without a database or the LiveKit secrets; the route handler does the IO around them. (F09)
 - **A valid-looking room code is never authorization.** `/api/token` re-reads the meeting and refuses unless `ended_at is null and now() < expires_at`, even though the page already checked existence at render: the endpoint is directly callable, and a meeting can close while someone sits in the lobby deciding. (F09)
 - **In the lobby, off releases the device — it never mutes.** A preview reading OFF while the camera light stays lit is what breaks trust in a lobby. It also keeps the SDK's muted-track trap out of reach: `setDeviceId` sets `pendingDeviceChange` and returns early on a muted track, so a device picker would appear to do nothing until the track was unmuted. (F08)
-- **A media request is only timed out when it cannot be waiting on a person.** `getUserMedia` does not settle until the permission prompt is answered, so a flat timeout fires on someone who took a moment to find the Allow button — a false failure on the most ordinary path in the product. Permission state decides the shape: granted means no prompt is coming, so each device is requested separately and timed; undecided means one combined untimed request. (F07)
 - **Secrets are parsed per service, not all in one schema.** `env.server.ts` parsed all three at module load, so `/api/meetings` — which never calls LiveKit — could not build while the LiveKit keys were blank. The same coupling would take meeting creation down during a LiveKit key rotation in production. (F06)
