@@ -7,7 +7,7 @@ import { JoinFailureNotice } from '@/components/lobby/join-failure-notice';
 import { LobbyControls } from '@/components/lobby/lobby-controls';
 import { MediaStateNotice } from '@/components/lobby/media-state-notice';
 import { SelfPreview } from '@/components/lobby/self-preview';
-import { ConnectedPanel } from '@/components/room/connected-panel';
+import { CallStage } from '@/components/room/call-stage';
 import { RoomShell } from '@/components/room/room-shell';
 import { SectionOverline } from '@/components/ui/section-overline';
 import { useMediaPreview } from '@/hooks/use-media-preview';
@@ -68,21 +68,28 @@ export function RoomExperience({ code, profileName }: RoomExperienceProps) {
 
   if (join.phase === 'joined') {
     return (
-      <main className="flex min-h-dvh flex-col justify-center px-4 py-6">
-        <div className="mx-auto w-full max-w-2xl">
-          <RoomShell
-            serverUrl={join.grant.serverUrl}
-            token={join.grant.token}
-            audio={microphone.enabled}
-            video={camera.enabled}
-            cameraId={camera.deviceId}
-            microphoneId={microphone.deviceId}
-            // Leaving returns Home, which is what project-overview.md describes.
-            onDisconnected={() => router.push('/')}
-          >
-            <ConnectedPanel />
-          </RoomShell>
-        </div>
+      // Full-bleed and no max-width: the line-length cap governs text, and the
+      // video grid is the one thing code-standards lets run the full viewport.
+      // dvh, never vh, so mobile browser chrome cannot crop the control row off
+      // the bottom.
+      //
+      // The safe-area inset is padding on top of the stage's own pb-3, rather
+      // than a max() of the two: on a device with a home indicator that reads as
+      // twelve points of breathing room above it, and on every other device the
+      // inset is zero and this is just pb-3.
+      <main className="flex h-dvh flex-col px-3 pt-3 pb-[env(safe-area-inset-bottom)]">
+        <RoomShell
+          serverUrl={join.grant.serverUrl}
+          token={join.grant.token}
+          audio={microphone.enabled}
+          video={camera.enabled}
+          cameraId={camera.deviceId}
+          microphoneId={microphone.deviceId}
+          // Leaving returns Home, which is what project-overview.md describes.
+          onDisconnected={() => router.push('/')}
+        >
+          <CallStage />
+        </RoomShell>
       </main>
     );
   }

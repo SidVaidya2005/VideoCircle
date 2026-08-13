@@ -41,6 +41,11 @@ export function RoomShell({
       video={video}
       options={options}
       onDisconnected={onDisconnected}
+      // <LiveKitRoom> renders a container div of its own, which sits between the
+      // page's flex column and the call. Without these it is a static-height box
+      // and the grid below it has nothing to grow into, so a full-height call
+      // collapses to the height of its own content.
+      className="flex min-h-0 flex-1 flex-col"
     >
       {children}
       {/* Renders every remote audio track. Without it the call is silent, and it
