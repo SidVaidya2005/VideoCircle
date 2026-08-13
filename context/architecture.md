@@ -55,8 +55,9 @@ filled in by the feature that needs it. Built so far:
 - **F06** — `src/lib/crypto/{base64url,chat-key}.ts`, `src/app/api/meetings/`, and the hero's share panel. `src/middleware.ts` became `src/proxy.ts` at the Phase 1 checkpoint, per Next 16's rename
 - **F07** — `src/app/room/[code]/{page,not-found}.tsx`, `src/components/room/room-experience.tsx`, `src/components/lobby/{self-preview,media-state-notice}.tsx`, `src/hooks/use-media-preview.ts`, `src/lib/media/classify-media-error.ts`, `src/lib/meetings.ts`. First consumer of `livekit-client`
 - **F08** — the rest of `src/components/lobby/`, `src/hooks/{use-media-devices,use-copy-to-clipboard}.ts`, `src/lib/media/preferences.ts`. `use-media-preview.ts` grew from one-shot acquisition into the lobby's device controller, and `section-overline.tsx` moved from `home/` to `ui/` at its third caller
+- **F09** — `src/app/api/token/`, `src/lib/env.livekit.server.ts`, `src/lib/meeting-state.ts`, `src/lib/livekit/{token,token-ttl,room-options,request-token}.ts`, `src/components/room/{room-shell,connected-panel}.tsx`, `src/components/lobby/join-failure-notice.tsx`. First consumers of `livekit-server-sdk` and `@livekit/components-react`
 
-Not yet built: `api/{token,livekit}`, `lib/livekit/`,
+Not yet built: `api/livekit/webhook`, `lib/livekit/webhook.ts`,
 `lib/crypto/chat-message.ts`, `types/meeting.ts`, the `history` page, and
 `render.yaml`.
 
@@ -125,7 +126,10 @@ VideoCircle/
     │   │   ├── proxy.ts               → session-refresh helper used by src/proxy.ts
     │   │   └── admin.ts               → service-role client, server-only
     │   ├── livekit/
-    │   │   ├── token.ts               → AccessToken construction
+    │   │   ├── token.ts               → AccessToken construction, server-only
+    │   │   ├── token-ttl.ts           → pure min(1h, expires_at − now) cap
+    │   │   ├── room-options.ts        → adaptiveStream/dynacast + chosen devices
+    │   │   ├── request-token.ts       → browser-side POST /api/token, parsed
     │   │   └── webhook.ts             → WebhookReceiver setup
     │   ├── crypto/
     │   │   ├── base64url.ts           → byte ⇄ base64url helpers
@@ -134,6 +138,8 @@ VideoCircle/
     │   ├── media/
     │   │   ├── classify-media-error.ts → getUserMedia rejection → a renderable state
     │   │   └── preferences.ts         → validated localStorage for device choices
+    │   ├── meeting-state.ts           → pure joinability decision (open/ended/expired)
+    │   ├── env.livekit.server.ts      → Zod-parsed LiveKit secrets, server-only
     │   ├── meetings.ts                → meeting lookup by code, server-only
     │   ├── room-code.ts               → generation and validation of meeting codes
     │   ├── parse-room-code.ts         → pulls a code + opaque fragment out of a pasted code or link
@@ -164,7 +170,9 @@ VideoCircle/
 | `src/lib/crypto` | All Web Crypto usage. No other folder may call `crypto.subtle` directly. |
 | `src/lib/meetings.ts` | Meeting lookup by code, `server-only`. Uses `supabaseAdmin` deliberately: RLS hides a meeting from the very guest opening its link, so the anon client would make every valid code look unknown. Existing here rather than in the page is what keeps the service-role client out of `src/app`. |
 | `src/lib/media` | Turns media-device failures into states the UI can render. Holds no React and no track lifecycle — that belongs to `src/hooks`. |
-| `src/lib/env.*.server` modules | The only place secrets are read out of `process.env`, one module per service so an absent credential fails only its own consumers. `import 'server-only'` on line one. `env.server.ts` is Supabase's; LiveKit's arrives in F09. |
+| `src/lib/meeting-state.ts` | The joinability decision, pure and free of `server-only` so every branch is testable without a database. The route handler does the IO and hands the row here. |
+| `src/lib/livekit/token-ttl.ts` | The TTL cap, split out for the same reason: `token.ts` cannot be imported without the LiveKit secrets present. |
+| `src/lib/env.*.server` modules | The only place secrets are read out of `process.env`, one module per service so an absent credential fails only its own consumers. `import 'server-only'` on line one. `env.server.ts` is Supabase's; `env.livekit.server.ts` is LiveKit's. |
 | `src/lib/supabase/admin.ts` | The only consumer of `serverEnv.SUPABASE_SERVICE_ROLE_KEY`. `import 'server-only'` on line one. |
 | `src/lib/livekit/token.ts` | The only place `serverEnv.LIVEKIT_API_SECRET` is used for signing. |
 | `src/types` | Shared type declarations only. No runtime values, no logic. |
@@ -224,10 +232,19 @@ and so would not appear until it mattered.
           ended_at is not null → 410  "This meeting has ended."
           now() >= expires_at  → 410  "This link has expired."
       → resolve identity: session user → `user:<uuid>`, else `guest:<random>`
+        Generated server-side and never accepted from the client — it is what the
+        participation webhook later reads a user id back out of.
       → mintAccessToken() signs a JWT scoped to that room only
       → 200 { serverUrl, token, identity }
-  → <LiveKitRoom serverUrl token connect>  → WebRTC to LiveKit Cloud SFU
-  → apply lobby mic/camera state to the local participant
+  → stopPreview()  → every lobby track released BEFORE connecting. A live preview
+                     track holds the camera the room is about to ask for, and on
+                     some devices that blocks the room acquiring it at all.
+  → <LiveKitRoom serverUrl token connect audio={micOn} video={cameraOn}
+                 options={memoised roomOptions(chosen device ids)}>
+      The options object must be memoised: <LiveKitRoom> re-creates its Room
+      whenever that object's identity changes, so a fresh literal per render
+      reconnects the call continuously and presents as a network fault.
+  → WebRTC to LiveKit Cloud SFU
 ```
 
 ### Encrypted chat message
@@ -702,7 +719,7 @@ export function apiError(code: string, message: string, status: number) {
 
 **Secrets and privilege**
 
-- Secrets leave `process.env` only inside a `server-only` env module under `src/lib`, **one per service**: `env.server.ts` holds Supabase's service-role key, and LiveKit's pair gets its own module in F09. Nothing outside those modules reads `process.env.SUPABASE_SERVICE_ROLE_KEY`, `process.env.LIVEKIT_API_KEY`, or `process.env.LIVEKIT_API_SECRET`.
+- Secrets leave `process.env` only inside a `server-only` env module under `src/lib`, **one per service**: `env.server.ts` holds Supabase's service-role key, `env.livekit.server.ts` holds LiveKit's pair. Nothing outside those modules reads `process.env.SUPABASE_SERVICE_ROLE_KEY`, `process.env.LIVEKIT_API_KEY`, or `process.env.LIVEKIT_API_SECRET`.
 - **One schema per service, not one for all secrets.** Each module parses at import so a misconfigured deploy fails at boot rather than at first request — but a single shared schema makes every consumer fail on every other service's absent credential. `/api/meetings` does not call LiveKit and must not fail to build because LiveKit is unconfigured; in production the same coupling would take meeting creation down during a LiveKit key rotation.
 - `serverEnv.SUPABASE_SERVICE_ROLE_KEY` is consumed in exactly one file, `src/lib/supabase/admin.ts`, which also begins with `import 'server-only'`.
 - The LiveKit API secret is consumed only in `src/lib/livekit/token.ts` and `src/lib/livekit/webhook.ts`, both `server-only`.

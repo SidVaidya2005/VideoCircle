@@ -18,8 +18,8 @@ progress, and what is next.
 ## Current Status
 
 **Phase:** Phase 2 — Lobby
-**Last completed:** 08 Lobby controls — toggles that release the hardware rather than muting it, device pickers, a server-prefilled name field, and copy-invite; preferences persist and are honoured before any device is touched. 20 E2E and 95 unit tests green
-**Next:** 09 Join handoff — `/api/token`, the LiveKit env module, and the Join control F07 and F08 both deliberately left out
+**Last completed:** 09 Join handoff — `/api/token` mints a one-hour, single-room grant after re-checking joinability; Join connects to LiveKit Cloud for real and Leave returns Home. 31 E2E and 104 unit tests green
+**Next:** Phase 2 checkpoint — run the gates, walk the phase diff against `architecture.md`, compact the journal, and promote binding decisions into `constraints.md`
 
 ---
 
@@ -43,7 +43,7 @@ progress, and what is next.
 
 - [x] 07 Media permissions and self-preview
 - [x] 08 Lobby controls
-- [ ] 09 Join handoff
+- [x] 09 Join handoff
 - [ ] Phase checkpoint — verify Phase 2 — Lobby is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
 
 ### Phase 3 — The call
@@ -102,6 +102,7 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 
 ## Key Decisions
 
+- **A valid-looking room code is never authorization.** `/api/token` re-reads the meeting and refuses unless `ended_at is null and now() < expires_at`, even though the page already checked existence at render: the endpoint is directly callable, and a meeting can close while someone sits in the lobby deciding. (F09)
 - **In the lobby, off releases the device — it never mutes.** A preview reading OFF while the camera light stays lit is what breaks trust in a lobby. It also keeps the SDK's muted-track trap out of reach: `setDeviceId` sets `pendingDeviceChange` and returns early on a muted track, so a device picker would appear to do nothing until the track was unmuted. (F08)
 - **A media request is only timed out when it cannot be waiting on a person.** `getUserMedia` does not settle until the permission prompt is answered, so a flat timeout fires on someone who took a moment to find the Allow button — a false failure on the most ordinary path in the product. Permission state decides the shape: granted means no prompt is coming, so each device is requested separately and timed; undecided means one combined untimed request. (F07)
 - **Secrets are parsed per service, not all in one schema.** `env.server.ts` parsed all three at module load, so `/api/meetings` — which never calls LiveKit — could not build while the LiveKit keys were blank. The same coupling would take meeting creation down during a LiveKit key rotation in production. (F06)
@@ -111,4 +112,3 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 - **The expiry sweep has a 2-hour grace period**, resolving a contradiction in `architecture.md` between "closes open rows" and "skips meetings with open rows". (F03)
 - **One participation policy, not two** — "read own" was a strict subset of "read co-participants", and Postgres evaluates every permissive policy per row. (F03)
 - **`_verify.mjs` now compares three copies of the token mirror** — kit, `library-docs.md`, and `globals.css`. The copy that ships was previously the one nothing checked. (F02)
-- **The shell is a `(shell)` route group**, so `/room/[code]` cannot inherit a footer into the call by forgetting to opt out. (F02)

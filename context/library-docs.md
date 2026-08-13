@@ -39,15 +39,22 @@ frequently and training data may be outdated.
 Server-only. This package must never appear in a client bundle — every module that
 imports it starts with `import 'server-only'`.
 
+The secrets come from `src/lib/env.livekit.server.ts`, never from `src/lib/env.ts`:
+that module holds `NEXT_PUBLIC_*` values only and is safe to import from a Client
+Component, so putting a signing key in it would ship the key to every visitor.
+
 ### Setup
 
 ```ts
 // src/lib/livekit/webhook.ts
 import 'server-only';
 import { WebhookReceiver } from 'livekit-server-sdk';
-import { env } from '@/lib/env';
+import { livekitEnv } from '@/lib/env.livekit.server';
 
-export const webhookReceiver = new WebhookReceiver(env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET);
+export const webhookReceiver = new WebhookReceiver(
+  livekitEnv.LIVEKIT_API_KEY,
+  livekitEnv.LIVEKIT_API_SECRET,
+);
 ```
 
 ### Minting an access token
@@ -55,7 +62,7 @@ export const webhookReceiver = new WebhookReceiver(env.LIVEKIT_API_KEY, env.LIVE
 ```ts
 import { AccessToken, type VideoGrant } from 'livekit-server-sdk';
 
-const at = new AccessToken(env.LIVEKIT_API_KEY, env.LIVEKIT_API_SECRET, {
+const at = new AccessToken(livekitEnv.LIVEKIT_API_KEY, livekitEnv.LIVEKIT_API_SECRET, {
   identity, // stable per participant; how LiveKit and our webhooks identify them
   name: displayName, // shown in the UI; not unique
   ttl: tokenTtlSeconds(expiresAt), // min(1h, expires_at − now); never outlives the meeting
@@ -953,23 +960,43 @@ export const env = PublicEnvSchema.parse({
 ```
 
 ```ts
-// src/lib/env.server.ts — secrets. Never reaches the browser.
+// src/lib/env.server.ts — Supabase's secret. Never reaches the browser.
 import 'server-only';
 
 import { z } from 'zod';
 
 const ServerEnvSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
-  LIVEKIT_API_KEY: z.string().min(1),
-  LIVEKIT_API_SECRET: z.string().min(1),
 });
 
 export const serverEnv = ServerEnvSchema.parse({
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+});
+```
+
+```ts
+// src/lib/env.livekit.server.ts — LiveKit's pair, in a module of its own.
+import 'server-only';
+
+import { z } from 'zod';
+
+const LiveKitEnvSchema = z.object({
+  LIVEKIT_API_KEY: z.string().min(1),
+  LIVEKIT_API_SECRET: z.string().min(1),
+});
+
+export const livekitEnv = LiveKitEnvSchema.parse({
   LIVEKIT_API_KEY: process.env.LIVEKIT_API_KEY,
   LIVEKIT_API_SECRET: process.env.LIVEKIT_API_SECRET,
 });
 ```
+
+**One module per service, not one for all secrets.** Both parse at import so a
+misconfigured deploy fails at boot rather than at the first request — which is
+exactly why they must not share a schema. A single module makes every consumer
+fail on every *other* service's absent credential: these two keys lived in
+`env.server.ts` until feature 06, where they stopped `/api/meetings` building at
+all, an endpoint that never calls LiveKit.
 
 **Rules:**
 
@@ -977,7 +1004,7 @@ export const serverEnv = ServerEnvSchema.parse({
 - Never return Zod's error object to the client; it describes internal field names.
 - Zod 4 moved string formats to top-level functions: `z.url()`, `z.email()`, `z.uuid()`. `z.string().url()` is deprecated.
 - `z.url()` alone only checks that `new URL()` parses. Any URL that must be reachable over a particular scheme needs the `protocol` option.
-- These two files are the only places `parse` (throwing) is correct — a misconfigured deploy should fail at boot, loudly.
+- These env modules are the only places `parse` (throwing) is correct — a misconfigured deploy should fail at boot, loudly.
 - Never add a secret to `env.ts`. It is compiled into the client bundle, so a secret there ships to every visitor.
 - Because both parse at import time, a unit test must `vi.stubEnv` then `vi.resetModules()` **before** `await import()`, or it gets the previous test's cached module.
 

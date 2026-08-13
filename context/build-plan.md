@@ -258,21 +258,26 @@ the module in F05.
 
 **UI:**
 
-- Distinct lobby states for "meeting does not exist", "meeting has ended", and "link expired" — each explaining what happened and offering to start a new meeting
-- Token-failure state that returns the user to the lobby with a retry, never a blank screen
+- "Join now" in the lobby, disabled only while the trimmed name is empty — never on a failed device, since joining anyway is the point of feature 07's states
+- Distinct states for "meeting does not exist", "meeting has ended", and "link expired". Each explains what happened and offers to start a new meeting, because a retry cannot help
+- Token-failure state that returns to the lobby with a retry, never a blank screen
+- A minimal connected state: connection status, headcount, and Leave
 
 **Logic:**
 
-- `POST /api/token` — Zod validation, then **meeting-state check before minting**: 404 unknown code, 410 ended, 410 expired
-- `getUser()`, identity resolution (`user:<uuid>` / `guest:<uuid>`), `mintAccessToken`
-- `src/lib/livekit/token.ts` with the `min(1h, expires_at − now)` TTL cap and single-room grant
-- A `server-only` env module parsing `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`. They were dropped from `env.server.ts` in F06, because one shared secret schema made `/api/meetings` fail to build over credentials it never uses — see `code-standards.md` → Environment Variables
-- Lobby transitions to the connected state, passing the chosen mic/camera state into `<LiveKitRoom>`
+- `POST /api/token` — Zod body, then **meeting-state check before minting**: 404 unknown, 410 ended, 410 expired
+- `getUser()`, identity resolution (`user:<uuid>` / `guest:<uuid>`, generated server-side and never accepted from the client), `mintAccessToken`
+- `src/lib/livekit/token.ts` with the `min(1h, expires_at − now)` TTL cap and a single-room grant carrying no admin claims
+- `src/lib/env.livekit.server.ts` parsing `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`. They were dropped from `env.server.ts` in F06, because one shared secret schema made `/api/meetings` fail to build over credentials it never uses
+- **Preview tracks are released before connecting**, not after. A live preview track holds the camera the room is about to ask for
+- `<LiveKitRoom>` carries the lobby's mic/camera state and device ids. Its `options` object **must be memoised**: the component re-creates its `Room` whenever that object's identity changes, so a fresh literal per render reconnects continuously and looks like a network fault
+- The joinability decision and the TTL cap live in pure modules free of `server-only`, so every branch is testable without a database or the LiveKit secrets
 
-**Verify:** Decode the returned JWT and confirm the grant names exactly one room and
-carries no admin claims. Then POST a well-formed code that was never created and
-confirm a 404 with no token in the response — a valid-looking code must not be
-enough to get into a room.
+**Verify:** `POST /api/token` with a well-formed code that was never created returns
+404 **with nothing token-shaped in the body** — a valid-looking code must not be
+enough to get into a room. Decode the returned JWT and confirm the grant names
+exactly one room, sets `roomJoin`, and carries no `roomAdmin`, `roomCreate`, or
+`roomList`. Then join for real against LiveKit Cloud and leave again.
 
 ---
 

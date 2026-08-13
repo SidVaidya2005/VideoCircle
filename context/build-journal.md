@@ -117,3 +117,29 @@ At that phase's checkpoint, the whole phase collapses to:
 - 7 new E2E specs: camera off drops live tracks to **zero** rather than muting; on again returns to exactly one and never two; the picker lists a labelled device; switching keeps the same document instance; preferences survive a reload; the name caps at `MAX_DISPLAY_NAME_LENGTH`; every control clears 44px at 360px with no overflow.
 - 11 new unit assertions over `preferences.ts` — malformed JSON, wrong types, missing fields, storage that throws on read, storage that throws on write, and a device id that no longer exists.
 - **Not verified:** every microphone path, because audio capture hangs on this machine. The camera equivalents exercise the same acquisition code. Recorded as a follow-up.
+
+### 2026-08-13 — 09 Join handoff
+
+**Decisions**
+
+- **F09 connects for real rather than stopping at the token.** A JWT that decodes correctly but is refused by the SFU is exactly the bug a token-only feature hides, and it would have been the third feature running whose primary action did nothing when pressed. The connected state is deliberately minimal — status, headcount, Leave — and feature 10 replaces it with the grid without touching the token path.
+- **Leave ships now.** Connecting with no way out is a trap: the only escape would be closing the tab, which also strands the meeting's `room_finished` bookkeeping behind a timeout.
+- **Preview tracks are released before connecting, never after.** A live preview track holds the camera the room is about to ask for, and on some devices that blocks the room acquiring it at all. `stopPreview` also bumps both acquisition generations, so a request still in flight is stopped on arrival instead of being adopted into a lobby that has already handed off.
+- **The joinability decision and the TTL cap are pure modules.** `server-only` throws under Node — verified, not assumed — so anything importing it cannot be unit-tested at all, and `token.ts` additionally cannot be imported without the LiveKit secrets present. Splitting the two decisions out means every branch of "can this be joined" and "how long may this token live" is tested directly rather than through a live database.
+- **`ended` is reported before `expired`.** A meeting that finished and then sat past its expiry is both; "this meeting has ended" is what actually happened, and the reverse order would tell someone their link expired when the call simply finished without them.
+- **Failures split by what the person can do next.** Unknown, ended and expired offer a way to start a new meeting, because a retry cannot help; everything else offers a retry. The copy is written once, in the route, and the client branches on the code — so the two cannot drift into describing the same failure differently.
+
+**Gotchas**
+
+- **`<LiveKitRoom>`'s `options` object must be memoised.** It re-creates its `Room` whenever that object's identity changes, so building it inline — which is the natural way to carry the lobby's device ids — reconnects the call on every render. The symptom would look like a network fault, not a code one.
+- **`server-only` throws when imported under Node**, which is what forced the pure-module split above. Checked directly rather than discovered through a failing test.
+- **Two library-docs snippets read LiveKit secrets from `src/lib/env.ts`,** the public module that by design cannot hold them — following either would have shipped a signing key to every visitor or, more likely, thrown at import. The same section still showed the merged `env.server.ts` that feature 06 undid. Both corrected here; this is the drift the checkpoint reconciliation exists to catch, found early only because the feature happened to read that section.
+- **Next injects its own `role="alert"` route announcer,** so an unscoped `getByRole('alert')` matches two elements. The test was scoped to `main`; unscoped it would have been ambiguous rather than wrong, but the same locator elsewhere could pass against the announcer while the real notice said nothing.
+
+**Verified**
+
+- `npm run lint` (0 errors, 3 pre-existing warnings), `npm run typecheck`, `npm run build`, `npm run test` (104 passing), `npm run test:e2e` (31 passing).
+- The two security criteria directly: a well-formed code that was never created returns 404 with nothing token-shaped anywhere in the body, and a decoded grant names exactly one room with `roomAdmin`, `roomCreate` and `roomList` all absent. Token expiry asserted against the one-hour cap rather than the meeting's 24-hour window.
+- 9 new unit assertions over `meetingJoinability` and `tokenTtlSeconds`, including the exact-expiry boundary and the both-ended-and-expired case.
+- 11 new E2E: real connection to LiveKit Cloud, Leave returning Home, the preview released before connecting, ended-versus-transient failure handling, and Join disabled until a name is entered.
+- The audio-acquisition hang on this machine did **not** block connecting: the room connects and the connected state renders regardless.

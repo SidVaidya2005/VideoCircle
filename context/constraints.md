@@ -46,7 +46,7 @@ feature. The feature refs below point at where each one will be applied.*
 
 ## Auth and secrets
 
-- **Secrets are parsed per service, never in one shared schema.** Each env module parses at import so a misconfigured deploy fails at boot, which means a single schema makes every consumer fail on every *other* service's missing credential. `/api/meetings` could not build at all while the LiveKit keys were blank; in production the same coupling would take meeting creation down during a LiveKit key rotation. LiveKit's own module arrives with its first consumer in F09. (F06)
+- **Secrets are parsed per service, never in one shared schema.** Each env module parses at import so a misconfigured deploy fails at boot, which means a single schema makes every consumer fail on every *other* service's missing credential. `/api/meetings` could not build at all while the LiveKit keys were blank; in production the same coupling would take meeting creation down during a LiveKit key rotation. LiveKit's pair lives in `env.livekit.server.ts`, added with its first consumer. (F06, F09)
 - **A display name comes from `profiles`, never `user_metadata`.** Supabase's `raw_user_meta_data` is user-editable and surfaces in `auth.jwt()`, so it is unsafe for any authorization decision — and using it for a name would put a second derivation beside the `auth.users` trigger's, free to drift from what call history shows. (F04)
 - **`/auth/signout` is POST-only, answered with 303.** A GET signout is fetched by `next/link` prefetch, by speculative loading, and by any third-party `<img>` — all of which would end a session with no user action. 307 would preserve the method and re-issue it as `POST /`. (F04)
 - **Auth redirects resolve against `NEXT_PUBLIC_SITE_URL`, never `request.url`.** Render terminates TLS at a proxy, so the request's own origin is not reliably the public one, and `X-Forwarded-Host` is caller-controlled. It also means exactly one redirect URL to allow-list in the Supabase dashboard. (F04)
@@ -61,6 +61,7 @@ feature. The feature refs below point at where each one will be applied.*
 
 ## Design system
 
+- **The shell is a `(shell)` route group.** Keeping the exclusion structural is what stops `/room/[code]` acquiring a header and footer into the call by someone forgetting to opt out. (F02)
 - **~70 tokens are mirrored into `:root`, and `@theme inline` holds nothing but `var()`.** The radii, type scale, tracking and easings were unguarded literals before that. The kit's 16-hue chromatic palette stays out until a feature earns a stop. (F02)
 - **shadcn primitives arrive per feature, never up front.** Each one is restyled to the kit on arrival, so generating a set "to have them" creates unreviewed components carrying the six things the kit forbids. (F02)
 - **`src/components/ui/button.tsx` is restyled and a plain `shadcn add button` will revert it.** The generated source ships six things this project forbids: `dark:` variants, `shadow-xs` on `outline`, `rounded-md` (0.4rem is the button radius), `font-medium` (only 400 and 700 are loaded, so 500 synthesizes), `ring-[3px]` (an arbitrary value), and 36px hit areas. The `xs` and `icon-xs` sizes were removed outright — at 24px they cannot clear the 44px floor. Re-apply all of this after any regeneration. (F02)
