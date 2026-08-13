@@ -387,6 +387,19 @@ than claimed.
 
 - Focus resolution order: manual pin, then active screen share, then active speaker
 - Active-speaker detection from LiveKit
+- **Active speaker orders the filmstrip and drives the speaking ring; it never triggers spotlight.** The two bullets above cannot both hold literally — a layout that focuses whoever is speaking flips several times a minute in a four-way conversation, and "return to grid when the share ends and nothing is pinned" says grid is the resting state. Grid is entered and left only by a share or a pin
+- **A pin whose participant has left is cleared**, falling to the share if one is running and otherwise back to grid. Keeping spotlight alive on the next speaker would leave a focused layout with nothing pinned and no obvious way out
+- **Pins are stored as the tile key** (`identity:source`), never a participant object, so a stale pin cannot retain a departed participant
+- **Two pin paths ship: the gesture and the menu.** Double-click or long-press on a tile, plus a per-tile Pin/Unpin menu that is the keyboard and screen-reader path. The menu button shows on hover or focus where a pointer is fine and is always visible where hover is not available — otherwise it is unreachable on exactly the devices that cannot hover. A hover tooltip names the gesture on desktop
+- **The filmstrip excludes the focused tile only.** With Ada's screen focused, Ada's camera stays in the strip — you keep her face at the moment she is presenting and talking
+- **`orderCallTiles` is unchanged from F12.** Spotlight consumes the same ordered, capped list, so the share-first sort is what makes a share the natural focus and nothing is unpicked
+
+**Verify:** Two contexts prove a share switching the receiver's layout to one
+focused tile plus a filmstrip and returning to grid when it stops; a double-click
+pinning and unpinning; the menu pinning without a pointer gesture; and a pin
+outranking a running share. Unit tests cover focus resolution, including a pinned
+key whose participant has gone. At 360px in spotlight the page has no horizontal
+overflow and every control in `main` clears 44px.
 
 ### 14 Participant list panel
 

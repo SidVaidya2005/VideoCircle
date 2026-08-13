@@ -161,3 +161,30 @@ directions, including that the control is not hiding in MORE. Screenshots confir
 the promoted share tile, the unmirrored share beside the mirrored self-camera, and
 screen share sitting in MORE on a narrow window while remaining on the bar at
 `sm:` and up.
+
+### 13 Speaker and spotlight view — 2026-08-13
+
+**Decisions**
+
+- **The build plan contradicted itself and the contradiction was resolved in favour of the grid.** "Focus resolution order: manual pin, then active screen share, then active speaker" cannot coexist with "return to grid when the share ends and nothing is pinned" — if speech could focus, the grid would never be the resting state. `resolveFocusKey` takes no speaker argument at all, so the layout *cannot* follow whoever is talking. Active speakers reach the filmstrip through `useVisualStableUpdate`, which already promotes them, and ring their own tile.
+- **A pin whose participant has left is cleared**, falling to a running share and otherwise back to grid. Keeping spotlight alive on the next speaker would leave a focused layout with nothing pinned and no obvious way out.
+- **Pins are stored as the tile key**, not a participant object — a string cannot keep a departed participant alive.
+- **Two pin paths ship.** The gesture is a double-click or long-press; the per-tile menu is the keyboard and screen-reader path, and is what makes a hidden gesture defensible. The menu button hides on hover-capable devices and is always visible where hover does not exist, since a hover-revealed control is unreachable on exactly the phones that cannot hover.
+- **The filmstrip drops only the focused tile.** With Ada's screen focused, Ada's camera stays in the strip — you keep her face at the moment she is presenting and talking.
+
+**Gotchas**
+
+- **The memo comparator needed the new props, and this is the second time.** `ParticipantTile` gained `pinned` and `size`; a comparator that ignored them would have left a pinned tile rendering as unpinned — the same defect class as the `isMuted` comparison F11 found. `onTogglePin` is deliberately excluded: a fresh closure every render would defeat the memo outright while always closing over the correct key.
+- **Counting lists could not detect spotlight.** With nobody else in the call the filmstrip is empty and one list renders either way. Naming the lists — `Focused participant` and `Other participants` — fixed the test and is a real accessibility improvement: two unnamed lists announce as "list" twice.
+- **`animate-tile-in` makes every hit area measure small while it plays.** Its `scale(0.96)` put the new tile menu button at 43.53px and failed both 44px sweeps. Measured once, that is a false failure; polled, it waits out the 700ms and still catches a control that is genuinely undersized. Both specs now poll.
+- **One screen-share spec turned out to be a real product finding, after three wrong diagnoses.** It failed under parallel load and passed alone, so it looked like a timeout — a 20s budget changed nothing. It looked like the stub, so the canvas source was swapped back in — no change. It looked like `dynacast`, so that was switched off and measured — the solo case got *worse*, ruling it out. What is actually true: **a screen share published into a room with nobody else in it is unpublished again within about a second, roughly half the time**, and with one other participant present it is stable across many runs. The mechanism is still unknown and is recorded as an open follow-up for F24. The spec now tests the two-participant case, which is what the feature is for, rather than encoding a known-bad one. Our UI was correct throughout: holding no sharing state, it followed the unpublish instead of lying about it.
+- **Diagnosis cost more than the feature.** Two of the wrong turns were self-inflicted: an early debug script called `getDisplayMedia` directly before clicking, which was itself enough to disturb the publish, and the `ended` readings that pointed at the canvas were the clone-and-stop behaviour discovered in F12 all over again. Read the harness before blaming the product, and then read it again.
+
+**Verified:** 55 e2e specs and 151 unit tests pass; `lint`, `typecheck` and `build`
+clean. Two and three contexts prove a share switching the receiver's layout on its
+own and releasing it when stopped, the sharer's camera staying in the strip, and a
+pin outranking a running share. Double-click pins and unpins; the menu does the
+same without a pointer gesture. Unit tests cover focus resolution including a
+pinned key whose participant has gone. At 360px in spotlight there is no
+horizontal overflow and every control in `main` clears 44px. Screenshots confirm
+the vertical strip from `lg:` and the horizontal one below it.
