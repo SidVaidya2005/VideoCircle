@@ -28,7 +28,8 @@
   .ctrl.on{background:var(--white-1);color:var(--bg-1)}
   .ctrl.on:hover{background:var(--white-2)}
 
-  /* self-warning = red glyph on a red-tinted ground. Your mic/cam only. */
+  /* self-warning = red glyph on a red-tinted ground. Your own MIC only —
+     a stopped camera is neutral, since off-camera is a preference, not a warning. */
   .ctrl.warn{background:var(--red-5);color:var(--red-1)}
   .ctrl.warn:hover{background:var(--red-4)}
 
@@ -118,7 +119,7 @@
 <div class="note">
   <strong>Engaged is a white fill, never red.</strong> Several toggles can be engaged at once in a call;
   if "on" were red, red would stop meaning danger exactly when Leave needs it most. Red appears twice
-  only: your own muted mic or stopped camera, and Leave.<br>
+  only: your own muted mic, and Leave. A stopped camera is neutral — the slashed icon carries it.<br>
   <strong>Press does not shrink.</strong> The kit inverts the fill instead, and keyboard focus reuses
   that same inverted state — so focus and press look identical by design.<br>
   <strong>Transitions are asymmetric</strong> — <code>50ms ease-out</code> in, <code>250ms ease-in-out</code>

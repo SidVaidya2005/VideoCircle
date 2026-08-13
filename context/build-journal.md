@@ -103,3 +103,30 @@ back to one tile and "Only you"; a camera-off join keeps a named tile with no
 persists and Leave stays enabled; no horizontal overflow at 360px. Red appears in
 exactly two places in `src/components/room/`, both audited by grep: the local
 muted dot and the Leave control.
+
+### 11 In-call control bar — 2026-08-13
+
+**Decisions**
+
+- **The full bar shipped with its unbuilt controls disabled**, against the recommendation to ship only what acts. Chat, participants and reactions use the kit's own disabled recipe and carry `aria-disabled`; F14, F15 and F19 each remove one flag and add one handler. The cost, accepted knowingly: MORE opens to three disabled rows until F14.
+- **Screen share is absent rather than disabled**, so absence keeps one meaning — your device cannot do this. It is already absent on every mobile browser, and a second meaning would have cost the rule its clarity.
+- **Camera-off is neutral; only your own muted mic is red.** `Design/README.md` and the `control-states.html` note both said "mic *or camera*", contradicting `DeviceToggle`, which has passed `signalWhenOff` for the mic alone since F08. The docs were corrected to match the code rather than the reverse: off-camera is a preference, and the slashed icon carries it.
+- **Leave confirms in place** rather than in a modal, which would cover the people you are deciding whether to leave. `armed` lives in the bar, not the control, because only the bar knows another control was pressed.
+- **The responsive collapse is CSS.** Secondary controls are declared once and rendered twice — inline at `sm:`, in the dropdown below it — so there is no measurement inside the call tree and no SSR mismatch.
+
+**Gotchas**
+
+- **A memo comparator that reads a mutable object can never see it change.** `ParticipantTile` compared `publication.isMuted`; LiveKit mutates the publication in place, so `previous` and `next` resolved to the same live value and the tile never re-rendered. Turning a camera off mid-call left a dead `<video>` on every other participant's screen. F10 shipped this — its camera-off test joined with the camera already off, exercising the placeholder path and never the muted-publication one. Mute now comes from `useIsMuted`, whose own state re-renders the tile whatever the memo decides, and the comparator reads only immutable facts.
+- **Playwright's role engine pierces shadow DOM; `querySelectorAll` does not.** An unscoped `getByRole('button')` hit-area sweep measured Next's dev-tools badge at 32px and failed. Scope to `main` — the same fix the route announcer needed at F09.
+- **Two React rules were broken and caught by lint, not by behaviour**: a ref written during render in `use-call-shortcuts`, and `setState` inside an effect in the first Leave control. The second was a design smell — the state belonged to the parent, which is where it went.
+- **Three existing specs encoded the one-press Leave contract** and failed the moment it became two. They were updated, not worked around; a passing suite that asserts the old contract is worse than a red one.
+- **Two real-SFU specs outran the 30s default** once the suite ran them in parallel — the reconnect test needs two offline transitions, and the two-context camera test needs two joins before it starts. Both now set their own budget.
+- **The generated tooltip carried two arbitrary pixel values**, both on the arrow. Dropping the arrow removed them and the brand has no arrow precedent anyway — a tooltip here is a chip, not a speech bubble.
+
+**Verified:** 45 e2e specs and 134 unit tests pass; `lint`, `typecheck` and `build`
+clean. Camera off drops live tracks to zero and the other participant's tile
+switches to initials, proven with two contexts. `d` and `e` toggle; Cmd-D and
+Ctrl-D do not. Leave takes two presses and pressing the mic disarms it. At 360px
+the bar keeps mic, camera, MORE and Leave, every control in `main` clears 44px on
+both axes, and nothing overflows. Screenshots confirm the muted-mic red, the
+neutral camera-off, the dimmed stubs, and the phone collapse.

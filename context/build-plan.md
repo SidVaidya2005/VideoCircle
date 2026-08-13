@@ -318,7 +318,7 @@ participants is confirmed by hand, being the one claim no assertion reaches.
 
 **UI:**
 
-- Mic, camera, screen share, chat, participants, reactions, and leave controls
+- Mic, camera, chat, participants, reactions, and leave controls, built to the `control-states.html` recipe
 - Active/inactive styling, tooltips on desktop, 44px minimum targets on touch
 - Bar pinned above the safe-area inset on mobile
 - Leave confirmation
@@ -328,6 +328,21 @@ participants is confirmed by hand, being the one claim no assertion reaches.
 - `useLocalParticipant` toggles for microphone and camera
 - Keyboard shortcuts: `d` mic, `e` camera, suppressed while the chat composer has focus
 - Controls remain interactive during a reconnect
+- **The full bar ships now, with the four unbuilt controls in the kit's disabled state** — `rgba(255,255,255,.03)` ground, `--fg-4` glyph, `aria-disabled`. F12, F14, F15 and F19 each remove one flag and wire one handler. The known cost: MORE opens to three disabled rows until F14 lands
+- **Screen share is absent until F12, not disabled.** The specimen's rule is that an unavailable *capability* is absent, and it is already absent on every phone — so if the control is on the bar, your device can share. Two meanings for absence would cost that rule its clarity
+- **Camera-off is neutral; only your muted mic is red.** `Design/README.md` → Colour in a call and the `control-states.html` note both said "mic *or camera*", contradicting `DeviceToggle`, which has passed `signalWhenOff` for the mic alone since F08. The docs were corrected to match the code — off-camera is not a warning
+- **Leave confirms in place**, widening to `LEAVE?` rather than opening a modal over the people you are deciding whether to leave. Reverts on a timeout or when another control is pressed. Leaving is recoverable: the same link rejoins
+- **The responsive collapse is CSS, not a media-query hook.** Secondary controls are defined once and rendered twice — inline at `sm:` and up, inside the MORE dropdown below it — so there is no measurement inside the call tree and no SSR mismatch. MORE reuses the `dropdown-menu` restyled at F04; the specimen's own trigger declares `aria-haspopup="menu"`, which is the dropdown contract rather than the sheet one
+
+**Verify:** Pressing camera off drops live video tracks to **zero**, not to a muted
+track, and the other participant's tile switches to initials — proven with two
+contexts. `d` and `e` toggle from the keyboard; the typing guard is unit-tested
+across inputs, contenteditable, modifiers and key repeat, since the composer that
+would prove it end to end arrives at F19. Leave takes two presses and only the
+second navigates. At 360px the bar keeps mic, camera, MORE and Leave, every
+control clears 44px on both axes, and nothing overflows horizontally. The mic
+toggle stays enabled and responsive while `setOffline` holds the room in
+reconnecting.
 
 ### 12 Screen sharing
 

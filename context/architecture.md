@@ -57,6 +57,7 @@ filled in by the feature that needs it. Built so far:
 - **F08** — the rest of `src/components/lobby/`, `src/hooks/{use-media-devices,use-copy-to-clipboard}.ts`, `src/lib/media/preferences.ts`. `use-media-preview.ts` grew from one-shot acquisition into the lobby's device controller, and `section-overline.tsx` moved from `home/` to `ui/` at its third caller
 - **F09** — `src/app/api/token/`, `src/lib/env.livekit.server.ts`, `src/lib/meeting-state.ts`, `src/lib/livekit/{token,token-ttl,room-options,request-token}.ts`, `src/components/room/{room-shell,connected-panel}.tsx`, `src/components/lobby/join-failure-notice.tsx`. First consumers of `livekit-server-sdk` and `@livekit/components-react`
 - **F10** — `src/components/room/{call-stage,video-grid,participant-tile,participant-count}.tsx` and `src/lib/{room-grid,initials}.ts`. `connected-panel.tsx` was deleted, its status strip and Leave absorbed into `call-stage.tsx`. The grid is ours rather than `GridLayout`/`ParticipantTile` — see `library-docs.md` → Rendering the participant grid
+- **F11** — `src/components/room/{control-bar,control-button,leave-control}.tsx`, `src/hooks/use-call-shortcuts.ts`, `src/lib/keyboard.ts`, and the `tooltip` primitive. First consumer of `lucide-react`
 
 Not yet built: `api/livekit/webhook`, `lib/livekit/webhook.ts`,
 `lib/crypto/chat-message.ts`, `types/meeting.ts`, the `history` page, and
@@ -103,7 +104,7 @@ VideoCircle/
     │       ├── token/route.ts         → POST: mint a LiveKit AccessToken
     │       └── livekit/webhook/route.ts → POST: LiveKit participant/room events
     ├── components/
-    │   ├── ui/                        → shadcn primitives (button, dropdown-menu, input; others
+    │   ├── ui/                        → shadcn primitives (button, dropdown-menu, input, tooltip; others
     │   │                                added per feature) plus section-overline, the brand's own
     │   ├── shell/                     → wordmark, site header, site footer, auth menu
     │   ├── home/                      → hero, call preview, how-it-works, feature grid, join-by-code
@@ -112,14 +113,16 @@ VideoCircle/
     │   │                                pickers, display-name field, copy-invite, join-failure
     │   │                                notice, lobby controls
     │   ├── room/                      → room-experience (hosts lobby then call), room-shell
-    │   │                                (<LiveKitRoom>), call-stage (status / grid / leave),
-    │   │                                video-grid, participant-tile, participant-count, and
-    │   │                                later the control bar, panels, reactions
+    │   │                                (<LiveKitRoom>), call-stage (status / grid / controls),
+    │   │                                video-grid, participant-tile, participant-count,
+    │   │                                control-bar, control-button, leave-control, and later
+    │   │                                the panels and reactions
     │   ├── chat/                      → encrypted chat panel, composer, message list
     │   └── history/                   → history table, empty state
     ├── hooks/                         → use-media-preview (owns the lobby's tracks),
     │                                    use-media-devices, use-copy-to-clipboard,
-    │                                    use-chat-key, use-encrypted-chat, …
+    │                                    use-call-shortcuts, use-chat-key,
+    │                                    use-encrypted-chat, …
     ├── lib/
     │   ├── auth/
     │   │   ├── sign-in.ts             → signInWithGoogle + the chat-key fragment stash
@@ -144,6 +147,7 @@ VideoCircle/
     │   │   └── preferences.ts         → validated localStorage for device choices
     │   ├── room-grid.ts               → pure headcount → column classes, and the visible/
     │   │                                 overflow split against MAX_VISIBLE_TILES
+    │   ├── keyboard.ts                 → pure typing-target and bare-keypress predicates
     │   ├── initials.ts                 → pure display name → up to two characters
     │   ├── meeting-state.ts           → pure joinability decision (open/ended/expired)
     │   ├── env.livekit.server.ts      → Zod-parsed LiveKit secrets, server-only

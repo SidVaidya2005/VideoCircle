@@ -18,8 +18,8 @@ progress, and what is next.
 ## Current Status
 
 **Phase:** Phase 3 — The call
-**Last completed:** 10 Room connection and video grid — our own grid and tile on the unstyled LiveKit primitives, CSS reflow keyed to headcount, local participant first and mirrored, speakers promoted above 12. Verified with two real contexts against LiveKit Cloud; all 36 e2e and 126 unit tests pass
-**Next:** 11 In-call control bar — replaces the stage's temporary Leave with the real bar
+**Last completed:** 11 In-call control bar — the full bar to the kit's control recipe, with chat/participants/reactions disabled until their features land, screen share absent until F12, `d`/`e` shortcuts, and Leave confirming in place. Caught and fixed an F10 memo bug that kept a dead `<video>` on a tile after its camera was turned off. 45 e2e and 134 unit tests pass
+**Next:** 12 Screen sharing — adds the one control F11 deliberately left off the bar
 
 ---
 
@@ -49,7 +49,7 @@ progress, and what is next.
 ### Phase 3 — The call
 
 - [x] 10 Room connection and video grid
-- [ ] 11 In-call control bar
+- [x] 11 In-call control bar
 - [ ] 12 Screen sharing
 - [ ] 13 Speaker and spotlight view
 - [ ] 14 Participant list panel
@@ -103,6 +103,7 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 
 ## Key Decisions
 
+- **A memo comparator must read only immutable facts.** `ParticipantTile` compared `publication.isMuted`, which LiveKit mutates in place — both sides of the comparison resolved to the same live value, so a camera turned off mid-call left a dead `<video>` on every other screen. Mute state now comes from `useIsMuted`, whose own state re-renders the tile regardless of what the memo decides. (F11)
 - **The prebuilt LiveKit grid was rejected, not overlooked.** `GridLayout` lays out nothing without `@livekit/components-styles`, an unapproved dependency, and `ParticipantTile` ships four pieces of chrome the design system contradicts. Ours is built on the unstyled primitives — `useTracks`, `VideoTrack`, `useIsSpeaking`, `useIsMuted`, `useVisualStableUpdate`. (F10)
 - **Pure decision modules exist because `server-only` throws under Node.** Joinability and the token TTL cap are free of it so every branch is testable without a database or the LiveKit secrets; the route handler does the IO around them. (F09)
 - **A valid-looking room code is never authorization.** `/api/token` re-reads the meeting and refuses unless `ended_at is null and now() < expires_at`, even though the page already checked existence at render: the endpoint is directly callable, and a meeting can close while someone sits in the lobby deciding. (F09)
@@ -112,4 +113,3 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 - **A fragment is never case-normalised.** `parseRoomCodeInput` lowercases the room code but splits the fragment off first: the chat key is base64url and case-sensitive, so normalising the whole pasted string would silently decode to the wrong bytes. Now an invariant in `architecture.md` → Encryption. (F05)
 - **The session is read server-side in the `(shell)` layout**, which makes Home and Call History dynamic. A client-side read would keep Home static at the cost of showing a signed-out header on every load before correcting — worst on exactly the cold free-tier load this project already fights. (F04)
 - **RLS helpers live in `private` and keep `EXECUTE` for `authenticated`** — the schema is what hides them; revoking the grant breaks every policy read. (F03)
-- **The expiry sweep has a 2-hour grace period**, resolving a contradiction in `architecture.md` between "closes open rows" and "skips meetings with open rows". (F03)

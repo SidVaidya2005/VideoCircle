@@ -185,7 +185,7 @@ One-accent-per-screen does not survive contact with a call, which has many
 simultaneous status colours. The allocation is fixed here rather than decided per
 component:
 
-- **Red (`--red-1`)** — destructive and self-warning only: the Leave control, and *your own* mic muted or camera stopped. Nothing else.
+- **Red (`--red-1`)** — destructive and self-warning only: the Leave control, and *your own* microphone muted. Nothing else. **Not a stopped camera** — off-camera is not a warning, it is a preference, and the slashed icon already carries it. This was decided in the lobby at F08 and applied to the call bar at F11; the two surfaces must not disagree about what the same control means.
 - **White fill (`--white-1`) with a dark glyph** — the engaged state of any toggle. This is the kit's own inverted press state. **Engaged is white, not red** — several toggles can be on at once, and if "on" meant red, red would stop meaning danger exactly when Leave needs it most.
 - **Neutrals** — everything else. A *remote* participant's mute dot is `--fg-3`; twelve red badges on a twelve-person grid would destroy the signal.
 - **Connection quality** — `green-1` / `yellow-1` / `red-1`, as a small marker only, never a filled surface.
