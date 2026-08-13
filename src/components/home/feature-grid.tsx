@@ -2,13 +2,8 @@ import { SectionOverline } from '@/components/ui/section-overline';
 
 const FEATURES = [
   {
-    title: 'No account',
-    body: 'Guests open the link and join. Signing in is optional, and only buys call history.',
-    chip: 'no sign-up',
-  },
-  {
     title: 'Encrypted chat',
-    body: 'Messages are AES-GCM encrypted in the browser. The key rides the link fragment.',
+    body: "Messages are AES-GCM encrypted in the browser. So you don't have to worry",
     chip: 'never sent to us',
   },
   {
@@ -22,9 +17,14 @@ const FEATURES = [
     chip: '/history',
   },
   {
-    title: 'Built for phones',
-    body: 'Every layout starts at 360px and every control clears a 44px target.',
-    chip: '360px first',
+    title: 'Works great on phones',
+    body: 'Optimised for every screen size.',
+    chip: 'User Experience',
+  },
+  {
+    title: 'Works without an account',
+    body: 'Guests open the link and join. Signing in is optional, and only buys call history.',
+    chip: 'no sign-up',
   },
   {
     title: 'Nothing to install',
@@ -39,9 +39,7 @@ export function FeatureGrid() {
       <div className="mx-auto flex max-w-5xl flex-col gap-8">
         <div className="flex flex-col gap-3">
           <SectionOverline>What you get</SectionOverline>
-          <h2 className="max-w-2xl text-xl leading-snug sm:text-2xl">
-            Everything a call needs. Nothing it doesn&apos;t.
-          </h2>
+          <h2 className="max-w-2xl text-xl leading-snug sm:text-2xl">Everything a call needs.</h2>
         </div>
 
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

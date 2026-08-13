@@ -25,7 +25,7 @@ export function HowItWorks() {
         <div className="flex flex-col gap-3">
           <SectionOverline>How it works</SectionOverline>
           <h2 className="max-w-2xl text-xl leading-snug sm:text-2xl">
-            Three steps, and none of them is signing up.
+            Three easy steps to get started
           </h2>
         </div>
 
