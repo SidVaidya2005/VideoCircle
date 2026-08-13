@@ -231,18 +231,28 @@ the module in F05.
 
 **UI:**
 
-- Mic and camera toggles with unmistakable on/off states and `aria-pressed`
-- Camera, microphone, and speaker dropdowns listing real device labels
-- Display-name field — prefilled and read-only-ish for signed-in users, required for guests
-- "Join" primary action; copy-link secondary action
-- Full-height layout using `dvh`, control row reachable one-handed on a phone
+- Mic and camera toggles with unmistakable on/off states and `aria-pressed`. The engaged state is the kit's white fill; a muted **own** microphone is one of only two sanctioned uses of `signal`
+- Camera and microphone pickers listing real device labels
+- Display-name field — prefilled from `profiles` server-side for signed-in users, editable, required for guests
+- Copy-invite-link secondary action
+- Full-height `dvh` layout, controls bottom-weighted so they stay in one-handed reach
 
 **Logic:**
 
-- `enumerateDevices` after permission is granted so labels are populated
-- Switching a device replaces the preview track without tearing down the page
-- Persist device and mic/camera preferences to `localStorage`, keyed by device id
+- **Off releases the device; it never mutes.** A preview reading OFF while the camera light stays lit destroys trust, and a muted track makes `setDeviceId` defer silently
+- Enumeration through `Room.getLocalDevices(kind, false)` — the `false` matters, or the SDK raises a second permission prompt. Runs only once permission is known, because labels are empty before that
+- Switching while on calls `track.setDeviceId()`, which restarts capture in place; switching while off just records the choice for the next acquire
+- Preferences persisted to `localStorage` and Zod-validated on read, since storage is user-editable. Honoured *before* any device is touched, so leaving with the camera off means it is not opened on the way back in
+- A remembered device that has since vanished falls back to the system default: the stored id is passed as a bare `deviceId`, an ideal constraint rather than `{exact}`
 - Name validation against `MAX_DISPLAY_NAME_LENGTH`
+
+**Three things the build changed from this entry, and why:**
+
+- **No Join control.** Minting a token and connecting are both F09, and a primary action that does nothing when pressed reads as broken. Same call as F07's, kept consistent.
+- **The speaker picker moved out.** Nothing in the lobby plays remote audio, so the control could not be verified here and would silently do nothing on Firefox and iOS, which cannot honour `setSinkId`. It belongs with the in-call device controls.
+- **`SectionOverline` moved to `src/components/ui/`, and the clipboard logic became `useCopyToClipboard`.** The lobby is the third surface needing the overline and the second needing clipboard handling, including its hang timeout. Duplicating either would have been the drift `code-standards.md` warns about.
+
+**Verify:** Automated — camera off drops live tracks to **zero** (a mute would still read as one, which is the point), on again returns to exactly one, the picker lists a labelled device, switching keeps the same document, preferences survive a reload, the name caps at the shared maximum, and every control clears 44px at 360px. Manual — the microphone equivalents, since audio capture hangs on the development machine.
 
 ### 09 Join handoff
 

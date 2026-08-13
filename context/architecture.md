@@ -54,6 +54,7 @@ filled in by the feature that needs it. Built so far:
 - **F05** — `src/lib/room-code.ts`, `src/lib/parse-room-code.ts`, the hero's join-by-code form, and the `input` primitive
 - **F06** — `src/lib/crypto/{base64url,chat-key}.ts`, `src/app/api/meetings/`, and the hero's share panel. `src/middleware.ts` became `src/proxy.ts` at the Phase 1 checkpoint, per Next 16's rename
 - **F07** — `src/app/room/[code]/{page,not-found}.tsx`, `src/components/room/room-experience.tsx`, `src/components/lobby/{self-preview,media-state-notice}.tsx`, `src/hooks/use-media-preview.ts`, `src/lib/media/classify-media-error.ts`, `src/lib/meetings.ts`. First consumer of `livekit-client`
+- **F08** — the rest of `src/components/lobby/`, `src/hooks/{use-media-devices,use-copy-to-clipboard}.ts`, `src/lib/media/preferences.ts`. `use-media-preview.ts` grew from one-shot acquisition into the lobby's device controller, and `section-overline.tsx` moved from `home/` to `ui/` at its third caller
 
 Not yet built: `api/{token,livekit}`, `lib/livekit/`,
 `lib/crypto/chat-message.ts`, `types/meeting.ts`, the `history` page, and
@@ -100,18 +101,20 @@ VideoCircle/
     │       ├── token/route.ts         → POST: mint a LiveKit AccessToken
     │       └── livekit/webhook/route.ts → POST: LiveKit participant/room events
     ├── components/
-    │   ├── ui/                        → shadcn primitives (button, dropdown-menu, input; others added per feature)
+    │   ├── ui/                        → shadcn primitives (button, dropdown-menu, input; others
+    │   │                                added per feature) plus section-overline, the brand's own
     │   ├── shell/                     → wordmark, site header, site footer, auth menu
     │   ├── home/                      → hero, call preview, how-it-works, feature grid, join-by-code
     │   │                                form, start-meeting + share panel, auth-error notice
-    │   ├── lobby/                     → self-preview, media-state notice, device pickers,
-    │   │                                pre-join controls
+    │   ├── lobby/                     → self-preview, media-state notice, device toggles and
+    │   │                                pickers, display-name field, copy-invite, lobby controls
     │   ├── room/                      → room-experience (hosts lobby then call), grid, tiles,
     │   │                                control bar, panels, reactions
     │   ├── chat/                      → encrypted chat panel, composer, message list
     │   └── history/                   → history table, empty state
-    ├── hooks/                         → use-media-preview, use-media-devices, use-chat-key,
-    │                                    use-encrypted-chat, …
+    ├── hooks/                         → use-media-preview (owns the lobby's tracks),
+    │                                    use-media-devices, use-copy-to-clipboard,
+    │                                    use-chat-key, use-encrypted-chat, …
     ├── lib/
     │   ├── auth/
     │   │   ├── sign-in.ts             → signInWithGoogle + the chat-key fragment stash
@@ -129,7 +132,8 @@ VideoCircle/
     │   │   ├── chat-key.ts            → key generation, export, import, hash parsing
     │   │   └── chat-message.ts        → encrypt/decrypt the message envelope
     │   ├── media/
-    │   │   └── classify-media-error.ts → getUserMedia rejection → a renderable state
+    │   │   ├── classify-media-error.ts → getUserMedia rejection → a renderable state
+    │   │   └── preferences.ts         → validated localStorage for device choices
     │   ├── meetings.ts                → meeting lookup by code, server-only
     │   ├── room-code.ts               → generation and validation of meeting codes
     │   ├── parse-room-code.ts         → pulls a code + opaque fragment out of a pasted code or link
@@ -152,7 +156,7 @@ VideoCircle/
 | `src/app/(pages)` | Routing, layout composition, and Server Component data fetching. Owns no business logic and no direct third-party SDK calls beyond the Supabase server client. |
 | `src/app/api` | HTTP boundary: parse, authorize, delegate to `src/lib`, shape the response. Contains no React and no rendering logic. |
 | `src/components` | Presentation and local interaction state. Never reads `process.env` secrets, never constructs a Supabase admin client, never mints tokens, never talks to Postgres directly. |
-| `src/components/ui` | Unmodified-in-spirit shadcn primitives. No product concepts — nothing here may know what a meeting is. |
+| `src/components/ui` | Presentational primitives with no product knowledge — the shadcn-generated set plus the brand's own `section-overline`. Nothing here may know what a meeting is. |
 | `src/components/shell` | The header/footer chrome rendered by the `(shell)` route group, plus the wordmark. Knows nothing about auth — the header takes a sign-in slot as a prop. |
 | `src/hooks` | Reusable client-side stateful logic bridging LiveKit/Web Crypto to React. No JSX. |
 | `src/lib` | Framework-agnostic logic and third-party client construction. Imports nothing from `src/components` or `src/app`. |
@@ -736,6 +740,8 @@ export function apiError(code: string, message: string, status: number) {
 
 - Local camera and microphone tracks are acquired only through LiveKit APIs (`createLocalTracks`, `Room`, `setCameraEnabled`, `setMicrophoneEnabled`); `navigator.mediaDevices.getUserMedia` is never called directly in application code.
 - Lobby preview tracks are stopped before, or handed to, the room connection — a preview track is never left running after join.
+- A device turned off in the lobby is **released, not muted**. `track.stop()`, and the reference dropped. Muting leaves the hardware light on under a UI that says off, and the SDK defers `setDeviceId` on a muted track, so a device picker would silently stop working.
+- Device enumeration passes `requestPermissions: false`. `Room.getLocalDevices` will otherwise raise a permission prompt of its own, and the lobby owns the only prompt in the product.
 - Device acquisition never leaves a surface waiting indefinitely. `getUserMedia` is not guaranteed to settle, so any request that cannot be waiting on a person is bounded by a timeout and resolves to a rendered state. A request that *may* still be waiting on a permission prompt is never timed out — the person is not a fault condition.
 - Tracks that arrive after the code that asked for them has moved on are stopped at the point they arrive. An abandoned request still opens the device, and nothing downstream holds a reference to close it.
 - The screen-share control is not rendered when `navigator.mediaDevices.getDisplayMedia` is undefined, which is the case on iOS and Android browsers.

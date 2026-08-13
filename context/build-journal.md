@@ -91,3 +91,29 @@ At that phase's checkpoint, the whole phase collapses to:
 - 8 unit assertions over the classifier, covering both spellings of each DOMException, an unrecognised one, and non-object throws.
 - Bundle claim checked by serving the production build: Home requests no chunk containing SDK symbols; its only `livekit` match is the `NEXT_PUBLIC_LIVEKIT_URL` value. Home's first load measures ~341 kB gzipped against a 200 kB target — pre-existing, recorded as a follow-up for F22.
 - **Not verified:** the denied, no-device, and in-use states in a real browser. Recorded as a follow-up.
+
+### 2026-08-13 — 08 Lobby controls
+
+**Decisions**
+
+- **Off releases the device; it never mutes.** A preview reading OFF while the camera light stays lit is the thing that destroys trust in a lobby, so the toggle calls `track.stop()` and drops the reference. It also keeps the SDK's muted-track trap unreachable: `setDeviceId` sets `pendingDeviceChange` and returns early on a muted track, so a device picker would appear to do nothing until the track was unmuted. The cost — re-acquisition can be slow or fail — is already covered by F07's timeout and failure classification.
+- **Switching uses `track.setDeviceId()` while on, and only records the choice while off.** The SDK restarts capture in place rather than republishing, which is why the preview does not flicker and the page never reloads.
+- **Preferences are honoured before any device is touched.** Someone who left with the camera off must not have it opened again on the way back in, so the stored set is read first and a device nobody asked for is never acquired. Validated with Zod on read, because `localStorage` is user-editable like any other boundary.
+- **A stale device id is harmless by construction.** The stored id is passed as a bare `deviceId`, which is an *ideal* constraint rather than `{exact}`, so an unplugged webcam falls back to the system default instead of failing the request. `resolveDeviceId` exists only so the picker does not show a selection the browser is not honouring.
+- **No Join control, and no speaker picker.** Join belongs to F09 with the token that makes it work; the speaker picker belongs where remote audio exists, since in the lobby it would change nothing observable and silently do nothing on Firefox and iOS. Both are the same call made for F07: every control that ships does something when pressed.
+- **Two extractions rather than two copies.** The lobby is the third surface needing the overline and the second needing clipboard handling with its hang timeout, so `SectionOverline` moved to `ui/` and `useCopyToClipboard` came out of `share-panel.tsx`.
+
+**Gotchas**
+
+- **Reworking the hook reintroduced a track leak the F07 suite caught immediately.** F07 used a `cancelled` flag local to each effect run; the rework replaced it with a shared `mounted` ref. Under React's development double-mount the first run's cleanup sets that ref false and the second run sets it true again, so the first request sees "still mounted" when it resolves and holds its track alongside the second's — two live cameras, one owned by nothing. The lesson is that per-run state must not be hoisted to a ref shared across runs.
+- **`Room.getLocalDevices` raises a permission prompt by default.** Its second argument defaults to requesting permission, which would have produced a second prompt from an enumeration. Passing `false` explicitly is required, and was found by reading the signature rather than by the code failing.
+- **ESLint's `react-hooks/set-state-in-effect` rejected two shapes.** The copy button's mount-time `window.location.hash` read became a read at click time, which is better anyway — no state, and correct if the hash changes. The device enumeration needed its `setState` moved inside a nested async IIFE rather than a traced `useCallback`.
+- **A locator matched two elements** because the preview placeholder and the toggle both read "Camera off". Scoped to the paragraph, or the assertion would have passed on the button while the preview frame said nothing.
+- **One unexplained E2E failure, recorded rather than dismissed.** "Turning the camera back on re-acquires exactly one track" failed once under four-worker load and did not reproduce in ten subsequent runs; the artifact was overwritten by the passing runs, so what it asserted is unknown. Reviewing that path for a cause turned up a real defect regardless — `release()`, which stops a track, was being called *inside* a `setState` updater. React double-invokes updaters in development and they must be pure, so the stop was firing twice against whatever snapshot each invocation saw. Moved outside the updater. That is a plausible cause but an unproven one, and the flake should be treated as open until it either recurs with an artifact or stays gone.
+
+**Verified**
+
+- `npm run lint` (0 errors, 3 pre-existing warnings), `npm run typecheck`, `npm run build`, `npm run test` (95 passing), `npm run test:e2e` (20 passing).
+- 7 new E2E specs: camera off drops live tracks to **zero** rather than muting; on again returns to exactly one and never two; the picker lists a labelled device; switching keeps the same document instance; preferences survive a reload; the name caps at `MAX_DISPLAY_NAME_LENGTH`; every control clears 44px at 360px with no overflow.
+- 11 new unit assertions over `preferences.ts` — malformed JSON, wrong types, missing fields, storage that throws on read, storage that throws on write, and a device id that no longer exists.
+- **Not verified:** every microphone path, because audio capture hangs on this machine. The camera equivalents exercise the same acquisition code. Recorded as a follow-up.
