@@ -188,3 +188,29 @@ same without a pointer gesture. Unit tests cover focus resolution including a
 pinned key whose participant has gone. At 360px in spotlight there is no
 horizontal overflow and every control in `main` clears 44px. Screenshots confirm
 the vertical strip from `lg:` and the horizontal one below it.
+
+### 14 Participant list panel — 2026-08-13
+
+**Decisions**
+
+- **`lg:` is the sheet/inline boundary**, not `sm:` — it is where a side column has room to exist, and it is the breakpoint the spotlight filmstrip already switches on. With the panel open the filmstrip falls back to horizontal, so only one column of chrome ever holds the right edge.
+- **The headcount moved out of the status strip onto the participants control.** The number belongs beside the control that opens the list, and the strip needs its width at 360px for the sharing banner. `participant-count.tsx` was deleted rather than left as a second source that could disagree.
+- **`openPanel` is one value on the stage.** One value means one open panel — the only workable behaviour on a phone, and it stops two panels competing for the right column. F19 adds a variant, not a mechanism.
+- **Rows read mic and camera through `useIsMuted` per row**, as the tile does. Reading `participant.isMicrophoneEnabled` would depend on `useParticipants` re-rendering for events it does not promise, and LiveKit mutates publications in place — the defect class found in F11 and again in F13.
+- **The panel shows your real name plus `· you`, where the tile says `YOU`.** A list whose one job is answering "who is here" should name you in it.
+
+**Gotchas**
+
+- **This is the first responsive decision in the call made in JavaScript, and the reason is Radix.** An open dialog traps focus, locks body scroll and hides the rest of the page from assistive tech the moment it mounts, and its content is portaled to `document.body` — out of reach of any wrapper class. Choosing sheet-versus-inline with `lg:hidden` would have left an invisible dialog holding focus on every desktop. `use-media-query` exists for that one case, built on `useSyncExternalStore` with a server snapshot, the same shape as the screen-share capability hook. Rendering one form rather than both also means the list mounts once instead of subscribing to room events twice.
+- **`Participant.joinedAt` is a `Date`, not a number.** The sort takes milliseconds so it can stay a pure module with no LiveKit types; mapping happens at the boundary rather than widening the shared shape.
+- **An `aria-label` on a button overrides its contents outright**, so the count badge is unreachable to a screen reader no matter what is inside it. The number is written into the label — `Show participants (3)` — and the badge is `aria-hidden`.
+- **The row truncated the names it exists to show.** Side by side, `MIC ON CAM ON` took enough of a 288px panel that "Ada Lovelace" rendered as "Ada Lovela…". Caught by screenshot, not by any assertion; the state moved to a second line.
+- **Two existing specs asserted the strip's headcount** and one asserted the participants control was a disabled stub. All three were updated to the new contract rather than worked around.
+
+**Verified:** 60 e2e specs and 158 unit tests pass; `lint`, `typecheck` and `build`
+clean. Two contexts prove the list naming both people with the marker on the local
+row only, and mic and camera state updating live without reopening the panel. The
+badge reads 1 alone, 2 after a join and 1 after a leave. At desktop width the panel
+is a `complementary` with no dialog present; at 360px it is a dialog reached
+through MORE, with no horizontal overflow and every control in it clearing 44px.
+Screenshots confirm both forms and the two-line row.

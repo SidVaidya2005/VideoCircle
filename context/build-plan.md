@@ -413,6 +413,19 @@ overflow and every control in `main` clears 44px.
 
 - Derive from LiveKit participant state; no separate data source
 - Sort: local participant first, then join order
+- **`lg:` is the sheet/inline boundary**, not `sm:` — it is where a side column has room to exist, and it is the breakpoint the spotlight filmstrip already switches on
+- **The panel takes the right column, and the filmstrip falls back to horizontal while it is open.** One column of chrome at a time; two independently scrolling regions stacked in a narrow column are useless at 1024px, and the filmstrip's horizontal mode already exists
+- **The headcount moves out of the status strip onto the participants control as a badge.** The number belongs beside the control that opens the list, and the strip needs its width at 360px for the sharing banner and connection state. `participant-count.tsx` is deleted rather than left unused, so two counts can never disagree
+- **`openPanel` is a single value on `CallStage`** — `'participants' | null`, widening at F19. One value means one open panel, which is the only workable behaviour on a phone and stops two panels competing for the right column. F19 adds a variant, not a mechanism
+- **Rows read mic and camera through `useIsMuted` per row**, as the tile does. Reading `participant.isMicrophoneEnabled` would depend on `useParticipants` re-rendering for events it does not promise, and LiveKit mutates publications in place — the defect class found in F11 and again in F13
+- **No pinning from the list.** F13 deferred the question here; F14's bullets do not ask for it and the tile already offers pin by gesture and by menu
+
+**Verify:** Two contexts prove the list naming both people, the `you` marker on the
+local row only, and mic and camera state updating live without reopening the panel.
+The badge counts 1 alone, 2 after a join, 1 again after a leave. At 360px the panel
+is a dialog with no horizontal overflow and every control clearing 44px; at desktop
+width it is an `aside` with no dialog role, and opening it turns the filmstrip
+horizontal. Sorting is unit-tested.
 
 ### 15 Reactions and raise hand
 

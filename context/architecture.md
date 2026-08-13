@@ -58,6 +58,7 @@ filled in by the feature that needs it. Built so far:
 - **F09** — `src/app/api/token/`, `src/lib/env.livekit.server.ts`, `src/lib/meeting-state.ts`, `src/lib/livekit/{token,token-ttl,room-options,request-token}.ts`, `src/components/room/{room-shell,connected-panel}.tsx`, `src/components/lobby/join-failure-notice.tsx`. First consumers of `livekit-server-sdk` and `@livekit/components-react`
 - **F10** — `src/components/room/{call-stage,video-grid,participant-tile,participant-count}.tsx` and `src/lib/{room-grid,initials}.ts`. `connected-panel.tsx` was deleted, its status strip and Leave absorbed into `call-stage.tsx`. The grid is ours rather than `GridLayout`/`ParticipantTile` — see `library-docs.md` → Rendering the participant grid
 - **F11** — `src/components/room/{control-bar,control-button,leave-control}.tsx`, `src/hooks/use-call-shortcuts.ts`, `src/lib/keyboard.ts`, and the `tooltip` primitive. First consumer of `lucide-react`
+- **F14** — `src/components/room/{call-panel,participant-list}.tsx`, `src/hooks/use-media-query.ts`, `src/lib/participants.ts`, and the `sheet` primitive. `participant-count.tsx` was deleted — the headcount moved onto the participants control as a badge
 - **F13** — `src/components/room/{focus-layout,tile-menu}.tsx` and `src/lib/room-focus.ts`. `participant-tile.tsx` gained the pin gesture, the menu, a `size` variant and the pinned marker; `video-grid.tsx` now chooses between grid and spotlight and owns the pin
 - **F12** — `src/components/room/call-status.tsx` (the status strip, moved out of `call-stage.tsx` so the sharing banner and the connection line it replaces sit together) and `src/hooks/use-is-screen-share-supported.ts`. `video-grid.tsx` gained the `ScreenShare` source and `room-grid.ts` the `orderCallTiles` sort
 
@@ -106,7 +107,7 @@ VideoCircle/
     │       ├── token/route.ts         → POST: mint a LiveKit AccessToken
     │       └── livekit/webhook/route.ts → POST: LiveKit participant/room events
     ├── components/
-    │   ├── ui/                        → shadcn primitives (button, dropdown-menu, input, tooltip; others
+    │   ├── ui/                        → shadcn primitives (button, dropdown-menu, input, sheet, tooltip;
     │   │                                added per feature) plus section-overline, the brand's own
     │   ├── shell/                     → wordmark, site header, site footer, auth menu
     │   ├── home/                      → hero, call preview, how-it-works, feature grid, join-by-code
@@ -117,15 +118,15 @@ VideoCircle/
     │   ├── room/                      → room-experience (hosts lobby then call), room-shell
     │   │                                (<LiveKitRoom>), call-stage (status / grid / controls),
     │   │                                call-status, video-grid, focus-layout,
-    │   │                                participant-tile, tile-menu, participant-count,
-    │   │                                control-bar, control-button, leave-control, and
-    │   │                                later the panels and reactions
+    │   │                                participant-tile, tile-menu, call-panel,
+    │   │                                participant-list, control-bar, control-button,
+    │   │                                leave-control, and later the chat panel and reactions
     │   ├── chat/                      → encrypted chat panel, composer, message list
     │   └── history/                   → history table, empty state
     ├── hooks/                         → use-media-preview (owns the lobby's tracks),
     │                                    use-media-devices, use-copy-to-clipboard,
     │                                    use-call-shortcuts, use-is-screen-share-supported,
-    │                                    use-chat-key, use-encrypted-chat, …
+    │                                    use-media-query, use-chat-key, use-encrypted-chat, …
     ├── lib/
     │   ├── auth/
     │   │   ├── sign-in.ts             → signInWithGoogle + the chat-key fragment stash
@@ -154,6 +155,7 @@ VideoCircle/
     │   ├── keyboard.ts                 → pure typing-target and bare-keypress predicates
     │   ├── room-focus.ts               → pure focus resolution (pin, then share, then grid)
     │   │                                 and the focused/filmstrip split
+    │   ├── participants.ts             → pure roster ordering: you first, then join order
     │   ├── initials.ts                 → pure display name → up to two characters
     │   ├── meeting-state.ts           → pure joinability decision (open/ended/expired)
     │   ├── env.livekit.server.ts      → Zod-parsed LiveKit secrets, server-only

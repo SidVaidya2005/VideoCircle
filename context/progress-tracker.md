@@ -18,8 +18,8 @@ progress, and what is next.
 ## Current Status
 
 **Phase:** Phase 3 — The call
-**Last completed:** 13 Speaker and spotlight view — grid is the resting state, spotlight entered only by a share or a pin, filmstrip vertical from `lg:` and horizontal below it, pinning by double-click or long-press with a per-tile menu as the keyboard path. 55 e2e and 151 unit tests pass
-**Next:** 14 Participant list panel — the first of the three panels the control bar has been holding disabled slots for
+**Last completed:** 14 Participant list panel — Sheet below `lg:` and an inline right column above, the filmstrip falling back to horizontal while it is open, headcount moved onto the participants control as a badge, and one `openPanel` value on the stage for F19 to widen. 60 e2e and 158 unit tests pass
+**Next:** 15 Reactions and raise hand — claims the last of the control bar's disabled slots except chat
 
 ---
 
@@ -52,7 +52,7 @@ progress, and what is next.
 - [x] 11 In-call control bar
 - [x] 12 Screen sharing
 - [x] 13 Speaker and spotlight view
-- [ ] 14 Participant list panel
+- [x] 14 Participant list panel
 - [ ] 15 Reactions and raise hand
 - [ ] 16 Copy invite link in call
 - [ ] Phase checkpoint — verify Phase 3 — The call is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
@@ -106,6 +106,7 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 
 ## Key Decisions
 
+- **One responsive decision in the call is made in JavaScript, and only one.** Everything else is a Tailwind variant so nothing measures the viewport in the call tree — but a Radix dialog traps focus, locks scroll and hides the page from assistive tech the moment it opens, and its content is portaled out of reach of any wrapper class. Choosing sheet-versus-inline in CSS would leave an invisible dialog holding focus on every desktop, so `use-media-query` exists for that case alone. (F14)
 - **Speech never moves the layout.** `resolveFocusKey` takes no speaker argument at all, so it cannot: a layout that follows whoever is talking flips several times a minute in an ordinary conversation. Active speakers order the filmstrip and ring their own tile, which is what the build plan's "active-speaker detection" is actually for. (F13)
 - **We hold no mirrored sharing state, and that is what makes the hard case free.** `useLocalParticipant` re-emits on `LocalTrackUnpublished`, so a share ended from Chrome's own stop bar syncs the control and banner with no listener of ours. The build plan's "no stale UI state" requirement is met by having no state that could go stale. (F12)
 - **A memo comparator must read only immutable facts.** `ParticipantTile` compared `publication.isMuted`, which LiveKit mutates in place — both sides of the comparison resolved to the same live value, so a camera turned off mid-call left a dead `<video>` on every other screen. Mute state now comes from `useIsMuted`, whose own state re-renders the tile regardless of what the memo decides. (F11)
@@ -115,4 +116,3 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 - **In the lobby, off releases the device — it never mutes.** A preview reading OFF while the camera light stays lit is what breaks trust in a lobby. It also keeps the SDK's muted-track trap out of reach: `setDeviceId` sets `pendingDeviceChange` and returns early on a muted track, so a device picker would appear to do nothing until the track was unmuted. (F08)
 - **A media request is only timed out when it cannot be waiting on a person.** `getUserMedia` does not settle until the permission prompt is answered, so a flat timeout fires on someone who took a moment to find the Allow button — a false failure on the most ordinary path in the product. Permission state decides the shape: granted means no prompt is coming, so each device is requested separately and timed; undecided means one combined untimed request. (F07)
 - **Secrets are parsed per service, not all in one schema.** `env.server.ts` parsed all three at module load, so `/api/meetings` — which never calls LiveKit — could not build while the LiveKit keys were blank. The same coupling would take meeting creation down during a LiveKit key rotation in production. (F06)
-- **A fragment is never case-normalised.** `parseRoomCodeInput` lowercases the room code but splits the fragment off first: the chat key is base64url and case-sensitive, so normalising the whole pasted string would silently decode to the wrong bytes. Now an invariant in `architecture.md` → Encryption. (F05)
