@@ -1,4 +1,38 @@
+import { readFileSync } from 'node:fs';
+
 import { defineConfig, devices } from '@playwright/test';
+
+/**
+ * Puts `.env.local` into the suite's own process.
+ *
+ * Next loads that file for the server it starts, but the Playwright process is
+ * plain Node and inherits nothing — and the webhook spec has to sign payloads with
+ * `LIVEKIT_API_SECRET` and read rows back with the service-role key. A real
+ * environment variable always wins, so CI keeps supplying its own, and a missing
+ * file is not an error for the same reason.
+ *
+ * Deliberately not a dotenv dependency: this reads `KEY=value` and nothing else,
+ * which is all this file has ever contained.
+ */
+function loadEnvLocal(): void {
+  let contents;
+  try {
+    contents = readFileSync('.env.local', 'utf8');
+  } catch {
+    return; // CI supplies these directly.
+  }
+
+  for (const line of contents.split('\n')) {
+    const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line.trim());
+    const key = match?.[1];
+    const rawValue = match?.[2];
+    if (!key || rawValue === undefined || process.env[key] !== undefined) continue;
+
+    process.env[key] = rawValue.trim().replace(/^["']|["']$/g, '');
+  }
+}
+
+loadEnvLocal();
 
 // Deliberately NOT 3000. With `reuseExistingServer`, anything already holding the
 // dev port gets reused — a leftover `next start`, or an editor's port-forwarding
