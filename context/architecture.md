@@ -63,7 +63,7 @@ filled in by the feature that needs it. Built so far:
 - **F14** — `src/components/room/{call-panel,participant-list}.tsx`, `src/hooks/use-media-query.ts`, `src/lib/participants.ts`, and the `sheet` primitive. `participant-count.tsx` was deleted — the headcount moved onto the participants control as a badge
 - **F13** — `src/components/room/{focus-layout,tile-menu}.tsx` and `src/lib/room-focus.ts`. `participant-tile.tsx` gained the pin gesture, the menu, a `size` variant and the pinned marker; `video-grid.tsx` now chooses between grid and spotlight and owns the pin
 - **F12** — `src/components/room/call-status.tsx` (the status strip, moved out of `call-stage.tsx` so the sharing banner and the connection line it replaces sit together) and `src/hooks/use-is-screen-share-supported.ts`. `video-grid.tsx` gained the `ScreenShare` source and `room-grid.ts` the `orderCallTiles` sort
-- **F17** — `src/hooks/use-chat-key.ts` and `src/components/chat/chat-panel.tsx`, the first file under `components/chat/`. `CallPanelName` widened to `'participants' | 'chat'` and `control-bar.tsx` lost `PENDING_CONTROLS` — no control on the bar is disabled any more. `room-experience.tsx` became the caller of `restoreChatKeyFragment()`, which had shipped uncalled since F04
+- **F17** — `src/hooks/use-chat-key.ts` and `src/components/chat/chat-panel.tsx`, the first file under `components/chat/`. `CallPanelName` widened to `'participants' | 'chat'` and `control-bar.tsx` lost `PENDING_CONTROLS`, leaving no disabled control on the bar until F24 gated screen share on `Connected`. `room-experience.tsx` became the caller of `restoreChatKeyFragment()`, which had shipped uncalled since F04
 - **F18** — `src/lib/crypto/chat-message.ts` and `src/hooks/use-encrypted-chat.ts`. The panel gained a plain input, a Send button and a message list; `call-stage.tsx` owns the transcript, because `CallPanel` unmounts its children when closed
 - **F19** — `src/lib/chat-time.ts` and the `textarea` primitive. `chat-panel.tsx` grew the real composer, the relative-time tick and the near-bottom scroll pin; `call-stage.tsx` gained the seen mark the unread count derives from, and `closePanel` beside `togglePanel` so the sheet's own dismiss stamps it too
 
@@ -71,7 +71,14 @@ filled in by the feature that needs it. Built so far:
 
 - **F21** — `src/app/(shell)/history/page.tsx`, `src/lib/history.ts`, and `src/components/history/{history-list,history-empty,history-time}.tsx`. The `.history-row` column widths join `globals.css`. `tests/e2e/support/session.ts` arrived with it: the suite mints real Supabase sessions through the admin API, so signed-in pages are testable without Google's consent screen
 
-Not yet built: `types/meeting.ts` and `render.yaml`.
+- **F22** — `tests/e2e/support/viewport.ts` and `responsive.spec.ts`, the measured audit; `tests/e2e/sign-in.spec.ts`, which covers the one path that had none. `src/app/layout.tsx` gained the `viewport` export — the thing that makes every `env(safe-area-inset-*)` in the project resolve to anything at all — and `globals.css` gained `.call-surface` and `.sheet-surface` to pay those insets back. `sign-in.ts` moved the Supabase browser client behind a dynamic `import()`, taking 64 kB off Home
+
+- **F23** — `src/lib/livekit/{disconnect-reason,connection-quality}.ts` and `src/components/room/disconnect-notice.tsx`. `onDisconnected` stopped pushing Home for every disconnect and now branches on the reason, which meant widening `RoomShell`'s prop to carry it; `call-status.tsx` gained the reconnect banner and put reconnecting above sharing; `participant-tile.tsx` gained the degraded-connection marker
+
+- **F24** — `src/app/{error,global-error}.tsx`, `src/lib/media/media-failure-copy.ts` (moved out of `media-state-notice.tsx` so the three unreachable states are testable), and `tests/support/forbidden-copy.ts`, shared by the unit and e2e halves of the leak check. `control-bar.tsx` gates screen share on `Connected`; `chat-panel.tsx` gained jump-to-latest. **No `loading.tsx` anywhere, deliberately** — see `constraints.md` → Error and loading surfaces
+
+Not yet built: `types/meeting.ts` and `render.yaml`. Deliberately absent: any
+`loading.tsx`, and any toast primitive.
 
 ```
 VideoCircle/
@@ -90,18 +97,29 @@ VideoCircle/
 │   ├── config.toml                    → CLI config (supabase init)
 │   └── migrations/                    → timestamped SQL migrations (schema + RLS)
 ├── tests/
+│   ├── support/                       → shared by BOTH suites: forbidden-copy.ts, the
+│   │                                    one definition of what a user-facing message
+│   │                                    may never contain
 │   ├── unit/                          → Vitest specs
 │   └── e2e/                           → Playwright specs
-│       └── support/                   → media stubs, signed webhook payloads, and
-│                                        session.ts, which signs a context in for real
+│       └── support/                   → media stubs, signed webhook payloads,
+│                                        session.ts (signs a context in for real), and
+│                                        viewport.ts (the measured responsive sweep)
 └── src/
     ├── proxy.ts                       → Supabase session refresh on every request
     ├── app/
-    │   ├── layout.tsx                 → root layout: html/body, JetBrains Mono, metadata
+    │   ├── layout.tsx                 → root layout: html/body, JetBrains Mono,
+    │   │                                metadata, and the viewport export that makes
+    │   │                                env(safe-area-inset-*) resolve to anything
+    │   ├── error.tsx                  → root error boundary; recovery is retry()
+    │   ├── global-error.tsx           → boundary for the root layout itself; brings
+    │   │                                its own html/body, globals.css and typeface
     │   ├── globals.css                → Tailwind import + :root token mirror + @theme
     │   │                                inline, then the few component classes whose
     │   │                                values are literals (.grid-backdrop, the
-    │   │                                wordmark dot, .history-row)
+    │   │                                wordmark dot, .history-row, and .call-surface
+    │   │                                / .sheet-surface, which pay the safe-area
+    │   │                                insets the viewport export turns on)
     │   ├── (shell)/                   → route group: header + footer chrome
     │   │   ├── layout.tsx             → SiteHeader / <main> / SiteFooter
     │   │   ├── page.tsx               → Home: new meeting, join by code, sign in
@@ -156,6 +174,9 @@ VideoCircle/
     │   │   ├── token.ts               → AccessToken construction, server-only
     │   │   ├── token-ttl.ts           → pure min(1h, expires_at − now) cap
     │   │   ├── room-options.ts        → adaptiveStream/dynacast + chosen devices
+    │   │   ├── disconnect-reason.ts    → pure: deliberate-leave test, and the reason
+    │   │   │                            → copy map, exhaustive over all 17 members
+    │   │   ├── connection-quality.ts   → pure: quality → a label, degraded only
     │   │   ├── request-token.ts       → browser-side POST /api/token, parsed
     │   │   ├── participation-event.ts → pure identity → user id, and bigint
     │   │   │                            event seconds → ISO
@@ -166,6 +187,9 @@ VideoCircle/
     │   │   └── chat-message.ts        → encrypt/decrypt the message envelope
     │   ├── media/
     │   │   ├── classify-media-error.ts → getUserMedia rejection → a renderable state
+    │   │   ├── media-failure-copy.ts  → the copy for each failure. Pure, because
+    │   │   │                            three of the five states are unreachable
+    │   │   │                            from the e2e suite
     │   │   └── preferences.ts         → validated localStorage for device choices
     │   ├── room-grid.ts               → pure headcount → column classes, tile ordering
     │   │                                (shares first), and the visible/overflow split
@@ -868,7 +892,7 @@ export function apiError(code: string, message: string, status: number) {
 - Device acquisition never leaves a surface waiting indefinitely. `getUserMedia` is not guaranteed to settle, so any request that cannot be waiting on a person is bounded by a timeout and resolves to a rendered state. A request that *may* still be waiting on a permission prompt is never timed out — the person is not a fault condition.
 - Tracks that arrive after the code that asked for them has moved on are stopped at the point they arrive. An abandoned request still opens the device, and nothing downstream holds a reference to close it.
 - The screen-share control is not rendered when `navigator.mediaDevices.getDisplayMedia` is undefined, which is the case on iOS and Android browsers.
-- Mic and camera controls are reachable in every call state, including while reconnecting.
+- Mic and camera controls are reachable in every call state, including while reconnecting. Screen share is the one control that may be gated, and only against *starting* one: stopping a share stays available in every state, because a reconnect is exactly when someone wants their screen to stop being broadcast.
 
 **Design**
 
@@ -880,7 +904,7 @@ export function apiError(code: string, message: string, status: number) {
 - No emoji appear in any component, string constant, or piece of user-facing copy.
 - No `dark:` variants and no theme toggle exist — the application is dark-only.
 - No card, dialog, popover, or dropdown carries a drop shadow; elevation is expressed through the `bg-1`…`bg-5` ladder.
-- `signal` (red) is used only for the Leave control and the local participant's own muted state.
+- `signal` (red) is used only for the Leave control and the local participant's own muted state. **Connection quality is not a third use** — a degraded connection is marked typographically in the tile's label row, never with a coloured dot. `code-standards.md` once offered green/yellow/red here and was corrected at F23.
 - The grid backdrop is never rendered behind or over a video tile.
 - Nothing under `src/` imports from `context/Design/`; assets are copied into `public/brand/` and tokens are mirrored into `globals.css`.
 - `animejs` is never imported into any component rendered inside `<LiveKitRoom>`.
@@ -892,4 +916,6 @@ export function apiError(code: string, message: string, status: number) {
 - Nothing under `src/components/ui/` references a product concept such as a meeting, participant, or room.
 - Route handlers under `src/app/api/` that accept a request body validate it with a Zod schema before touching any other code. A handler that takes no input says so in a comment rather than parsing an empty schema for the look of it — `/api/meetings` is the one such handler.
 - Route handlers under `src/app/api/` return either `apiOk(data)` or `apiError(code, message, status)` and never a bare `Response` or an unshaped object. The `/auth/*` handlers are the deliberate exception and the only one: they are navigated to by the browser rather than fetched, so they answer with a redirect — a JSON body would render to the user as text.
-- Every page and panel is usable at a 360px viewport width with no horizontal scroll.
+- Every page and panel is usable at a 360px viewport width with no horizontal scroll, and at the seven widths `tests/e2e/responsive.spec.ts` sweeps.
+- **No `loading.tsx` on a route that gates.** Next flushes the loading shell before the route body runs, which sends the HTTP status — so `notFound()` can then only swap the UI and `redirect()` degrades to a client-side navigation. `/room/[code]` and `/history` both gate, and both lost a skeleton at F24 for exactly this. A skeleton is only safe where the server work is pure data fetching.
+- **`viewport-fit=cover` and the safe-area padding are one decision, not two.** The `viewport` export is what makes `env(safe-area-inset-*)` resolve to anything, and it also puts content under the display's cutouts — so `.call-surface` and `.sheet-surface` must pay every inset back. Setting one without the other makes a notched phone worse than setting neither.

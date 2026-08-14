@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useEffect } from 'react';
 
+import { Button } from '@/components/ui/button';
+
 interface ErrorProps {
   error: Error & { digest?: string };
   /**
@@ -51,21 +53,18 @@ export default function GlobalRouteError({ error, retry }: ErrorProps) {
           The problem may be temporary. Trying again will reload the part of the page that failed.
         </p>
 
+        {/* The same pair, in the same order, as `DisconnectNotice` — one recovery
+            and one way onward. Through `Button` rather than hand-rolled classes so
+            the two surfaces cannot drift, which is what they had already started
+            to do. */}
         <div className="flex flex-col gap-2 sm:flex-row">
-          <button
-            type="button"
-            onClick={() => retry()}
-            className="border-line/60 bg-active text-canvas hover:bg-active/90 ease-out-quint flex min-h-11 flex-1 items-center justify-center rounded-sm border px-4 text-xs tracking-wider uppercase transition-colors duration-150"
-          >
+          <Button type="button" onClick={() => retry()}>
             Try again
-          </button>
+          </Button>
 
-          <Link
-            href="/"
-            className="border-line/60 text-ink hover:bg-card ease-out-quint flex min-h-11 flex-1 items-center justify-center rounded-sm border px-4 text-xs tracking-wider uppercase transition-colors duration-150"
-          >
-            Return home
-          </Link>
+          <Button asChild variant="outline">
+            <Link href="/">Return home</Link>
+          </Button>
         </div>
       </div>
     </main>
