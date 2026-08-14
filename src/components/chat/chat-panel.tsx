@@ -113,6 +113,23 @@ export function ChatPanel({ chatKey, messages, onSend }: ChatPanelProps) {
   // anything. A ref rather than state: nothing renders from it.
   const nearBottom = useRef(true);
 
+  // How long the transcript was when the reader scrolled away from the floor, or
+  // null while they are at it. One value rather than a boolean beside a ref:
+  // reading a ref during render is forbidden — `react-hooks` fails the build over
+  // it — and the two halves would have had to agree anyway.
+  //
+  // Set only from the scroll handler and the jump, both event handlers, because a
+  // synchronous setState in the layout effect below is the other thing this
+  // project treats as an error.
+  const [scrolledAwayAt, setScrolledAwayAt] = useState<number | null>(null);
+
+  // Derived at render, so nothing can fall out of sync: the control appears only
+  // when messages have landed *since* the reader scrolled up. Scrolled up in a
+  // quiet conversation shows nothing, which is the point — the scroll pin
+  // deliberately holds the view still, and until F24 that meant a message
+  // arriving while you read back was completely silent.
+  const missedBelow = scrolledAwayAt !== null && messages.length > scrolledAwayAt;
+
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), TICK_MS);
     return () => clearInterval(timer);
@@ -129,7 +146,30 @@ export function ChatPanel({ chatKey, messages, onSend }: ChatPanelProps) {
 
   function trackScroll(event: React.UIEvent<HTMLUListElement>) {
     const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
-    nearBottom.current = scrollHeight - scrollTop - clientHeight <= NEAR_BOTTOM_PX;
+    const atFloor = scrollHeight - scrollTop - clientHeight <= NEAR_BOTTOM_PX;
+
+    // Stamped on the transition away from the floor, not on every scroll event:
+    // re-stamping while the reader scrolls around up there would keep resetting
+    // the baseline, and the control would never appear.
+    if (nearBottom.current && !atFloor) {
+      setScrolledAwayAt(messages.length);
+    } else if (atFloor) {
+      setScrolledAwayAt(null);
+    }
+
+    nearBottom.current = atFloor;
+  }
+
+  function jumpToLatest() {
+    const list = listRef.current;
+    if (!list) return;
+
+    list.scrollTop = list.scrollHeight;
+    // Cleared here as well as by the `scroll` event this fires: waiting for the
+    // event leaves the control on screen for a frame after it has done its job,
+    // and re-pins the list so new messages start following again immediately.
+    nearBottom.current = true;
+    setScrolledAwayAt(null);
   }
 
   function resizeComposer() {
@@ -188,6 +228,24 @@ export function ChatPanel({ chatKey, messages, onSend }: ChatPanelProps) {
           ))}
         </ul>
       )}
+
+      {missedBelow ? (
+        // Inside the flow rather than floating over the transcript: the panel is
+        // 288px wide inline and a full sheet on a phone, and an absolutely
+        // positioned pill would sit on top of the message someone is reading.
+        //
+        // A button, so it is reachable by keyboard and announced — this is the
+        // only signal that anything arrived, since the unread badge counts only
+        // while the panel is closed.
+        <button
+          type="button"
+          onClick={jumpToLatest}
+          className="border-line/60 bg-raised text-ink hover:bg-overlay ease-out-quint focus-visible:ring-active focus-visible:ring-offset-canvas flex min-h-11 flex-none items-center justify-center gap-2 rounded-md border px-3 text-xs tracking-wider uppercase transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        >
+          <span aria-hidden="true" className="bg-active size-1.5 flex-none" />
+          New messages
+        </button>
+      ) : null}
 
       <form
         onSubmit={(event) => {

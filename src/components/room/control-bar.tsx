@@ -1,6 +1,7 @@
 'use client';
 
-import { useLocalParticipant } from '@livekit/components-react';
+import { useConnectionState, useLocalParticipant } from '@livekit/components-react';
+import { ConnectionState } from 'livekit-client';
 import {
   Hand,
   Link as LinkIcon,
@@ -70,6 +71,8 @@ interface SecondaryControl {
   pressed?: boolean;
   /** Rendered as a small count on the control. Participants only, for now. */
   badge?: number;
+  /** Screen share only, and only until the room is connected. See below. */
+  disabled?: boolean;
 }
 
 export function ControlBar({
@@ -85,6 +88,19 @@ export function ControlBar({
   // Capability, not width: absent on every phone, present inside MORE on a narrow
   // desktop window. Absence keeps one meaning — your device cannot do this.
   const screenShareSupported = useIsScreenShareSupported();
+
+  // The bar renders as soon as the room tree mounts, which is one to three
+  // seconds before the handshake finishes — and that is exactly when someone who
+  // pressed Join reaches for a control. A share started in that window is
+  // published into a room that is not there and immediately unpublished, with
+  // nothing surfaced at all: the control simply does not change.
+  //
+  // Only *starting* is gated. Stopping stays available in every state, including
+  // a mid-call reconnect, because a share you cannot stop is worse than one you
+  // could not start — and the reconnecting case is precisely when someone wants
+  // their screen to stop being broadcast.
+  const connectionState = useConnectionState();
+  const canStartShare = connectionState === ConnectionState.Connected;
   const { send, handRaised: raised, toggleHand } = useReactions();
   // The bar owns this, not the Leave control: pressing anything else has to
   // disarm it, and only the bar knows that happened.
@@ -145,9 +161,18 @@ export function ControlBar({
       ? [
           {
             key: 'screen',
-            label: isScreenShareEnabled ? 'Stop sharing your screen' : 'Share your screen',
+            // The disabled label says why, because a control that is simply dim
+            // is indistinguishable from one that is broken — and this state lasts
+            // a second or two, which is long enough to press and not long enough
+            // to investigate.
+            label: isScreenShareEnabled
+              ? 'Stop sharing your screen'
+              : canStartShare
+                ? 'Share your screen'
+                : 'Share your screen — available once you are connected',
             icon: isScreenShareEnabled ? MonitorOff : MonitorUp,
             pressed: isScreenShareEnabled,
+            disabled: !isScreenShareEnabled && !canStartShare,
             onClick: () => void toggleScreenShare(),
           },
         ]
@@ -225,6 +250,7 @@ export function ControlBar({
             toggled={control.pressed}
             onClick={control.onClick}
             badge={control.badge}
+            disabled={control.disabled}
             className="hidden sm:inline-flex"
           />
         ))}
@@ -246,7 +272,11 @@ export function ControlBar({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="center" side="top">
             {secondaryControls.map((control) => (
-              <DropdownMenuItem key={control.key} onSelect={control.onClick}>
+              <DropdownMenuItem
+                key={control.key}
+                disabled={control.disabled}
+                onSelect={control.onClick}
+              >
                 <control.icon aria-hidden="true" className="size-4" />
                 {control.label}
                 {control.badge === undefined ? null : (
