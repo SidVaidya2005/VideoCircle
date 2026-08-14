@@ -1,7 +1,6 @@
 'use client';
 
 import { env } from '@/lib/env';
-import { createClient } from '@/lib/supabase/client';
 
 /** Same-origin, same-tab, and cleared the moment it is consumed. */
 const CHAT_KEY_STASH = 'vc.pending-chat-key';
@@ -31,6 +30,15 @@ export async function signInWithGoogle(returnTo: string): Promise<void> {
   if (window.location.hash.startsWith('#k=')) {
     sessionStorage.setItem(CHAT_KEY_STASH, window.location.hash);
   }
+
+  // Imported here rather than at module scope, and that is a bundle decision
+  // rather than a style one. `auth-menu.tsx` renders on Home for every signed-out
+  // visitor, so a static import puts the whole GoTrue client — the single largest
+  // chunk Home loads — into the first-load bundle of a page whose primary action
+  // is starting a meeting without an account. Most visitors never press Sign in.
+  // Nothing is traded away: this function is already async and already behind a
+  // click, so the fetch happens while the button is being pressed.
+  const { createClient } = await import('@/lib/supabase/client');
 
   const supabase = createClient();
   const { error } = await supabase.auth.signInWithOAuth({
