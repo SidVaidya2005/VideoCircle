@@ -1,5 +1,6 @@
 'use client';
 
+import type { DisconnectReason } from 'livekit-client';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -8,10 +9,12 @@ import { LobbyControls } from '@/components/lobby/lobby-controls';
 import { MediaStateNotice } from '@/components/lobby/media-state-notice';
 import { SelfPreview } from '@/components/lobby/self-preview';
 import { CallStage } from '@/components/room/call-stage';
+import { DisconnectNotice } from '@/components/room/disconnect-notice';
 import { RoomShell } from '@/components/room/room-shell';
 import { SectionOverline } from '@/components/ui/section-overline';
 import { useMediaPreview } from '@/hooks/use-media-preview';
 import { restoreChatKeyFragment } from '@/lib/auth/sign-in';
+import { isDeliberateLeave } from '@/lib/livekit/disconnect-reason';
 import { requestToken, type TokenGrant } from '@/lib/livekit/request-token';
 
 interface RoomExperienceProps {
@@ -24,7 +27,9 @@ type JoinState =
   | { phase: 'lobby' }
   | { phase: 'joining' }
   | { phase: 'joined'; grant: TokenGrant }
-  | { phase: 'failed'; code: string; message: string };
+  | { phase: 'failed'; code: string; message: string }
+  /** The call ended without anyone here choosing it. `reason` is genuinely optional. */
+  | { phase: 'dropped'; reason: DisconnectReason | undefined };
 
 function previewPlaceholder(busy: boolean, enabled: boolean, failed: boolean): string {
   if (busy) return 'Starting camera';
@@ -95,11 +100,34 @@ export function RoomExperience({ code, profileName }: RoomExperienceProps) {
           video={camera.enabled}
           cameraId={camera.deviceId}
           microphoneId={microphone.deviceId}
-          // Leaving returns Home, which is what project-overview.md describes.
-          onDisconnected={() => router.push('/')}
+          // Leaving returns Home, which is what project-overview.md describes —
+          // but ONLY when leaving is what happened. Every disconnect used to land
+          // here, so a call that dropped put you on the landing page with no way
+          // to tell whether you had left or been dropped. `isDeliberateLeave`
+          // compares the reason explicitly rather than testing it for truth:
+          // the parameter is optional and `UNKNOWN_REASON` is `0`, so a
+          // truthiness check reads the commonest involuntary drop as a leave.
+          onDisconnected={(reason) => {
+            if (isDeliberateLeave(reason)) {
+              router.push('/');
+              return;
+            }
+            setJoin({ phase: 'dropped', reason });
+          }}
         >
           <CallStage code={code} />
         </RoomShell>
+      </main>
+    );
+  }
+
+  if (join.phase === 'dropped') {
+    // Its own surface rather than a notice inside the lobby: the lobby's preview
+    // was released at join and its acquiring effect runs on mount, so rendering
+    // the lobby again would show a dead camera under a message about a dead call.
+    return (
+      <main className="flex min-h-dvh flex-col items-center justify-center px-4 py-10">
+        <DisconnectNotice reason={join.reason} />
       </main>
     );
   }

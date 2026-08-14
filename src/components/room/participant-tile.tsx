@@ -2,6 +2,7 @@
 
 import {
   isTrackReference,
+  useConnectionQualityIndicator,
   useIsMuted,
   useIsSpeaking,
   VideoTrack,
@@ -14,6 +15,7 @@ import { useHandRaised, useParticipantReaction } from '@/components/room/reactio
 import { TileMenu } from '@/components/room/tile-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { toInitials } from '@/lib/initials';
+import { connectionQualityLabel } from '@/lib/livekit/connection-quality';
 import { cn } from '@/lib/utils';
 
 /** How long a press has to hold before it counts as a pin. */
@@ -59,6 +61,17 @@ function ParticipantTileImpl({
   // and the person has a camera tile of their own to carry them.
   const reaction = useParticipantReaction(participant.identity);
   const handRaised = useHandRaised(participant) && !isScreenShare;
+
+  // This participant's connection, not the room's — the same rule every other
+  // hook on this tile follows, and the reason a twelve-tile grid does not
+  // re-render twelve times per quality report.
+  //
+  // Suppressed on a share for the same reason mute and speaking are: a connection
+  // belongs to a person, and that person already has a camera tile to say it on.
+  // Rendered only when degraded, and without colour — see `connection-quality.ts`
+  // for why the red invariant wins over a faster-reading dot.
+  const { quality } = useConnectionQualityIndicator({ participant });
+  const qualityLabel = isScreenShare ? null : connectionQualityLabel(quality);
 
   const name = participant.name?.trim() || (isLocal ? LOCAL_LABEL : UNNAMED);
   const personLabel = isLocal ? LOCAL_LABEL : name;
@@ -169,6 +182,13 @@ function ParticipantTileImpl({
         {/* text-ink on the scrim, never a muted grey — those are for known backgrounds. */}
         <span className="text-ink truncate">{label}</span>
         {pinned ? <span className="text-muted flex-none">· pinned</span> : null}
+        {qualityLabel ? (
+          // text-ink, not the muted grey `· pinned` uses. This rides the tile
+          // scrim over arbitrary video pixels, where code-standards requires fg-1
+          // — and unlike a pin, it is something the person needs to be able to
+          // read at a glance on a picture that has started stuttering.
+          <span className="text-ink flex-none">· {qualityLabel}</span>
+        ) : null}
       </p>
 
       {handRaised ? (

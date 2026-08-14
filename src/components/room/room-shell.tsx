@@ -1,6 +1,7 @@
 'use client';
 
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
+import type { DisconnectReason } from 'livekit-client';
 import { useMemo } from 'react';
 
 import { roomOptions } from '@/lib/livekit/room-options';
@@ -13,7 +14,12 @@ interface RoomShellProps {
   video: boolean;
   cameraId: string | undefined;
   microphoneId: string | undefined;
-  onDisconnected: () => void;
+  /**
+   * Receives LiveKit's own reason, which is what separates a pressed Leave from a
+   * dropped call. Optional because the SDK does not always supply one — and
+   * `UNKNOWN_REASON` is `0`, so the caller must compare rather than test truth.
+   */
+  onDisconnected: (reason?: DisconnectReason) => void;
   children: React.ReactNode;
 }
 

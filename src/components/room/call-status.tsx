@@ -35,6 +35,35 @@ export function CallStatus() {
   const reconnecting =
     state === ConnectionState.Reconnecting || state === ConnectionState.SignalReconnecting;
 
+  if (reconnecting) {
+    return (
+      // A banner, not the quiet line every other state gets. During a reconnect
+      // the video is frozen, and a small grey word at the top of a still picture
+      // reads as a call that has died rather than one that is coming back — which
+      // is exactly when someone gives up and leaves a call that would have
+      // recovered on its own.
+      //
+      // Polite, not assertive: this resolves by itself, and an assertive region
+      // would interrupt whatever a screen reader was already saying.
+      <div
+        aria-live="polite"
+        className="border-line/60 bg-raised flex w-full items-center gap-2 rounded-md border px-3 py-2"
+      >
+        {/* Static, never the looping live-dot: a continuous keyframe inside a call
+            competes with video encoding on whatever device is weakest. White
+            rather than red — recovering is a state, not a destructive action. */}
+        <span aria-hidden="true" className="bg-active size-1.5 flex-none" />
+        <p className="text-ink text-xs tracking-wider uppercase">{STATUS[state]}</p>
+        <p className="text-muted truncate text-xs tracking-wider uppercase">
+          — trying to restore the connection
+        </p>
+      </div>
+    );
+  }
+
+  // Below reconnecting, deliberately. Sharing used to be checked first, which
+  // meant a reconnect *during* a share was invisible: the more urgent of the two
+  // states lost to the one the person already knows about, because they chose it.
   if (isScreenShareEnabled) {
     return (
       <div className="flex min-w-0 items-center gap-3">
@@ -63,13 +92,6 @@ export function CallStatus() {
       aria-live="polite"
       className="text-muted flex items-center gap-2 text-xs tracking-wider uppercase"
     >
-      {reconnecting ? (
-        // Static, not the looping live-dot: a continuous keyframe is fine on Home
-        // and not inside a call, which is encoding video on whatever device is
-        // weakest. White rather than red — reconnecting is a state, not a
-        // destructive action.
-        <span aria-hidden="true" className="bg-active size-1.5 flex-none" />
-      ) : null}
       {STATUS[state]}
     </p>
   );
