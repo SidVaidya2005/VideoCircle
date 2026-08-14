@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { JoinFailureNotice } from '@/components/lobby/join-failure-notice';
 import { LobbyControls } from '@/components/lobby/lobby-controls';
@@ -11,6 +11,7 @@ import { CallStage } from '@/components/room/call-stage';
 import { RoomShell } from '@/components/room/room-shell';
 import { SectionOverline } from '@/components/ui/section-overline';
 import { useMediaPreview } from '@/hooks/use-media-preview';
+import { restoreChatKeyFragment } from '@/lib/auth/sign-in';
 import { requestToken, type TokenGrant } from '@/lib/livekit/request-token';
 
 interface RoomExperienceProps {
@@ -46,6 +47,15 @@ export function RoomExperience({ code, profileName }: RoomExperienceProps) {
   // moment where the field is empty and then fills in.
   const [displayName, setDisplayName] = useState(profileName ?? '');
   const [join, setJoin] = useState<JoinState>({ phase: 'lobby' });
+
+  // Puts back a chat key stashed before a sign-in round trip, which strips the
+  // fragment. Here rather than in the call tree, and that ordering is the point:
+  // this runs when the lobby mounts, while `useChatKey` runs when CallStage mounts
+  // — behind a click on Join, and so always afterwards. React runs child effects
+  // before parent ones, so a restore living any deeper would race the read.
+  useEffect(() => {
+    restoreChatKeyFragment();
+  }, []);
 
   const { camera, microphone, blockingFailure } = preview;
 

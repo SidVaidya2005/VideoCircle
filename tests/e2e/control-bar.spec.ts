@@ -123,23 +123,30 @@ test('pressing another control disarms Leave', async ({ page, request }) => {
   await expect(leave(page)).toBeVisible();
 });
 
-test('controls whose panels do not exist yet say they are unavailable', async ({
-  page,
-  request,
-}) => {
+test('every control on the bar acts', async ({ page, request }) => {
   const code = await createMeeting(request);
   await joinAs(page, code, 'Ada Lovelace');
 
-  // Chat is the last stub, and F19 claims it. Screen share stopped being one at
-  // F12, participants at F14, reactions and raise hand at F15.
-  await expect(page.getByRole('button', { name: 'Open chat', disabled: true })).toBeVisible();
+  // No stubs remain: screen share stopped being one at F12, participants at F14,
+  // reactions and raise hand at F15, chat at F17. A disabled control in a call is
+  // a dead end under pressure, so the bar carries none.
+  await expect(page.getByRole('button', { name: /^show chat/i })).toBeEnabled();
   await expect(page.getByRole('button', { name: /^show participants/i })).toBeEnabled();
   await expect(page.getByRole('button', { name: /^Reactions/ })).toBeEnabled();
 
-  // Screen share is the one secondary control that acts, since F12. Absence still
-  // means exactly one thing — your device cannot do this — which screen-share.spec
-  // proves by removing the capability.
+  // Absence still means exactly one thing — your device cannot do this — which
+  // screen-share.spec proves by removing the capability.
   await expect(page.getByRole('button', { name: 'Share your screen' })).toBeEnabled();
+
+  const disabled = await page
+    .getByRole('main')
+    .getByRole('button')
+    .evaluateAll((nodes) =>
+      nodes
+        .filter((node) => node.hasAttribute('disabled'))
+        .map((node) => node.getAttribute('aria-label') ?? node.textContent?.trim() ?? ''),
+    );
+  expect(disabled).toEqual([]);
 });
 
 test('the phone bar keeps mic, camera, MORE and Leave', async ({ page, request }) => {
@@ -151,11 +158,11 @@ test('the phone bar keeps mic, camera, MORE and Leave', async ({ page, request }
   await expect(camera(page)).toBeVisible();
   await expect(leave(page)).toBeVisible();
 
-  // The secondary three are off the bar, not merely narrower.
-  await expect(page.getByRole('button', { name: 'Open chat' })).toBeHidden();
+  // The secondary controls are off the bar, not merely narrower.
+  await expect(page.getByRole('button', { name: /^show chat/i })).toBeHidden();
 
   await page.getByRole('button', { name: 'More options' }).click();
-  await expect(page.getByRole('menuitem', { name: 'Open chat' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /^show chat/i })).toBeVisible();
 });
 
 test('no control shrinks below the hit-area floor at 360px', async ({ page, request }) => {

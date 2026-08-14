@@ -3,12 +3,14 @@
 import { useParticipants, useRoomContext } from '@livekit/components-react';
 import { useState } from 'react';
 
+import { ChatPanel } from '@/components/chat/chat-panel';
 import { CallPanel } from '@/components/room/call-panel';
 import { CallStatus } from '@/components/room/call-status';
 import { ControlBar, type CallPanelName } from '@/components/room/control-bar';
 import { ParticipantList } from '@/components/room/participant-list';
 import { ReactionsProvider } from '@/components/room/reactions-provider';
 import { VideoGrid } from '@/components/room/video-grid';
+import { useChatKey } from '@/hooks/use-chat-key';
 
 /**
  * The call: status pinned top, grid between, controls pinned bottom.
@@ -26,10 +28,14 @@ interface CallStageProps {
 export function CallStage({ code }: CallStageProps) {
   const room = useRoomContext();
   const participants = useParticipants();
+  // Read here rather than inside the panel: this mounts at join, so the import is
+  // settled long before anyone opens chat, whereas CallPanel unmounts its children
+  // when closed and would re-import on every open.
+  const chatKey = useChatKey();
 
   // One value, so only one panel can ever be open — the only workable behaviour
   // on a phone, and it keeps two panels from competing for the right column on a
-  // desktop. Feature 19 adds a variant here, not a mechanism.
+  // desktop.
   const [openPanel, setOpenPanel] = useState<CallPanelName | null>(null);
 
   function togglePanel(panel: CallPanelName) {
@@ -54,6 +60,10 @@ export function CallStage({ code }: CallStageProps) {
             onClose={() => setOpenPanel(null)}
           >
             <ParticipantList />
+          </CallPanel>
+
+          <CallPanel title="Chat" open={openPanel === 'chat'} onClose={() => setOpenPanel(null)}>
+            <ChatPanel chatKey={chatKey} />
           </CallPanel>
         </div>
 

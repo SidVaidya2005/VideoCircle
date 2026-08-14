@@ -37,7 +37,7 @@ import { buildInviteLink } from '@/lib/invite-link';
 import { REACTION_LABELS } from '@/lib/reactions';
 import { cn } from '@/lib/utils';
 
-export type CallPanelName = 'participants';
+export type CallPanelName = 'participants' | 'chat';
 
 interface ControlBarProps {
   onLeave: () => void;
@@ -49,34 +49,26 @@ interface ControlBarProps {
   participantCount: number;
 }
 
+/**
+ * A control that collapses into MORE below `sm:`.
+ *
+ * Declared once and rendered twice — inline on the bar, and as menu items in the
+ * dropdown — so the two never drift.
+ *
+ * Screen share is deliberately absent rather than disabled. `getDisplayMedia`
+ * exists on no mobile browser, so absence already means "your device cannot do
+ * this"; adding a second meaning would cost the rule its clarity.
+ */
 interface SecondaryControl {
   key: string;
   label: string;
   icon: LucideIcon;
-  /** Absent until the feature that gives this control something to open. */
-  onClick?: () => void;
+  onClick: () => void;
   /** Engaged — a white fill, never red. Several controls can be engaged at once. */
   pressed?: boolean;
   /** Rendered as a small count on the control. Participants only, for now. */
   badge?: number;
 }
-
-/**
- * The controls that collapse into MORE below `sm:`.
- *
- * Declared once and rendered twice — inline on the bar, and as menu items in the
- * dropdown — so the two never drift. Each is disabled until the feature that
- * gives it something to open: participants at F14, reactions and raise hand at
- * F15, chat at F19. Each of those removes one flag and adds one handler.
- *
- * Screen share is deliberately absent rather than disabled. `getDisplayMedia`
- * exists on no mobile browser, so absence already means "your device cannot do
- * this"; adding a second meaning would cost the rule its clarity. F12 adds it
- * behind the capability check.
- */
-const PENDING_CONTROLS: readonly SecondaryControl[] = [
-  { key: 'chat', label: 'Open chat', icon: MessageSquare },
-];
 
 export function ControlBar({
   onLeave,
@@ -178,7 +170,18 @@ export function ControlBar({
       pressed: invite.open,
       onClick: openInvite,
     },
-    ...PENDING_CONTROLS,
+    {
+      key: 'chat',
+      // Never disabled, even when the link carries no key: the panel is the only
+      // place with room to explain which of the two is true.
+      label: `${openPanel === 'chat' ? 'Hide' : 'Show'} chat`,
+      icon: MessageSquare,
+      pressed: openPanel === 'chat',
+      onClick: () => {
+        disarmLeave();
+        onTogglePanel('chat');
+      },
+    },
   ];
 
   return (
@@ -209,8 +212,7 @@ export function ControlBar({
             label={control.label}
             icon={control.icon}
             pressed={control.pressed}
-            toggled={control.onClick ? control.pressed : undefined}
-            disabled={!control.onClick}
+            toggled={control.pressed}
             onClick={control.onClick}
             badge={control.badge}
             className="hidden sm:inline-flex"
@@ -234,11 +236,7 @@ export function ControlBar({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="center" side="top">
             {secondaryControls.map((control) => (
-              <DropdownMenuItem
-                key={control.key}
-                disabled={!control.onClick}
-                onSelect={control.onClick}
-              >
+              <DropdownMenuItem key={control.key} onSelect={control.onClick}>
                 <control.icon aria-hidden="true" className="size-4" />
                 {control.label}
                 {control.badge === undefined ? null : (
