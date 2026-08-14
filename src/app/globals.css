@@ -258,6 +258,26 @@ html {
     100px 100px;
 }
 
+/* Call History's desktop column widths, shared by the header strip and every row
+   so the two stay aligned. Lives here rather than as an arbitrary-value utility
+   because these are literals, and literals belong in this file.
+
+   When · Duration · Code · With · Rejoin. The first three are sized to their
+   widest real content — a formatted timestamp, `00:12:07`, and a room code, all
+   in the one mono face, so they never reflow. `With` takes the remainder and
+   truncates; the action column shrinks to its button.
+
+   Only the track widths live here. `display`, `align-items` and `gap` stay as
+   Tailwind variants on the element, so `hidden sm:grid` on the header strip
+   resolves by Tailwind's own variant ordering rather than by this file's position
+   in the cascade. Below `sm:` no grid is declared at all and each entry is a
+   stacked card — see history-list.tsx. */
+@media (width >= 40rem) {
+  .history-row {
+    grid-template-columns: 11rem 7rem 9rem 1fr auto;
+  }
+}
+
 /* The red square that dots each i in "VideoCircle" — both of them. Sized in em so
    it tracks the wordmark at every size. Lives here rather than in the component
    because the offsets are literals, and literals belong in this file.
