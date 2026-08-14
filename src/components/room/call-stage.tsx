@@ -43,9 +43,34 @@ export function CallStage({ code }: CallStageProps) {
   // desktop.
   const [openPanel, setOpenPanel] = useState<CallPanelName | null>(null);
 
+  // How much of the transcript had arrived last time chat was opened or closed.
+  // An index rather than a timestamp: two messages can share a millisecond with
+  // the stamp, and then whether they count is a coin toss.
+  const [chatSeenCount, setChatSeenCount] = useState(0);
+
+  // Stamped in the handlers rather than an effect. A setState in an effect body
+  // is an error here — the rule that reshaped useChatKey at F17 — and the two
+  // moments that matter are both already handlers.
+  function markChatSeen() {
+    setChatSeenCount(chat.messages.length);
+  }
+
   function togglePanel(panel: CallPanelName) {
     setOpenPanel((current) => (current === panel ? null : panel));
+    if (panel === 'chat') markChatSeen();
   }
+
+  function closePanel(panel: CallPanelName) {
+    setOpenPanel(null);
+    if (panel === 'chat') markChatSeen();
+  }
+
+  // Your own messages are never unread, and an unreadable entry is: something
+  // arrived, which is all the badge claims.
+  const unreadChat =
+    openPanel === 'chat'
+      ? 0
+      : chat.messages.slice(chatSeenCount).filter((message) => !message.isLocal).length;
 
   return (
     <ReactionsProvider>
@@ -62,12 +87,12 @@ export function CallStage({ code }: CallStageProps) {
           <CallPanel
             title="Participants"
             open={openPanel === 'participants'}
-            onClose={() => setOpenPanel(null)}
+            onClose={() => closePanel('participants')}
           >
             <ParticipantList />
           </CallPanel>
 
-          <CallPanel title="Chat" open={openPanel === 'chat'} onClose={() => setOpenPanel(null)}>
+          <CallPanel title="Chat" open={openPanel === 'chat'} onClose={() => closePanel('chat')}>
             <ChatPanel chatKey={chatKey} messages={chat.messages} onSend={chat.send} />
           </CallPanel>
         </div>
@@ -80,6 +105,7 @@ export function CallStage({ code }: CallStageProps) {
           openPanel={openPanel}
           onTogglePanel={togglePanel}
           participantCount={participants.length}
+          unreadChat={unreadChat}
         />
       </div>
     </ReactionsProvider>

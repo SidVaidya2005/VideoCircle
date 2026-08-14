@@ -47,6 +47,8 @@ interface ControlBarProps {
   onTogglePanel: (panel: CallPanelName) => void;
   /** Everyone in the call, you included. Shown on the participants control. */
   participantCount: number;
+  /** Messages that landed while chat was closed. Zero while it is open. */
+  unreadChat: number;
 }
 
 /**
@@ -76,6 +78,7 @@ export function ControlBar({
   openPanel,
   onTogglePanel,
   participantCount,
+  unreadChat,
 }: ControlBarProps) {
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } =
     useLocalParticipant();
@@ -174,9 +177,16 @@ export function ControlBar({
       key: 'chat',
       // Never disabled, even when the link carries no key: the panel is the only
       // place with room to explain which of the two is true.
-      label: `${openPanel === 'chat' ? 'Hide' : 'Show'} chat`,
+      //
+      // The count rides in the label for the same reason it does on participants:
+      // an aria-label overrides a button's contents, so the badge itself is
+      // unreachable to a screen reader whatever it holds.
+      label: `${openPanel === 'chat' ? 'Hide' : 'Show'} chat${
+        unreadChat > 0 ? ` (${unreadChat} unread)` : ''
+      }`,
       icon: MessageSquare,
       pressed: openPanel === 'chat',
+      badge: unreadChat > 0 ? unreadChat : undefined,
       onClick: () => {
         disarmLeave();
         onTogglePanel('chat');
