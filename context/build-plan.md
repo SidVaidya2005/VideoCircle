@@ -759,6 +759,27 @@ is recorded as manually verified rather than claimed as covered.
 - Friendly copy for token failure, room-full, and permission-denied
 - Confirm no user-facing message leaks an error code, provider name, or stack trace
 
+**Decisions taken before building:**
+
+- **Two of the bullets above were already built at F07 and are not rebuilt.** `not-found.tsx` covers a malformed and an unknown code without distinguishing them, and `page.tsx` checks the code's shape before it queries anything. Friendly join-failure copy shipped with `JoinFailureNotice` at F09. What is actually missing is the error boundary, the loading skeletons, and the checks — a feature's stated scope is not the same as its remaining scope.
+- **No toast system, and `architecture.md` is corrected instead.** Every transient failure already has a treatment written for the surface it happens on: the copy button's own failed state, a chat message marked *not sent*, the lobby's media notices, `JoinFailureNotice`, the sign-in alert. A toast layer would give each of those a second home and let the two drift. `architecture.md` lists a `toast` primitive among the shadcn set — stale anticipation that was never built, corrected here rather than satisfied by adding `sonner`, which is also not on the approved dependency list.
+- **Loading skeletons are route-level, not in-call.** `/room/[code]` awaits a meeting lookup *and* a profile lookup before it renders anything, and `/history` awaits two queries; on a cold instance that is the gap someone actually stares at. The in-call connecting state already belongs to `CallStatus`, and a second thing describing a connection is the trap F23 avoided by keeping one component.
+- **The leak check is automated on three fronts, because the copy lives in three places.** Pure modules get unit tests; the API routes carry their own user-facing `message` and pass it to the client verbatim, so those get e2e assertions against the returned body; rendered surfaces that the suite can reach get e2e. A one-time read cannot catch the edit made six months from now, which is when copy actually changes.
+- **Media-failure copy moves to a pure module.** It is a `Record` inside `media-state-notice.tsx` today, and three of its five states are unreachable from the suite — so only a unit test can cover them, and only if the map lives somewhere importable. Same split the project already makes for `disconnect-reason.ts`.
+- **The share control is gated on `Connected`.** Pressing it during the handshake publishes into a room that is not there and is immediately unpublished, with nothing surfaced — a one-to-three-second window right after Join, which is exactly when someone reaches for it.
+- **The empty-room share investigation is bounded and produces artifacts, not a fix.** It has been open since F13 with the mechanism unknown. F24 measures a real failure rate over repeated solo publishes rather than "roughly half the time", captures `livekit-client` debug logs across a publish→unpublish to see whether the unpublish is server- or client-initiated, and re-tests `dynacast: false` rigorously — the existing note records it as ruled out without saying how. It ends with either a named mechanism or a characterised reproduction recorded in `constraints.md`. **Nothing is filed upstream without explicit approval.**
+
+**Verify:** `error.tsx` is proved by throwing from a component and watching the
+boundary catch it and `reset()` recover, not by reading the file. Skeletons are
+proved with the route's data request delayed. The leak check runs the forbidden-pattern
+set against every API error body and all five `MediaFailure` states — the three the
+suite cannot reach being exactly why that half is a unit test. The share gate and
+jump-to-latest each get an e2e that is seen to fail before it is trusted.
+
+**Explicitly not claimed:** that the empty-room unpublish is fixed. It is LiveKit's
+behaviour inside LiveKit's SFU; the deliverable is a characterised reproduction and a
+decision, which may well be "accept and document".
+
 ---
 
 ## Phase 7 — Ship

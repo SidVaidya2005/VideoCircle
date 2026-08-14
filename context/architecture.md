@@ -22,7 +22,7 @@
 | Styling | Tailwind CSS 4.3 | Utility styling; design tokens declared with `@theme` |
 | Design system | VideoCircle design system (`context/Design/`) | Terminal-dark, mono-only visual language; token and specimen source of truth. Adapted from the MIT-licensed Anime.js kit |
 | Typeface | JetBrains Mono via `next/font/google` | The single family, self-hosted at build time. Substitutes for the kit's licensed IoskeleyMono |
-| UI primitives | shadcn/ui (Radix under the hood) | Dialog, dropdown, tooltip, toast, sheet — source lives in the repo, aliased to brand tokens |
+| UI primitives | shadcn/ui (Radix under the hood) | Dialog, dropdown, tooltip, popover, sheet, input, textarea, button — source lives in the repo, aliased to brand tokens. **No toast**: every transient failure is surfaced on the surface it happened on, and F24 decided against adding a second home for those messages |
 | Motion | CSS transitions with the kit's easing curves; `animejs` outside the call | Brand motion without competing with WebRTC encoding on the main thread |
 | Validation | Zod 4 | Request-body and env parsing at every server boundary |
 | Linting | ESLint 9 + `eslint-config-next` | **Not 10** — `eslint-plugin-react` breaks on it; see `constraints.md` → Tooling |
