@@ -71,9 +71,18 @@ function ParticipantsCell({ names }: { names: string[] }) {
   const { shown, overflow } = splitParticipantNames(names);
 
   return (
-    <span className="text-ink-2 truncate text-sm">
-      {shown.join(', ')}
-      {overflow > 0 ? <span className="text-faint">{` +${overflow} more`}</span> : null}
+    // A flex row, not one span with `truncate` on it. `truncate` sets `overflow:
+    // hidden`, which an *inline* box ignores — so above `sm:`, where Cell is
+    // `block` and this span is inline, nothing clipped and the nowrap name list
+    // became the grid column's min-content. That pushed /history 181px wide at
+    // 768 and 209px at phone landscape. Below `sm:` Cell is flex, which blockified
+    // the same span and hid it at the one width the suite used to measure.
+    //
+    // The count is `shrink-0` because it is the part that must survive: "+8 more"
+    // eaten by the ellipsis it is explaining would be worse than no truncation.
+    <span className="text-ink-2 flex min-w-0 items-baseline gap-1 text-sm">
+      <span className="truncate">{shown.join(', ')}</span>
+      {overflow > 0 ? <span className="text-faint shrink-0">{`+${overflow} more`}</span> : null}
     </span>
   );
 }
