@@ -382,3 +382,29 @@ test('the sheet form carries the whole panel on a phone', async ({ page, request
 
   await expect.poll(undersized).toEqual([]);
 });
+
+test('switching to another panel still marks chat read', async ({ page, browser, request }) => {
+  test.setTimeout(90_000);
+
+  const code = await createMeeting(request);
+  const second = await browser.newContext({ permissions: ['camera', 'microphone'] });
+  const guest = await second.newPage();
+
+  try {
+    await joinAs(page, code, 'Ada Lovelace', `#k=${KEY}`);
+    await joinAs(guest, code, 'Grace Hopper', `#k=${KEY}`);
+    await expect(page.getByRole('listitem')).toHaveCount(2, { timeout: 20_000 });
+
+    await chatControl(page).click();
+    await sendMessage(guest, 'read with the panel open');
+    await expect(entries(page)).toHaveCount(1);
+
+    // Chat closes without the chat control ever being touched. What was read
+    // while it was open must not come back as unread.
+    await page.getByRole('button', { name: /^show participants/i }).click();
+
+    await expect(chatControlNamed(page, /^show chat$/i)).toBeVisible();
+  } finally {
+    await second.close();
+  }
+});

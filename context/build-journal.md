@@ -89,73 +89,15 @@ At that phase's checkpoint, the whole phase collapses to:
 - **Phase gates at close:** `lint`, `typecheck`, `build` clean; 173 unit tests and 71 e2e specs pass. The suite grew from 36 e2e at the start of the phase to 71.
 
 
-## Phase 4 — Encrypted chat
 
-### 17 Chat key handling — 2026-08-14
+## Phase 4 — Encrypted chat *(compacted 2026-08-14)*
 
-- **The canonical snippet in `code-standards.md` was written before the rule that now forbids it.** `useChatKey` was implemented exactly as drawn — read the hash in an effect, `setState` — and `react-hooks/set-state-in-effect` failed `npm run lint` as an error. The rule is right: for the commonest case, a link carrying no key, that is a second render pass before paint. The fragment now comes through `useSyncExternalStore` with a `() => null` server snapshot, which is the shape `use-media-query` already uses for a value the server cannot see, and only the genuinely async import goes through state. The doc was corrected rather than the rule suppressed.
-- **The panel shell shipped here rather than at F19, so the feature could be verified at all.** F17's own verify line asks for the key-missing state to be visible; nothing in the UI could reach it while the chat control was still a disabled stub. The composer stayed at F19 rather than being built twice — it will gate on the same `status !== 'ready'`.
-- **The chat control is never disabled, and that is a copy decision as much as a UI one.** A disabled control says "chat is broken"; the truth is "the link you were sent is missing a piece", and only the panel has room to say which. Its wording is the other half of the invite dialog's no-key note — one warns the sender, one explains to the receiver.
-- **`PENDING_CONTROLS` is gone and `SecondaryControl.onClick` is now required.** Chat was the last stub, so the disabled path through the bar and the MORE menu disappeared with it. `control-bar.spec.ts`'s "controls whose panels do not exist yet" test was rewritten to assert the opposite — that no control in the call is disabled.
-- **`restoreChatKeyFragment()` got its first caller, four features after it shipped.** It lives on `RoomExperience`'s mount, and the ordering is safe by construction rather than by care: the restore runs when the lobby mounts, while `useChatKey` runs when `CallStage` mounts, behind a click on Join. React runs child effects before parent ones, so a restore placed any deeper would have raced the read it exists to precede. Note it still has no *producer* on this route — `signInWithGoogle` is only reachable from the shell header, which `/room/[code]` sits outside.
-- **The test fixture was the only real bug, and it was mine.** The 39-character key borrowed from `invite.spec.ts` is ~29 bytes, which AES-GCM rejects; that spec only ever carries the string through a URL, while this one imports it. Three tests failed identically, all on the valid-key path. A genuine 32-byte, 43-character key fixed them — and the wrong-length case became the malformed-key test.
-- **A `#k=` that is well-formed but unusable is one state with the missing case, not two.** Someone holding a truncated link cannot act on the difference.
-
-**Verified:** `npm run typecheck` clean; `npm run lint` clean (3 pre-existing
-`call-preview.tsx` inline-style warnings, no errors) with all 8 `_verify.mjs` checks
-passing; `npm run test` 173 passing; `npm run test:e2e` 77 passing, up from 71. Six
-new specs in `tests/e2e/chat-key.spec.ts` cover the ready, missing and malformed
-states, one-panel-at-a-time, the MORE path with no overflow at 360px, and that no
-request made while the chat panel is open carries any part of the fragment. One
-`call-grid.spec.ts` failure on the first full run was the known parallel-load
-`/api/meetings` flake: it passed alone, and `[api/meetings]` logged nothing across a
-second clean full run, matching the Phase 3 diagnosis that it fails before the
-handler.
-
-### 18 Message encryption — 2026-08-14
-
-- **The wire assertion this feature exists to make could not be written the way the build plan implied.** "Confirm no plaintext appears on the wire" reads like `page.on('request')`, which is what F16 used for the invite dialog — but the data channel is SCTP over WebRTC and makes no HTTP request at all, so a request-level check would have passed without ever having looked at a chat byte. The spec patches `RTCDataChannel.prototype.send` in an init script, records every outgoing payload, and asserts none contains the plaintext or the key. It also asserts the recording is non-empty: a leak check that never observed a send is the most dangerous green test available.
-- **Ordering is local, and that is a security decision as much as a correctness one.** The envelope's `sentAt` is validated by the schema and then deliberately unused. Ordering or displaying by it would let one client with a wrong clock reorder everyone's transcript, and a hostile one backdate itself to the top of a visible window. Arrival order, arrival timestamp, no sort anywhere.
-- **Async decryption does not preserve arrival order on its own.** Two payloads arriving back to back can resolve in either order and land reversed. Each decrypt is chained onto the last through a ref-held tail promise, which keeps append order equal to arrival order without inventing a pending state F19 would have to render.
-- **With no key, incoming payloads are dropped rather than collected as unreadable.** The panel has already explained that the link cannot read chat; a column of placeholders beneath that explanation is noise. `unreadable` is reserved for the case that is genuinely surprising — you hold a key and this message still will not open.
-- **Your own message is appended after `publishData` resolves, and a rejection is recorded rather than swallowed.** LiveKit does not echo your data back to you, so the sender must add its own copy; `reliable: true` can genuinely reject, and something typed and sent must never simply vanish. The composer clears immediately regardless — holding the field hostage to the network makes a fast conversation feel broken.
-- **`architecture.md`'s canonical snippet re-exported the base64url helpers, and that was wrong twice over.** Nothing about a chat message is base64 — the packed bytes go raw onto the channel — and a pure re-export is the barrel pattern `code-standards.md` bans. Corrected, along with the `Uint8Array<ArrayBuffer>` pinning that `publishData` and Web Crypto both require and the snippet did not have.
-- **Two type errors both traced to `Uint8Array` no longer meaning what it used to.** The default is now `Uint8Array<ArrayBufferLike>`, which admits a `SharedArrayBuffer` and which neither `crypto.subtle` nor `publishData` accepts. `decryptChatMessage` copies on the way in, exactly as `encodeReaction` copies on the way out. In the spec, `original.call(this, data)` failed for a different reason: `send` is four overloads and `.call` resolves to the last, so `Reflect.apply` is what lets one patched function stand in for all four.
-- **Two test bugs, both mine, both in the assertions rather than the product.** `getByRole('listitem')` matches video tiles as well as chat entries, so the transcript locator had to be scoped to the panel. And the message arrives attributed to whoever sent it — the host — where the assertion named the guest.
-
-**Verified:** `npm run typecheck`, `npm run lint` (0 errors, the 3 pre-existing
-`call-preview.tsx` warnings, 8/8 `_verify.mjs`) and `npm run build` all clean.
-`npm run test` 183 passing, up from 173: ten new cases in
-`tests/unit/lib/crypto/chat-message.test.ts` cover round trip, no-plaintext-in-
-ciphertext, a fresh IV per message, wrong key, tampered ciphertext, replay under
-another identity, over-long and empty bodies, a wrong-shaped plaintext crafted with
-`crypto.subtle` directly, and non-message bytes. `npm run test:e2e` 81 passing, up
-from 77: four two-context specs in `tests/e2e/chat.spec.ts` prove a message crosses
-between participants, that nothing readable leaves the browser, that a message
-under a different key renders as an unreadable placeholder with no page error, and
-that a keyless link shows the explanation and no composer.
-
-### 19 Chat panel — 2026-08-14
-
-- **The `textarea` primitive arrived shipping the same six things the kit forbids**, and got `input.tsx`'s corrections: `min-h-11` for the hit-area floor, `rounded-xs`, no `shadow-xs`, no `ring-[3px]`, no `md:text-sm` (below 16px iOS Safari zooms the viewport on focus), and no `dark:` variants. Two are specific to this one: `field-sizing-content` was dropped because Safari does not support it and this project's mobile target is real iOS, so the caller sizes from `scrollHeight` instead; and `resize-none` was added, because a drag handle fights a caller-driven height and leaves the field stuck. Re-apply all of it after any regeneration.
-- **Unread is an index, not a timestamp.** Two messages can share a millisecond with a seen-stamp, and then whether they count is a coin toss. `CallStage` remembers how many messages had arrived when chat was last opened or closed, and unread is the non-local entries past that mark.
-- **Stamping "seen" in handlers rather than an effect is the same rule that reshaped `useChatKey` at F17.** `react-hooks/set-state-in-effect` is an error here, and the two moments that matter — opening and closing — are both already handlers. It did surface something the panel state had been hiding: the sheet dismisses itself through `onClose`, which bypassed `togglePanel` entirely, so `closePanel` had to exist beside it or a sheet-dismissed chat would never mark anything read.
-- **"Near the bottom" has to be read before the list grows.** A ref updated on scroll, checked in a layout effect after the messages land. Reading the measurement after the DOM update would always report not-near-bottom, and the list would silently never follow anything — a defect that looks exactly like the feature working, since the scrolled-up case is the one people notice.
-- **The scroll pin is asserted in both directions.** A pin that never scrolls at all passes the scrolled-up test perfectly; only the at-the-bottom case catches it.
-- **Enter is guarded on `isComposing`.** An IME uses Enter to commit a character, so sending there would dispatch a half-typed word in any language that needs one.
-- **One interval for the panel, not one per message.** `CallPanel` unmounts its children when closed, so the timer dies with the panel and nothing ticks in a call where nobody opened chat.
-- **`locator.type()` is deprecated**, and the two places that needed real keystrokes rather than `fill` now use `pressSequentially`.
-- **The mobile sheet got its own spec rather than being assumed.** It shares `CallPanel` with the participants list, which is proven at 360px — but the composer is new, and "shares the shell" is not evidence that a text field and a Send button fit inside it.
-
-**Verified:** `npm run typecheck`, `npm run lint` (0 errors, the 3 pre-existing
-`call-preview.tsx` warnings, 8/8 `_verify.mjs`) and `npm run build` all clean.
-`npm run test` 189 passing, up from 183: six new cases in
-`tests/unit/lib/chat-time.test.ts` cover each boundary, truncation rather than
-rounding, and a clock that has gone backwards. `npm run test:e2e` 86 passing, up
-from 81: five new cases prove Enter sends while Shift+Enter does not, that a typed
-newline arrives intact, that the badge counts what landed while chat was shut and
-clears on open while your own messages never count, that the view holds still when
-scrolled up and follows when at the bottom, and that the sheet form carries the
-composer at 360px with no overflow and no undersized target. The known
-`/api/meetings` parallel-load flake appeared once in `createMeeting` and passed on
-re-run, as at F17.
+- **The privacy claim stopped being a structural argument and became a measurement.** It had been defended by invariants and review since F06, and by a request-level assertion at F16. That assertion could not carry chat: the data channel is SCTP over WebRTC and makes no HTTP request, so a request listener would have passed without ever having looked at a chat byte. `chat.spec.ts` patches `RTCDataChannel.prototype.send`, asserts no outgoing payload holds the plaintext or the key, and asserts the recording is non-empty — a leak check that never observed a send is the most dangerous green test available. (F18)
+- **Two rules about untrusted input turned out to be the same rule.** A decrypted payload proves the sender held the link key, not that they sent something well formed — so `ChatPlaintextSchema` validates on the way in, exactly as `decodeReaction` does for reactions. The sender's `sentAt` is the same problem wearing a clock: validated, then deliberately unused, because ordering by a peer-supplied value lets one wrong clock reorder everyone's transcript. (F18)
+- **`react-hooks/set-state-in-effect` shaped three separate designs this phase.** It rejected `useChatKey` as `code-standards.md` had drawn it, which moved the fragment read to `useSyncExternalStore`; it kept the unread seen-mark in handlers rather than an effect; and the doc's canonical snippet was corrected rather than the rule suppressed. A synchronous `setState` in an effect is an error here, not a warning. (F17, F19)
+- **Every feature in this phase shipped its UI early so it could be verified at all.** F17's verify line needs the key-missing state visible, F18's needs something able to send. Each built the smallest surface that made its own claim checkable, and F19 added to those rather than replacing them. (F17, F18, F19)
+- **Ownership follows the unmount boundary.** `CallPanel` unmounts its children when closed, which decided three things: the key is imported in `CallStage`, the transcript lives there too, and the relative-time interval lives in the panel precisely so it dies with it. (F17, F18, F19)
+- **The checkpoint diff found a bug the feature's own tests missed.** Switching straight from chat to the participants panel closes chat without touching the chat control, so the seen mark was never stamped and everything already read came back as unread. Fixed, and the regression test was confirmed to fail without the fix before being trusted. (checkpoint)
+- **Three defects traced to library and platform shapes rather than to logic**: `Uint8Array` now defaults to `ArrayBufferLike`, which neither `crypto.subtle` nor `publishData` accepts; `.call` on the four-times-overloaded `RTCDataChannel.send` resolves to the last overload; and `locator.type()` is deprecated. None was a reasoning error, and all three cost real time. (F18, F19)
+- **Test bugs outnumbered product bugs.** A 39-character key that `invite.spec.ts` can carry through a URL but `importChatKey` rejects; `getByRole('listitem')` matching video tiles as well as chat entries; an assertion naming the guest where the message is attributed to the host. Read the harness before blaming the product — the same lesson Phase 3 recorded. (F17, F18)
+- **Phase gates at close:** `lint`, `typecheck`, `build` clean; 189 unit tests and 87 e2e specs pass. The suite grew from 71 e2e at the start of the phase to 87.

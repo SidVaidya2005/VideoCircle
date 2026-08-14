@@ -17,9 +17,9 @@ progress, and what is next.
 
 ## Current Status
 
-**Phase:** Phase 4 — Encrypted chat
-**Last completed:** 19 Chat panel — the real composer (auto-growing textarea, Enter sends, Shift+Enter newlines that survive the round trip), relative timestamps on one panel-wide tick, own-message alignment, an unread badge counted by index, and a scroll pin that holds still when you have read back. Phase 4 is feature-complete. `typecheck`, `lint`, `build`, `test` (189) and `test:e2e` (86) all green
-**Next:** Phase 4 checkpoint — verify the phase, reconcile `architecture.md`, compact `build-journal.md`, promote Phase 4's binding decisions into `constraints.md`
+**Phase:** Phase 5 — Call history
+**Last completed:** Phase 4 checkpoint — gates green from a clean build, phase diff walked against every invariant with no violations. The diff found one real bug the feature's own tests missed: switching straight from chat to the participants panel closed chat without stamping the seen mark, so everything already read came back as unread. Fixed, and the regression test was confirmed to fail without the fix before being trusted. `architecture.md` reconciled, journal compacted 161→103 lines, Phase 4's binding decisions promoted into `constraints.md` under Encryption, The call, Design system and Testing
+**Next:** 20 Participation recording — opens Phase 5, and the first server-side work since F09
 
 ---
 
@@ -62,7 +62,7 @@ progress, and what is next.
 - [x] 17 Chat key handling
 - [x] 18 Message encryption
 - [x] 19 Chat panel
-- [ ] Phase checkpoint — verify Phase 4 — Encrypted chat is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
+- [x] Phase checkpoint — verify Phase 4 — Encrypted chat is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
 
 ### Phase 5 — Call history
 

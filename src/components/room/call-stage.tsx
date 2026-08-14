@@ -57,7 +57,12 @@ export function CallStage({ code }: CallStageProps) {
 
   function togglePanel(panel: CallPanelName) {
     setOpenPanel((current) => (current === panel ? null : panel));
-    if (panel === 'chat') markChatSeen();
+
+    // `openPanel === 'chat'` covers switching straight to another panel, which
+    // closes chat without ever touching the chat control. Without it, everything
+    // read while chat was open comes back as unread the moment you open the
+    // participants list.
+    if (panel === 'chat' || openPanel === 'chat') markChatSeen();
   }
 
   function closePanel(panel: CallPanelName) {

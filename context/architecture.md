@@ -126,8 +126,8 @@ VideoCircle/
     │   │                                participant-tile, tile-menu, call-panel,
     │   │                                participant-list, control-bar, control-button,
     │   │                                leave-control, reactions-provider, reaction-menu,
-    │   │                                invite-dialog, and later the chat panel
-    │   ├── chat/                      → encrypted chat panel, composer, message list
+    │   │                                and invite-dialog
+    │   ├── chat/                      → chat-panel: transcript, composer, key-missing notice
     │   └── history/                   → history table, empty state
     ├── hooks/                         → use-media-preview (owns the lobby's tracks),
     │                                    use-media-devices, use-copy-to-clipboard,
@@ -280,12 +280,22 @@ and so would not appear until it mattered.
 
 ```
 Chat composer (client)
-  → key = importChatKey(readChatKeyFromHash(location.hash))
+  → key = importChatKey(readChatKeyFromHash(location.hash))   (useChatKey, at CallStage)
   → encryptChatMessage(key, localIdentity, { body, sentAt })   → Uint8Array
   → room.localParticipant.publishData(bytes, { topic: 'vc.chat', reliable })
         ⇣  LiveKit SFU relays opaque bytes — cannot decrypt
   → useDataChannel('vc.chat') on every peer
   → decryptChatMessage(key, message.from.identity, bytes)      → rendered
+        a rejection here is an "unreadable message" entry, never a throw
+
+The sender appends its own copy after publishData resolves — LiveKit does not
+deliver your own data messages back to you — and a rejection is kept as a failed
+entry rather than vanishing. Incoming decryptions are chained through a tail
+promise, because async resolution order is not arrival order.
+
+The transcript lives in CallStage, not the panel: CallPanel unmounts its children
+when closed, and a transcript that stops receiving when someone closes chat is not
+a transcript. It exists in component state only and is never written anywhere.
 ```
 
 ### Recording participation for history
