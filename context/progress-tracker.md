@@ -18,8 +18,8 @@ progress, and what is next.
 ## Current Status
 
 **Phase:** Phase 4 — Encrypted chat
-**Last completed:** 18 Message encryption — `chat-message.ts` encrypts under the link key with a fresh IV and the sender identity as AAD, `useEncryptedChat` holds the transcript in `CallStage`, and a plain composer makes the path exercisable. The privacy claim is now measured at the data channel itself, by patching `RTCDataChannel.prototype.send` — `page.on('request')` can never see WebRTC traffic. `typecheck`, `lint`, `build`, `test` (183) and `test:e2e` (81) all green
-**Next:** 19 Chat panel — the composer's keyboard handling, unread badge, timestamps and auto-scroll
+**Last completed:** 19 Chat panel — the real composer (auto-growing textarea, Enter sends, Shift+Enter newlines that survive the round trip), relative timestamps on one panel-wide tick, own-message alignment, an unread badge counted by index, and a scroll pin that holds still when you have read back. Phase 4 is feature-complete. `typecheck`, `lint`, `build`, `test` (189) and `test:e2e` (86) all green
+**Next:** Phase 4 checkpoint — verify the phase, reconcile `architecture.md`, compact `build-journal.md`, promote Phase 4's binding decisions into `constraints.md`
 
 ---
 
@@ -61,7 +61,7 @@ progress, and what is next.
 
 - [x] 17 Chat key handling
 - [x] 18 Message encryption
-- [ ] 19 Chat panel
+- [x] 19 Chat panel
 - [ ] Phase checkpoint — verify Phase 4 — Encrypted chat is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
 
 ### Phase 5 — Call history
@@ -103,11 +103,14 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 - **A real desktop share has never been received on a real phone.** The suite stubs the picker and proves the publish path, the capability gate, and the remote tile — but the build plan's own verify line asks for a phone as receiver, and that stays manual. Worth doing at **F22**, alongside the mobile pass. (F12)
 - **Pressing the share control during the connect handshake silently does nothing.** The bar renders as soon as the room tree mounts, which is before `Connected`, so a share requested in that window is published into a room that is not there and immediately unpublished. The window is one to three seconds and the person has just pressed Join, so it is unlikely to be reached — revisit at **F24** with the other edge states. (F12)
 - **The wordmark's tittle sits ~3.5px off during the `next/font` swap window**, because the generated fallback matches advance and ascent but not glyph shapes. First paint only, on a cold load. Accepted at F02 rather than trading it for a flash of invisible text; revisit only if it looks wrong on the deployed instance.
+- **With chat open and scrolled up, nothing signals a new message.** The badge counts only while the panel is closed, and the scroll pin deliberately holds the view still — so a message arriving while you read back is silent until you scroll down. A jump-to-latest control closes it; it was left out of F19 as scope. Worth doing at **F24** with the other edge states, or sooner if it is felt in a real call. (F19)
+- **The composer's behaviour under a phone's on-screen keyboard is unverified.** The sheet is proven at 360px with hit areas and no overflow, but Playwright has no soft keyboard, so whether the composer stays clear of it on real iOS Safari and Android Chrome is untested. **F22 owns it** with the rest of the mobile pass. (F19)
 - **`joinAs` is copy-pasted into eight e2e specs.** Every call spec declares its own four-line version because they drifted apart before there was a support module; they are now identical. Lifting one into `tests/e2e/support/` is a small, safe cleanup that touches every call spec at once, so it wants its own commit rather than a feature's. **F26 owns it** with the other suite work. (F17)
 - **`/tokens` still ships its markup in the production bundle** even though it returns 404 there. A few kB of static swatches; revisit at F22 if the Home budget is tight.
 
 ## Key Decisions
 
+- **Unread is counted by index, and the seen mark is stamped in handlers rather than an effect.** An index has no tie-break problem where a message sharing a millisecond with a timestamp could be counted either way — and stamping on both open and close keeps `setState` out of an effect body, which is an error here. It also meant `closePanel` had to exist beside `togglePanel`: the sheet dismisses itself, and that path would otherwise never mark anything seen. (F19)
 - **The end-to-end encryption claim is measured at the data channel, because no HTTP request ever carries it.** `page.on('request')` cannot see SCTP over WebRTC, so a request-level assertion would have passed without ever looking at the bytes — the most dangerous kind of green test. `chat.spec.ts` patches `RTCDataChannel.prototype.send`, asserts no outgoing payload contains the plaintext or the key, and asserts the recording is non-empty so it cannot pass vacuously. (F18)
 - **A peer's clock is not evidence.** The envelope carries `sentAt` and the schema validates it, but the transcript is ordered and timestamped by local arrival: sorting by a sender-supplied value lets one misconfigured client reorder everyone's transcript and a hostile one pin itself to the top. Decryptions are chained through a tail promise for the same reason — async resolution order is not arrival order. (F18)
 - **A value the browser can read synchronously does not belong in an effect.** `useChatKey` was written the way `code-standards.md` drew it — read the hash in an effect, `setState` — and `react-hooks/set-state-in-effect` failed the build over it, correctly: a link with no key would have cost a second render pass before paint. The fragment now comes through `useSyncExternalStore`, the same shape `use-media-query` uses for the same reason, and only the genuinely async import touches state. The doc's canonical snippet was wrong and has been corrected. (F17)
@@ -117,4 +120,3 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 - **Speech never moves the layout.** `resolveFocusKey` takes no speaker argument at all, so it cannot: a layout that follows whoever is talking flips several times a minute in an ordinary conversation. Active speakers order the filmstrip and ring their own tile, which is what the build plan's "active-speaker detection" is actually for. (F13)
 - **We hold no mirrored sharing state, and that is what makes the hard case free.** `useLocalParticipant` re-emits on `LocalTrackUnpublished`, so a share ended from Chrome's own stop bar syncs the control and banner with no listener of ours. The build plan's "no stale UI state" requirement is met by having no state that could go stale. (F12)
 - **A memo comparator must read only immutable facts.** `ParticipantTile` compared `publication.isMuted`, which LiveKit mutates in place — both sides of the comparison resolved to the same live value, so a camera turned off mid-call left a dead `<video>` on every other screen. Mute state now comes from `useIsMuted`, whose own state re-renders the tile regardless of what the memo decides. (F11)
-- **The prebuilt LiveKit grid was rejected, not overlooked.** `GridLayout` lays out nothing without `@livekit/components-styles`, an unapproved dependency, and `ParticipantTile` ships four pieces of chrome the design system contradicts. Ours is built on the unstyled primitives — `useTracks`, `VideoTrack`, `useIsSpeaking`, `useIsMuted`, `useVisualStableUpdate`. (F10)

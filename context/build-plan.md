@@ -563,11 +563,25 @@ the check cannot pass vacuously.
 - Empty state noting that messages are end-to-end encrypted and not stored
 - Auto-scroll that does not yank the view when the user has scrolled up
 - `Sheet` on mobile, inline panel on desktop, sharing the participants-panel shell
+- **The composer becomes a textarea growing to about five rows**, then scrolling, and bodies render `whitespace-pre-wrap` so a typed newline survives the round trip. Growth is a `scrollHeight` read on input — a layout read, not an animation, so the no-JS-animation-in-call rule is untouched
+- **Own messages carry the fill; everyone else's do not.** The inline panel is already `bg-card`, so filling both sides would flatten the distinction rather than draw it
+- **Terse relative time** — `just now`, `2m`, `47m`, `3h`, `2d` — lowercase and unpunctuated, as room codes and identifiers are. Not `Intl.RelativeTimeFormat`, which produces "2 minutes ago" and reads nothing like the rest of the product
 
 **Logic:**
 
 - Transcript held in component state only; never written to storage
 - Messages from participants who have since left still render with their captured name
+- **Unread is counted by index, not by timestamp.** `CallStage` remembers how many messages had been seen when chat was last opened or closed; unread is the non-local entries past that mark. An index has no tie-break problem, where a message sharing a millisecond with the seen-stamp could be counted either way
+- **The seen mark is stamped in the handlers, never in an effect** — on open and on close, including the sheet's own dismiss path. This keeps `setState` out of an effect body, which `react-hooks/set-state-in-effect` rejects as an error; see F17, where that rule reshaped `useChatKey`
+- **"Near the bottom" is read from a ref updated on scroll, captured before the list grows.** Reading it after would always report not-near-bottom, and the list would never follow anything
+- **One interval per panel, never one per message.** It lives in `ChatPanel`, which `CallPanel` unmounts when closed, so nothing ticks in a call where chat is shut
+- **`formatChatTime` is pure and lives in `src/lib/`**, taking `receivedAt` and `now` so every boundary is testable without a clock
+
+**Verify:** Unit tests cover each relative-time boundary. Two contexts prove Enter
+sends while Shift+Enter does not, that a typed newline arrives intact, that the
+badge counts what landed while the panel was shut and clears on open, and that your
+own messages never count toward it. The scroll pin is asserted in both directions —
+a view that never moves would otherwise pass a one-sided test.
 
 ---
 

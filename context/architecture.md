@@ -65,6 +65,7 @@ filled in by the feature that needs it. Built so far:
 - **F12** — `src/components/room/call-status.tsx` (the status strip, moved out of `call-stage.tsx` so the sharing banner and the connection line it replaces sit together) and `src/hooks/use-is-screen-share-supported.ts`. `video-grid.tsx` gained the `ScreenShare` source and `room-grid.ts` the `orderCallTiles` sort
 - **F17** — `src/hooks/use-chat-key.ts` and `src/components/chat/chat-panel.tsx`, the first file under `components/chat/`. `CallPanelName` widened to `'participants' | 'chat'` and `control-bar.tsx` lost `PENDING_CONTROLS` — no control on the bar is disabled any more. `room-experience.tsx` became the caller of `restoreChatKeyFragment()`, which had shipped uncalled since F04
 - **F18** — `src/lib/crypto/chat-message.ts` and `src/hooks/use-encrypted-chat.ts`. The panel gained a plain input, a Send button and a message list; `call-stage.tsx` owns the transcript, because `CallPanel` unmounts its children when closed
+- **F19** — `src/lib/chat-time.ts` and the `textarea` primitive. `chat-panel.tsx` grew the real composer, the relative-time tick and the near-bottom scroll pin; `call-stage.tsx` gained the seen mark the unread count derives from, and `closePanel` beside `togglePanel` so the sheet's own dismiss stamps it too
 
 Not yet built: `api/livekit/webhook`, `lib/livekit/webhook.ts`, `types/meeting.ts`,
 the `history` page, and `render.yaml`.
@@ -111,7 +112,7 @@ VideoCircle/
     │       └── livekit/webhook/route.ts → POST: LiveKit participant/room events
     ├── components/
     │   ├── ui/                        → shadcn primitives, added per feature (button, dialog,
-    │   │                                dropdown-menu, input, popover, sheet, tooltip),
+    │   │                                dropdown-menu, input, popover, sheet, textarea, tooltip),
     │   │                                plus section-overline, the brand's own
     │   ├── shell/                     → wordmark, site header, site footer, auth menu
     │   ├── home/                      → hero, call preview, how-it-works, feature grid, join-by-code
@@ -158,6 +159,7 @@ VideoCircle/
     │   │                                (shares first), and the visible/overflow split
     │   │                                against MAX_VISIBLE_TILES
     │   ├── keyboard.ts                → pure typing-target and bare-keypress predicates
+    │   ├── chat-time.ts               → pure elapsed → `just now` / `2m` / `3h` / `2d`
     │   ├── room-focus.ts              → pure focus resolution (pin, then share, then grid)
     │   │                                and the focused/filmstrip split
     │   ├── participants.ts            → pure roster ordering: you first, then join order

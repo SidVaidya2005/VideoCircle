@@ -134,3 +134,28 @@ from 77: four two-context specs in `tests/e2e/chat.spec.ts` prove a message cros
 between participants, that nothing readable leaves the browser, that a message
 under a different key renders as an unreadable placeholder with no page error, and
 that a keyless link shows the explanation and no composer.
+
+### 19 Chat panel — 2026-08-14
+
+- **The `textarea` primitive arrived shipping the same six things the kit forbids**, and got `input.tsx`'s corrections: `min-h-11` for the hit-area floor, `rounded-xs`, no `shadow-xs`, no `ring-[3px]`, no `md:text-sm` (below 16px iOS Safari zooms the viewport on focus), and no `dark:` variants. Two are specific to this one: `field-sizing-content` was dropped because Safari does not support it and this project's mobile target is real iOS, so the caller sizes from `scrollHeight` instead; and `resize-none` was added, because a drag handle fights a caller-driven height and leaves the field stuck. Re-apply all of it after any regeneration.
+- **Unread is an index, not a timestamp.** Two messages can share a millisecond with a seen-stamp, and then whether they count is a coin toss. `CallStage` remembers how many messages had arrived when chat was last opened or closed, and unread is the non-local entries past that mark.
+- **Stamping "seen" in handlers rather than an effect is the same rule that reshaped `useChatKey` at F17.** `react-hooks/set-state-in-effect` is an error here, and the two moments that matter — opening and closing — are both already handlers. It did surface something the panel state had been hiding: the sheet dismisses itself through `onClose`, which bypassed `togglePanel` entirely, so `closePanel` had to exist beside it or a sheet-dismissed chat would never mark anything read.
+- **"Near the bottom" has to be read before the list grows.** A ref updated on scroll, checked in a layout effect after the messages land. Reading the measurement after the DOM update would always report not-near-bottom, and the list would silently never follow anything — a defect that looks exactly like the feature working, since the scrolled-up case is the one people notice.
+- **The scroll pin is asserted in both directions.** A pin that never scrolls at all passes the scrolled-up test perfectly; only the at-the-bottom case catches it.
+- **Enter is guarded on `isComposing`.** An IME uses Enter to commit a character, so sending there would dispatch a half-typed word in any language that needs one.
+- **One interval for the panel, not one per message.** `CallPanel` unmounts its children when closed, so the timer dies with the panel and nothing ticks in a call where nobody opened chat.
+- **`locator.type()` is deprecated**, and the two places that needed real keystrokes rather than `fill` now use `pressSequentially`.
+- **The mobile sheet got its own spec rather than being assumed.** It shares `CallPanel` with the participants list, which is proven at 360px — but the composer is new, and "shares the shell" is not evidence that a text field and a Send button fit inside it.
+
+**Verified:** `npm run typecheck`, `npm run lint` (0 errors, the 3 pre-existing
+`call-preview.tsx` warnings, 8/8 `_verify.mjs`) and `npm run build` all clean.
+`npm run test` 189 passing, up from 183: six new cases in
+`tests/unit/lib/chat-time.test.ts` cover each boundary, truncation rather than
+rounding, and a clock that has gone backwards. `npm run test:e2e` 86 passing, up
+from 81: five new cases prove Enter sends while Shift+Enter does not, that a typed
+newline arrives intact, that the badge counts what landed while chat was shut and
+clears on open while your own messages never count, that the view holds still when
+scrolled up and follows when at the bottom, and that the sheet form carries the
+composer at 360px with no overflow and no undersized target. The known
+`/api/meetings` parallel-load flake appeared once in `createMeeting` and passed on
+re-run, as at F17.
