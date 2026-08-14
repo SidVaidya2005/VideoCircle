@@ -121,6 +121,16 @@ export interface CloseMeetingOutcome {
  *
  * Closing the open rows is the reconciliation for a dropped `participant_left` —
  * which is exactly what a killed browser tab produces.
+ *
+ * **No `greatest(joined_at, …)` clamp here, deliberately, even though the nightly
+ * sweep needs one against the same `left_at >= joined_at` CHECK.** The difference is
+ * whose clock each one compares. The sweep sets `left_at` from `meetings.expires_at`,
+ * a Postgres value, against a `joined_at` that came from LiveKit — two clocks, so
+ * nothing orders them and a late joiner can land after expiry. Here both sides are
+ * LiveKit's: a participant joined before the room they were in finished, and both
+ * timestamps come from the same source, so the ordering is a fact rather than a
+ * hope. Adding a clamp anyway would suggest the two cases are the same, and the next
+ * reader would take the sweep's clamp for style rather than for the bug it fixes.
  */
 export async function closeMeeting(params: {
   meetingId: string;

@@ -141,6 +141,13 @@ test('a meeting shows its code, duration and the other people in it', async ({ p
     await expect(entry).toContainText('Grace');
     // Their own name is never listed among the others.
     await expect(entry).not.toContainText(account.displayName);
+
+    // The desktop layout is a plain-CSS class (`.history-row`, for the literal
+    // track widths) combined with a Tailwind `sm:grid`. Nothing else proves those
+    // two actually meet — a typo in either leaves a stack of cards on a 1280px
+    // screen, which no other assertion here would notice.
+    const columns = await entry.evaluate((el) => getComputedStyle(el).gridTemplateColumns);
+    expect(columns.split(' ')).toHaveLength(5);
   } finally {
     await cleanUp(db, [meeting.meetingId], [account]);
   }

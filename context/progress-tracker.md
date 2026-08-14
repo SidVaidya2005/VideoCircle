@@ -18,8 +18,8 @@ progress, and what is next.
 ## Current Status
 
 **Phase:** Phase 5 — Call history
-**Last completed:** 21 Call history page — `/history`, one entry per meeting, with the empty state and the rejoin gate. All gates green: 216 unit tests, 104 e2e (8 new), lint, typecheck, and a clean production build. The plan conceded that a signed-in page could not be tested without Google's consent screen; that turned out to be wrong — `generateLink` + `verifyOtp` mints a genuine session through the admin API, so the two-account isolation claim is now proved in a real browser as well as by JWT impersonation in SQL. The timezone test earned its place immediately: it failed twice, first catching that a server-rendered time showed the machine's zone, then that `suppressHydrationWarning` "fixes" the mismatch by keeping the server's text
-**Next:** Phase 5 checkpoint — verify the phase, reconcile `architecture.md`, compact `build-journal.md`, and promote binding decisions into `constraints.md`. Note F20 stays unproven against real LiveKit traffic until the dashboard is configured at F25
+**Last completed:** Phase 5 checkpoint — gates green from a cleared build cache: 216 unit tests, 104 e2e, lint, typecheck, production build. Phase diff walked against every invariant with no violations. It found one gap and one thing worth writing down: nothing pinned the desktop grid actually laying out in columns — a plain-CSS class meeting a Tailwind variant, where a typo in either leaves a stack of cards on a 1280px screen — now asserted, and seen to fail before being trusted; and `closeMeeting` deliberately lacks the `greatest()` clamp the sweep needs, which now says so in the code so nobody "makes them consistent". `architecture.md` reconciled, journal compacted 244→114 lines, Phase 5's binding decisions promoted into `constraints.md` under a new Participation and history topic plus Testing and Design system
+**Next:** Phase 6 — Mobile and resilience, opening with 22 Mobile pass. Note F20 stays unproven against real LiveKit traffic until the dashboard is configured at F25
 
 ---
 
@@ -68,7 +68,7 @@ progress, and what is next.
 
 - [x] 20 Participation recording
 - [x] 21 Call history page
-- [ ] Phase checkpoint — verify Phase 5 — Call history is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
+- [x] Phase checkpoint — verify Phase 5 — Call history is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
 
 ### Phase 6 — Mobile and resilience
 
@@ -89,6 +89,8 @@ progress, and what is next.
 
 Open work carried forward. Cleared as the feature that needs each arrives.
 
+- **`POST /api/meetings` returned a non-201 once in three full-suite runs at the Phase 5 checkpoint, and this is NOT the closed issue below.** That one is a thrown `ECONNRESET` before any handler runs; this failed at `expect(response.status()).toBe(201)`, so a response did arrive. Not reproduced in two further full runs or in a focused re-run, and the artifact was lost to the re-run — the same mistake the F08 flake follow-up already warned about, so **capture `test-results/` before re-running next time.** Untested hypothesis worth checking first: Phase 5 added a lot of auth traffic to the suite (`history.spec.ts` creates and deletes real users), and `/api/meetings` calls `supabase.auth.getUser()` on every request, so a rate-limited auth call would surface as the handler's own 500. (checkpoint)
+- **History's `limit(50)` counts participation rows, not meetings.** With rejoins, a user with heavy history could have a meeting's earlier session fall outside the window, shortening that entry's span. Bounded and rare — it needs 50+ rows — and the fix is a `distinct on (meeting_id)` or a two-step id query. Revisit only if history depth ever matters. (F21)
 - **~~`POST /api/meetings` 500s under parallel test load~~ — diagnosed at the Phase 3 checkpoint and closed.** It is `next dev` resetting connections when four Playwright workers hit it at once, surfacing as `read ECONNRESET` *before* any handler runs: across four fully logged suite runs the handler logged nothing, and twelve concurrent requests by hand never reproduced it. `createMeeting` now retries once on a thrown transport error only — a non-201 still fails immediately, so a genuine 500 stays as loud as it was. CI builds and runs a production server, where this has never appeared. (checkpoint)
 - **Home's first-load JS is ~341 kB gzipped, against a 200 kB target** in `code-standards.md` → Targets. Pre-existing and not from F07 — `livekit-client` is confirmed absent from Home's chunks, whose only `livekit` match is the `NEXT_PUBLIC_LIVEKIT_URL` string. Measured by summing the gzipped chunks Home requests from a production `next start`, since Next 16 no longer prints the size table. **Belongs to F22.**
 - **The denied, no-device, and in-use states have no automated coverage.** `--use-fake-ui-for-media-stream` auto-grants and the fake device is always present, so none of the three is reachable from the suite as configured. Reaching them needs a second Playwright project launched without the fake-UI flag. **F26 owns this**; until then they are verified by hand.

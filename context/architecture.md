@@ -92,11 +92,16 @@ VideoCircle/
 ├── tests/
 │   ├── unit/                          → Vitest specs
 │   └── e2e/                           → Playwright specs
+│       └── support/                   → media stubs, signed webhook payloads, and
+│                                        session.ts, which signs a context in for real
 └── src/
     ├── proxy.ts                       → Supabase session refresh on every request
     ├── app/
     │   ├── layout.tsx                 → root layout: html/body, JetBrains Mono, metadata
-    │   ├── globals.css                → Tailwind import + :root token mirror + @theme inline
+    │   ├── globals.css                → Tailwind import + :root token mirror + @theme
+    │   │                                inline, then the few component classes whose
+    │   │                                values are literals (.grid-backdrop, the
+    │   │                                wordmark dot, .history-row)
     │   ├── (shell)/                   → route group: header + footer chrome
     │   │   ├── layout.tsx             → SiteHeader / <main> / SiteFooter
     │   │   ├── page.tsx               → Home: new meeting, join by code, sign in
