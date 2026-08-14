@@ -18,8 +18,8 @@ progress, and what is next.
 ## Current Status
 
 **Phase:** Phase 4 — Encrypted chat
-**Last completed:** 17 Chat key handling — `useChatKey` reads the fragment once and imports the key non-extractable, the chat control now opens a third `CallPanel` explaining itself when the link carries no key, and `restoreChatKeyFragment()` finally has a caller. `typecheck`, `lint`, `test` (173) and `test:e2e` (77) all green
-**Next:** 18 Message encryption — `chat-message.ts` and the data-channel hook
+**Last completed:** 18 Message encryption — `chat-message.ts` encrypts under the link key with a fresh IV and the sender identity as AAD, `useEncryptedChat` holds the transcript in `CallStage`, and a plain composer makes the path exercisable. The privacy claim is now measured at the data channel itself, by patching `RTCDataChannel.prototype.send` — `page.on('request')` can never see WebRTC traffic. `typecheck`, `lint`, `build`, `test` (183) and `test:e2e` (81) all green
+**Next:** 19 Chat panel — the composer's keyboard handling, unread badge, timestamps and auto-scroll
 
 ---
 
@@ -60,7 +60,7 @@ progress, and what is next.
 ### Phase 4 — Encrypted chat
 
 - [x] 17 Chat key handling
-- [ ] 18 Message encryption
+- [x] 18 Message encryption
 - [ ] 19 Chat panel
 - [ ] Phase checkpoint — verify Phase 4 — Encrypted chat is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
 
@@ -108,6 +108,8 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 
 ## Key Decisions
 
+- **The end-to-end encryption claim is measured at the data channel, because no HTTP request ever carries it.** `page.on('request')` cannot see SCTP over WebRTC, so a request-level assertion would have passed without ever looking at the bytes — the most dangerous kind of green test. `chat.spec.ts` patches `RTCDataChannel.prototype.send`, asserts no outgoing payload contains the plaintext or the key, and asserts the recording is non-empty so it cannot pass vacuously. (F18)
+- **A peer's clock is not evidence.** The envelope carries `sentAt` and the schema validates it, but the transcript is ordered and timestamped by local arrival: sorting by a sender-supplied value lets one misconfigured client reorder everyone's transcript and a hostile one pin itself to the top. Decryptions are chained through a tail promise for the same reason — async resolution order is not arrival order. (F18)
 - **A value the browser can read synchronously does not belong in an effect.** `useChatKey` was written the way `code-standards.md` drew it — read the hash in an effect, `setState` — and `react-hooks/set-state-in-effect` failed the build over it, correctly: a link with no key would have cost a second render pass before paint. The fragment now comes through `useSyncExternalStore`, the same shape `use-media-query` uses for the same reason, and only the genuinely async import touches state. The doc's canonical snippet was wrong and has been corrected. (F17)
 - **The privacy claim is now tested, not only structured.** The chat key never leaving the browser was defended by invariants and code review; `tests/e2e/invite.spec.ts` records every request made while the invite dialog is open and copying, and asserts none carries the fragment. Showing the key in a dialog is exactly the change that could have broken it. (F16)
 - **Ephemeral and durable state get different transports, and the build plan had them the same.** A reaction rides the unreliable data channel because losing one costs nothing; a raised hand rides a participant attribute because losing one is a real failure — an unreliable packet can drop, and a data-channel message reaches nobody who joins afterwards. The cost is one extra token claim, `canUpdateOwnMetadata`, pinned by the grant spec. (F15)
@@ -116,5 +118,3 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 - **We hold no mirrored sharing state, and that is what makes the hard case free.** `useLocalParticipant` re-emits on `LocalTrackUnpublished`, so a share ended from Chrome's own stop bar syncs the control and banner with no listener of ours. The build plan's "no stale UI state" requirement is met by having no state that could go stale. (F12)
 - **A memo comparator must read only immutable facts.** `ParticipantTile` compared `publication.isMuted`, which LiveKit mutates in place — both sides of the comparison resolved to the same live value, so a camera turned off mid-call left a dead `<video>` on every other screen. Mute state now comes from `useIsMuted`, whose own state re-renders the tile regardless of what the memo decides. (F11)
 - **The prebuilt LiveKit grid was rejected, not overlooked.** `GridLayout` lays out nothing without `@livekit/components-styles`, an unapproved dependency, and `ParticipantTile` ships four pieces of chrome the design system contradicts. Ours is built on the unstyled primitives — `useTracks`, `VideoTrack`, `useIsSpeaking`, `useIsMuted`, `useVisualStableUpdate`. (F10)
-- **Pure decision modules exist because `server-only` throws under Node.** Joinability and the token TTL cap are free of it so every branch is testable without a database or the LiveKit secrets; the route handler does the IO around them. (F09)
-- **A valid-looking room code is never authorization.** `/api/token` re-reads the meeting and refuses unless `ended_at is null and now() < expires_at`, even though the page already checked existence at render: the endpoint is directly callable, and a meeting can close while someone sits in the lobby deciding. (F09)

@@ -522,14 +522,36 @@ are already covered.
 
 ### 18 Message encryption
 
+**UI:**
+
+- A plain input, a Send button, and an unstyled message list in the F17 panel
+- **The minimal composer ships here so the wire can be inspected at all.** F18's verify line asks that no plaintext crosses the channel, which needs something able to send. F19's items — Enter/Shift+Enter, own-message alignment, relative timestamps, unread badge, auto-scroll — are additions to this, not rebuilds
+- No composer at all when the key is missing; F17's explanation stands unchanged
+
 **Logic:**
 
 - `src/lib/crypto/chat-message.ts` — `encryptChatMessage` and `decryptChatMessage` with a fresh 12-byte IV and sender identity as additional authenticated data
 - `useEncryptedChat` hook wrapping `useDataChannel(DATA_TOPIC.CHAT)` with `{ reliable: true }`
 - Decryption failure yields an "unreadable message" entry rather than a throw
-- Enforce `MAX_CHAT_MESSAGE_LENGTH` before encrypting
+- Enforce `MAX_CHAT_MESSAGE_LENGTH` before encrypting. `encryptChatMessage` validates its own input against `ChatPlaintextSchema`, so the limit is the rule and the input's `maxLength` only a courtesy
+- **The transcript lives in `CallStage`, not the panel.** `CallPanel` unmounts its children when closed, so a hook inside the panel would stop receiving the moment someone closed it — and F19's unread badge sits on the control bar, outside the panel either way
+- **Order and displayed time both come from local receive time.** `sentAt` is part of the envelope and is validated on arrival, then deliberately unused: a peer's clock is neither trustworthy nor accurate, and ordering by it lets one misconfigured client reorder everyone's transcript or pin itself to the top
+- **Decryptions are serialized through a tail-promise chain.** `decrypt` is async, so two payloads arriving back to back can resolve in either order and land reversed. Chaining keeps append order equal to arrival order without inventing a pending state F19 would have to render
+- **Your own message appends after `publishData` resolves**, with a `failed` status on rejection rather than disappearing. `reliable: true` can genuinely reject, and LiveKit does not echo your own data back to you
+- **With no key, incoming payloads are dropped rather than shown as unreadable.** The panel already explains that this link cannot read chat; a column of placeholders beneath that explanation is noise
+- **`chat-message.ts` does not re-export the base64url helpers**, as this file's earlier `architecture.md` snippet did. Nothing about a message is base64 — the bytes go raw onto the channel — and a pure re-export is the barrel pattern `code-standards.md` bans
 
-**Verify:** Vitest covers round trip, wrong key, tampered ciphertext, and mismatched sender identity. With devtools recording, confirm no plaintext appears on the wire and the key appears in no request.
+**Verify:** Vitest covers round trip, wrong key, tampered ciphertext, mismatched
+sender identity, an over-long body, a valid-JSON-wrong-shape plaintext crafted with
+`crypto.subtle` directly, and a distinct IV per message. Two browser contexts prove
+a message crosses between participants and that a payload encrypted under a
+different key renders as an unreadable placeholder without breaking the call.
+
+**The wire assertion cannot use `page.on('request')`** — the data channel is SCTP
+over WebRTC, not HTTP, so no request is ever made. Patch
+`RTCDataChannel.prototype.send` in an init script to record every outgoing payload,
+then assert none contains the plaintext **and** that the recording is non-empty, so
+the check cannot pass vacuously.
 
 ### 19 Chat panel
 

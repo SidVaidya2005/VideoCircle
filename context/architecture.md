@@ -64,10 +64,10 @@ filled in by the feature that needs it. Built so far:
 - **F13** — `src/components/room/{focus-layout,tile-menu}.tsx` and `src/lib/room-focus.ts`. `participant-tile.tsx` gained the pin gesture, the menu, a `size` variant and the pinned marker; `video-grid.tsx` now chooses between grid and spotlight and owns the pin
 - **F12** — `src/components/room/call-status.tsx` (the status strip, moved out of `call-stage.tsx` so the sharing banner and the connection line it replaces sit together) and `src/hooks/use-is-screen-share-supported.ts`. `video-grid.tsx` gained the `ScreenShare` source and `room-grid.ts` the `orderCallTiles` sort
 - **F17** — `src/hooks/use-chat-key.ts` and `src/components/chat/chat-panel.tsx`, the first file under `components/chat/`. `CallPanelName` widened to `'participants' | 'chat'` and `control-bar.tsx` lost `PENDING_CONTROLS` — no control on the bar is disabled any more. `room-experience.tsx` became the caller of `restoreChatKeyFragment()`, which had shipped uncalled since F04
+- **F18** — `src/lib/crypto/chat-message.ts` and `src/hooks/use-encrypted-chat.ts`. The panel gained a plain input, a Send button and a message list; `call-stage.tsx` owns the transcript, because `CallPanel` unmounts its children when closed
 
-Not yet built: `api/livekit/webhook`, `lib/livekit/webhook.ts`,
-`lib/crypto/chat-message.ts`, `types/meeting.ts`, the `history` page, and
-`render.yaml`.
+Not yet built: `api/livekit/webhook`, `lib/livekit/webhook.ts`, `types/meeting.ts`,
+the `history` page, and `render.yaml`.
 
 ```
 VideoCircle/
@@ -631,9 +631,10 @@ export function isValidRoomCode(code: string): boolean {
 // src/lib/crypto/chat-message.ts
 import { z } from 'zod';
 
-import { fromBase64Url, toBase64Url } from '@/lib/crypto/base64url';
 import { MAX_CHAT_MESSAGE_LENGTH } from '@/lib/constants';
 
+// Nothing here is base64: the packed bytes go raw onto the data channel. Only the
+// key is encoded, and that belongs to `chat-key.ts`.
 const IV_BYTES = 12; // AES-GCM standard nonce length.
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -648,20 +649,29 @@ const ChatPlaintextSchema = z.object({
 
 export type ChatPlaintext = z.infer<typeof ChatPlaintextSchema>;
 
-/** Returns `iv || ciphertext`. The sender identity is authenticated but not encrypted. */
+/**
+ * Returns `iv || ciphertext`. The sender identity is authenticated but not encrypted.
+ *
+ * Validates on the way out too, which is where MAX_CHAT_MESSAGE_LENGTH is actually
+ * enforced — an input's `maxLength` is a courtesy, not a rule. The return type is
+ * pinned to `Uint8Array<ArrayBuffer>` because `publishData` will not take the
+ * `ArrayBufferLike` default, which admits a `SharedArrayBuffer`.
+ */
 export async function encryptChatMessage(
   key: CryptoKey,
   senderIdentity: string,
   message: ChatPlaintext,
-): Promise<Uint8Array> {
+): Promise<Uint8Array<ArrayBuffer>> {
+  const validated = ChatPlaintextSchema.parse(message);
+
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
   const ciphertext = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv, additionalData: encoder.encode(senderIdentity) },
     key,
-    encoder.encode(JSON.stringify(message)),
+    encoder.encode(JSON.stringify(validated)),
   );
 
-  const packed = new Uint8Array(IV_BYTES + ciphertext.byteLength);
+  const packed = new Uint8Array(new ArrayBuffer(IV_BYTES + ciphertext.byteLength));
   packed.set(iv, 0);
   packed.set(new Uint8Array(ciphertext), IV_BYTES);
   return packed;
@@ -674,22 +684,25 @@ export async function decryptChatMessage(
   senderIdentity: string,
   packed: Uint8Array,
 ): Promise<ChatPlaintext> {
+  // What arrives from the data channel is typed `Uint8Array<ArrayBufferLike>`,
+  // which admits a `SharedArrayBuffer`; Web Crypto's `BufferSource` excludes one.
+  // The copy keeps a cast out of the codebase, as `encodeReaction` does going out.
+  const bytes = Uint8Array.from(packed);
+
   const plaintext = await crypto.subtle.decrypt(
     {
       name: 'AES-GCM',
-      iv: packed.subarray(0, IV_BYTES),
+      iv: bytes.subarray(0, IV_BYTES),
       additionalData: encoder.encode(senderIdentity),
     },
     key,
-    packed.subarray(IV_BYTES),
+    bytes.subarray(IV_BYTES),
   );
 
   // parse throws on malformed JSON; ChatPlaintextSchema.parse throws on a valid
   // JSON value of the wrong shape. Both surface as the same "unreadable message".
   return ChatPlaintextSchema.parse(JSON.parse(decoder.decode(plaintext)));
 }
-
-export { toBase64Url, fromBase64Url };
 ```
 
 Binding `senderIdentity` as AES-GCM additional authenticated data means a
@@ -762,6 +775,7 @@ export function apiError(code: string, message: string, status: number) {
 - Every payload published to the `vc.chat` data-channel topic is the `Uint8Array` returned by `encryptChatMessage()`; plaintext is never passed to `publishData`.
 - Every payload received on `vc.reaction` is validated against the fixed label set before anything is rendered. Arriving over our own topic proves the sender is in the room, not that they sent something well-formed, and a reaction is drawn as text over someone's video.
 - Chat message contents are never persisted — not to Postgres, not to `localStorage`, not to `sessionStorage`.
+- Nothing orders or displays a chat message by the sender's `sentAt`. The envelope carries it and the schema validates it, but the transcript is ordered and timestamped by local arrival — a peer's clock is neither accurate nor trustworthy, and sorting by it lets one client reorder everyone's transcript. `tests/e2e/chat.spec.ts` pins the wire; the ordering rule is pinned by there being no sort at all.
 - A fragment is never case-normalised. The key is base64url and case-sensitive, so any code that lowercases or uppercases a string is responsible for splitting the fragment off first — see `parseRoomCodeInput`, which normalises the room code and leaves the fragment untouched, and `buildInviteLink`, which carries it verbatim. This failure is silent: the call still works and only chat is unreadable. `tests/unit/lib/invite-link.test.ts` and `tests/e2e/invite.spec.ts` pin it, the latter also asserting the key appears in no request URL or body while the invite dialog is open and copying.
 - `crypto.subtle` is called only from files under `src/lib/crypto/`.
 - Cryptographic and room-code randomness comes from `crypto.getRandomValues` or `crypto.randomUUID`; `Math.random()` is never used to produce a code, key, nonce, or identity.

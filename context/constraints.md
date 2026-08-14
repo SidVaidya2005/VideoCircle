@@ -46,6 +46,7 @@ feature. The feature refs below point at where each one will be applied.*
 
 ## Auth and secrets
 
+- **A valid-looking room code is never authorization.** `/api/token` re-reads the meeting and refuses unless `ended_at is null and now() < expires_at`, even though the page already checked existence at render: the endpoint is directly callable, and a meeting can close while someone sits in the lobby deciding. (F09)
 - **Secrets are parsed per service, never in one shared schema.** Each env module parses at import so a misconfigured deploy fails at boot, which means a single schema makes every consumer fail on every *other* service's missing credential. `/api/meetings` could not build at all while the LiveKit keys were blank; in production the same coupling would take meeting creation down during a LiveKit key rotation. LiveKit's pair lives in `env.livekit.server.ts`, added with its first consumer. (F06, F09)
 - **A display name comes from `profiles`, never `user_metadata`.** Supabase's `raw_user_meta_data` is user-editable and surfaces in `auth.jwt()`, so it is unsafe for any authorization decision — and using it for a name would put a second derivation beside the `auth.users` trigger's, free to drift from what call history shows. (F04)
 - **`/auth/signout` is POST-only, answered with 303.** A GET signout is fetched by `next/link` prefetch, by speculative loading, and by any third-party `<img>` — all of which would end a session with no user action. 307 would preserve the method and re-issue it as `POST /`. (F04)

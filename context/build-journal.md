@@ -111,3 +111,26 @@ request made while the chat panel is open carries any part of the fragment. One
 `/api/meetings` flake: it passed alone, and `[api/meetings]` logged nothing across a
 second clean full run, matching the Phase 3 diagnosis that it fails before the
 handler.
+
+### 18 Message encryption — 2026-08-14
+
+- **The wire assertion this feature exists to make could not be written the way the build plan implied.** "Confirm no plaintext appears on the wire" reads like `page.on('request')`, which is what F16 used for the invite dialog — but the data channel is SCTP over WebRTC and makes no HTTP request at all, so a request-level check would have passed without ever having looked at a chat byte. The spec patches `RTCDataChannel.prototype.send` in an init script, records every outgoing payload, and asserts none contains the plaintext or the key. It also asserts the recording is non-empty: a leak check that never observed a send is the most dangerous green test available.
+- **Ordering is local, and that is a security decision as much as a correctness one.** The envelope's `sentAt` is validated by the schema and then deliberately unused. Ordering or displaying by it would let one client with a wrong clock reorder everyone's transcript, and a hostile one backdate itself to the top of a visible window. Arrival order, arrival timestamp, no sort anywhere.
+- **Async decryption does not preserve arrival order on its own.** Two payloads arriving back to back can resolve in either order and land reversed. Each decrypt is chained onto the last through a ref-held tail promise, which keeps append order equal to arrival order without inventing a pending state F19 would have to render.
+- **With no key, incoming payloads are dropped rather than collected as unreadable.** The panel has already explained that the link cannot read chat; a column of placeholders beneath that explanation is noise. `unreadable` is reserved for the case that is genuinely surprising — you hold a key and this message still will not open.
+- **Your own message is appended after `publishData` resolves, and a rejection is recorded rather than swallowed.** LiveKit does not echo your data back to you, so the sender must add its own copy; `reliable: true` can genuinely reject, and something typed and sent must never simply vanish. The composer clears immediately regardless — holding the field hostage to the network makes a fast conversation feel broken.
+- **`architecture.md`'s canonical snippet re-exported the base64url helpers, and that was wrong twice over.** Nothing about a chat message is base64 — the packed bytes go raw onto the channel — and a pure re-export is the barrel pattern `code-standards.md` bans. Corrected, along with the `Uint8Array<ArrayBuffer>` pinning that `publishData` and Web Crypto both require and the snippet did not have.
+- **Two type errors both traced to `Uint8Array` no longer meaning what it used to.** The default is now `Uint8Array<ArrayBufferLike>`, which admits a `SharedArrayBuffer` and which neither `crypto.subtle` nor `publishData` accepts. `decryptChatMessage` copies on the way in, exactly as `encodeReaction` copies on the way out. In the spec, `original.call(this, data)` failed for a different reason: `send` is four overloads and `.call` resolves to the last, so `Reflect.apply` is what lets one patched function stand in for all four.
+- **Two test bugs, both mine, both in the assertions rather than the product.** `getByRole('listitem')` matches video tiles as well as chat entries, so the transcript locator had to be scoped to the panel. And the message arrives attributed to whoever sent it — the host — where the assertion named the guest.
+
+**Verified:** `npm run typecheck`, `npm run lint` (0 errors, the 3 pre-existing
+`call-preview.tsx` warnings, 8/8 `_verify.mjs`) and `npm run build` all clean.
+`npm run test` 183 passing, up from 173: ten new cases in
+`tests/unit/lib/crypto/chat-message.test.ts` cover round trip, no-plaintext-in-
+ciphertext, a fresh IV per message, wrong key, tampered ciphertext, replay under
+another identity, over-long and empty bodies, a wrong-shaped plaintext crafted with
+`crypto.subtle` directly, and non-message bytes. `npm run test:e2e` 81 passing, up
+from 77: four two-context specs in `tests/e2e/chat.spec.ts` prove a message crosses
+between participants, that nothing readable leaves the browser, that a message
+under a different key renders as an unreadable placeholder with no page error, and
+that a keyless link shows the explanation and no composer.
