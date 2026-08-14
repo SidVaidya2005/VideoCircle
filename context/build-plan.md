@@ -496,14 +496,29 @@ from `NEXT_PUBLIC_SITE_URL`.
 
 **UI:**
 
-- Key-missing state on the chat panel: composer disabled, plain explanation that this link cannot read chat
+- Key-missing state on the chat panel: plain explanation that this link cannot read chat
+- The chat control stops being a placeholder and opens a third `CallPanel`
+- **The panel shell ships here, the composer at F19.** This feature's own verify line is only executable if something in the UI reaches the missing state, so F17 builds the panel and its two states; F19 fills it and gates its composer on the same `status !== 'ready'` rather than inventing a second condition. A disabled composer built now would be built twice
+- **The control opens the panel in every state, and is never disabled.** A disabled control says "chat is broken" where the truth is "your link is missing a piece", and only the panel has room to say which
 
 **Logic:**
 
 - `useChatKey` hook reading the fragment, importing the key non-extractable, exposing `loading | ready | missing`
-- Reject a malformed key the same way as a missing one
+- Reject a malformed key the same way as a missing one. One state, one explanation: someone sent a truncated link cannot act on the difference
+- **Called once, in `CallStage`, and passed down.** It mounts at join, so the import is settled long before the panel can be opened — and `CallPanel` returns `null` while closed, so a hook inside the panel would re-import on every open and make `loading` visible for no reason. No provider until a second consumer exists
+- **The `CryptoKey` is safe in React state; the encoded string is not.** Non-serializable and non-extractable once imported. The base64url string is read in the effect and never stored
+- **Read once, never watched.** No `hashchange` listener: the only thing that rewrites the fragment is the restore below, which happens first, and a key that changed mid-call would mean the transcript's earlier messages silently became unreadable — a state worth not inventing
+- **`restoreChatKeyFragment()` finally gets its caller**, on mount of `RoomExperience`. Ordering is safe by construction rather than by care: the restore runs when the lobby mounts, and `CallStage` — the only reader — mounts later, behind a click on Join. A parent effect restoring for an already-mounted child would be the bug, since React runs child effects first
+- **`loading` renders nothing.** The import is sub-millisecond and settles before the panel can be opened; a spinner would flash only when something is wrong
 
-**Verify:** Open `/room/[code]` with no fragment and confirm the explanatory state, not a crash or an empty transcript.
+**Verify:** Open `/room/[code]` with no fragment and confirm the explanatory state,
+not a crash or an empty transcript. A malformed `#k=` reaches the same state. A
+valid key reaches the ready state. Every request made while the chat panel is open
+is asserted to carry no part of the fragment, as F16 does for the invite dialog. The
+bar still fits at 360px and 640px with every control clearing 44px. No unit test for
+the hook — React Testing Library is not an approved dependency, and adding one is a
+dependency decision rather than part of this feature; the pure functions beneath it
+are already covered.
 
 ### 18 Message encryption
 

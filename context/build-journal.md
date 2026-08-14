@@ -88,3 +88,26 @@ At that phase's checkpoint, the whole phase collapses to:
 - **The privacy claim stopped being structural.** The chat key never reaching a server was defended by invariants and review since F06; F16 records every request made while the invite dialog is open and copying and asserts none carries the fragment. (F16)
 - **Phase gates at close:** `lint`, `typecheck`, `build` clean; 173 unit tests and 71 e2e specs pass. The suite grew from 36 e2e at the start of the phase to 71.
 
+
+## Phase 4 — Encrypted chat
+
+### 17 Chat key handling — 2026-08-14
+
+- **The canonical snippet in `code-standards.md` was written before the rule that now forbids it.** `useChatKey` was implemented exactly as drawn — read the hash in an effect, `setState` — and `react-hooks/set-state-in-effect` failed `npm run lint` as an error. The rule is right: for the commonest case, a link carrying no key, that is a second render pass before paint. The fragment now comes through `useSyncExternalStore` with a `() => null` server snapshot, which is the shape `use-media-query` already uses for a value the server cannot see, and only the genuinely async import goes through state. The doc was corrected rather than the rule suppressed.
+- **The panel shell shipped here rather than at F19, so the feature could be verified at all.** F17's own verify line asks for the key-missing state to be visible; nothing in the UI could reach it while the chat control was still a disabled stub. The composer stayed at F19 rather than being built twice — it will gate on the same `status !== 'ready'`.
+- **The chat control is never disabled, and that is a copy decision as much as a UI one.** A disabled control says "chat is broken"; the truth is "the link you were sent is missing a piece", and only the panel has room to say which. Its wording is the other half of the invite dialog's no-key note — one warns the sender, one explains to the receiver.
+- **`PENDING_CONTROLS` is gone and `SecondaryControl.onClick` is now required.** Chat was the last stub, so the disabled path through the bar and the MORE menu disappeared with it. `control-bar.spec.ts`'s "controls whose panels do not exist yet" test was rewritten to assert the opposite — that no control in the call is disabled.
+- **`restoreChatKeyFragment()` got its first caller, four features after it shipped.** It lives on `RoomExperience`'s mount, and the ordering is safe by construction rather than by care: the restore runs when the lobby mounts, while `useChatKey` runs when `CallStage` mounts, behind a click on Join. React runs child effects before parent ones, so a restore placed any deeper would have raced the read it exists to precede. Note it still has no *producer* on this route — `signInWithGoogle` is only reachable from the shell header, which `/room/[code]` sits outside.
+- **The test fixture was the only real bug, and it was mine.** The 39-character key borrowed from `invite.spec.ts` is ~29 bytes, which AES-GCM rejects; that spec only ever carries the string through a URL, while this one imports it. Three tests failed identically, all on the valid-key path. A genuine 32-byte, 43-character key fixed them — and the wrong-length case became the malformed-key test.
+- **A `#k=` that is well-formed but unusable is one state with the missing case, not two.** Someone holding a truncated link cannot act on the difference.
+
+**Verified:** `npm run typecheck` clean; `npm run lint` clean (3 pre-existing
+`call-preview.tsx` inline-style warnings, no errors) with all 8 `_verify.mjs` checks
+passing; `npm run test` 173 passing; `npm run test:e2e` 77 passing, up from 71. Six
+new specs in `tests/e2e/chat-key.spec.ts` cover the ready, missing and malformed
+states, one-panel-at-a-time, the MORE path with no overflow at 360px, and that no
+request made while the chat panel is open carries any part of the fragment. One
+`call-grid.spec.ts` failure on the first full run was the known parallel-load
+`/api/meetings` flake: it passed alone, and `[api/meetings]` logged nothing across a
+second clean full run, matching the Phase 3 diagnosis that it fails before the
+handler.

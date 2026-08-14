@@ -17,9 +17,9 @@ progress, and what is next.
 
 ## Current Status
 
-**Phase:** Phase 3 — The call
-**Last completed:** Phase 3 checkpoint — gates green from a clean build, phase diff walked against every invariant with no violations, `architecture.md` reconciled, journal compacted 274→90 lines and Phase 3's binding decisions promoted into a new `constraints.md` → The call section. The intermittent `/api/meetings` failure was diagnosed as `next dev` resetting connections under four workers, not the handler
-**Next:** 17 Chat key handling — opens Phase 4, the encrypted chat
+**Phase:** Phase 4 — Encrypted chat
+**Last completed:** 17 Chat key handling — `useChatKey` reads the fragment once and imports the key non-extractable, the chat control now opens a third `CallPanel` explaining itself when the link carries no key, and `restoreChatKeyFragment()` finally has a caller. `typecheck`, `lint`, `test` (173) and `test:e2e` (77) all green
+**Next:** 18 Message encryption — `chat-message.ts` and the data-channel hook
 
 ---
 
@@ -59,7 +59,7 @@ progress, and what is next.
 
 ### Phase 4 — Encrypted chat
 
-- [ ] 17 Chat key handling
+- [x] 17 Chat key handling
 - [ ] 18 Message encryption
 - [ ] 19 Chat panel
 - [ ] Phase checkpoint — verify Phase 4 — Encrypted chat is stable, then **compact `build-journal.md` and promote binding decisions into `constraints.md`**
@@ -103,10 +103,12 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 - **A real desktop share has never been received on a real phone.** The suite stubs the picker and proves the publish path, the capability gate, and the remote tile — but the build plan's own verify line asks for a phone as receiver, and that stays manual. Worth doing at **F22**, alongside the mobile pass. (F12)
 - **Pressing the share control during the connect handshake silently does nothing.** The bar renders as soon as the room tree mounts, which is before `Connected`, so a share requested in that window is published into a room that is not there and immediately unpublished. The window is one to three seconds and the person has just pressed Join, so it is unlikely to be reached — revisit at **F24** with the other edge states. (F12)
 - **The wordmark's tittle sits ~3.5px off during the `next/font` swap window**, because the generated fallback matches advance and ascent but not glyph shapes. First paint only, on a cold load. Accepted at F02 rather than trading it for a flash of invisible text; revisit only if it looks wrong on the deployed instance.
+- **`joinAs` is copy-pasted into eight e2e specs.** Every call spec declares its own four-line version because they drifted apart before there was a support module; they are now identical. Lifting one into `tests/e2e/support/` is a small, safe cleanup that touches every call spec at once, so it wants its own commit rather than a feature's. **F26 owns it** with the other suite work. (F17)
 - **`/tokens` still ships its markup in the production bundle** even though it returns 404 there. A few kB of static swatches; revisit at F22 if the Home budget is tight.
 
 ## Key Decisions
 
+- **A value the browser can read synchronously does not belong in an effect.** `useChatKey` was written the way `code-standards.md` drew it — read the hash in an effect, `setState` — and `react-hooks/set-state-in-effect` failed the build over it, correctly: a link with no key would have cost a second render pass before paint. The fragment now comes through `useSyncExternalStore`, the same shape `use-media-query` uses for the same reason, and only the genuinely async import touches state. The doc's canonical snippet was wrong and has been corrected. (F17)
 - **The privacy claim is now tested, not only structured.** The chat key never leaving the browser was defended by invariants and code review; `tests/e2e/invite.spec.ts` records every request made while the invite dialog is open and copying, and asserts none carries the fragment. Showing the key in a dialog is exactly the change that could have broken it. (F16)
 - **Ephemeral and durable state get different transports, and the build plan had them the same.** A reaction rides the unreliable data channel because losing one costs nothing; a raised hand rides a participant attribute because losing one is a real failure — an unreliable packet can drop, and a data-channel message reaches nobody who joins afterwards. The cost is one extra token claim, `canUpdateOwnMetadata`, pinned by the grant spec. (F15)
 - **One responsive decision in the call is made in JavaScript, and only one.** Everything else is a Tailwind variant so nothing measures the viewport in the call tree — but a Radix dialog traps focus, locks scroll and hides the page from assistive tech the moment it opens, and its content is portaled out of reach of any wrapper class. Choosing sheet-versus-inline in CSS would leave an invisible dialog holding focus on every desktop, so `use-media-query` exists for that case alone. (F14)
@@ -116,4 +118,3 @@ Open work carried forward. Cleared as the feature that needs each arrives.
 - **The prebuilt LiveKit grid was rejected, not overlooked.** `GridLayout` lays out nothing without `@livekit/components-styles`, an unapproved dependency, and `ParticipantTile` ships four pieces of chrome the design system contradicts. Ours is built on the unstyled primitives — `useTracks`, `VideoTrack`, `useIsSpeaking`, `useIsMuted`, `useVisualStableUpdate`. (F10)
 - **Pure decision modules exist because `server-only` throws under Node.** Joinability and the token TTL cap are free of it so every branch is testable without a database or the LiveKit secrets; the route handler does the IO around them. (F09)
 - **A valid-looking room code is never authorization.** `/api/token` re-reads the meeting and refuses unless `ended_at is null and now() < expires_at`, even though the page already checked existence at render: the endpoint is directly callable, and a meeting can close while someone sits in the lobby deciding. (F09)
-- **In the lobby, off releases the device — it never mutes.** A preview reading OFF while the camera light stays lit is what breaks trust in a lobby. It also keeps the SDK's muted-track trap out of reach: `setDeviceId` sets `pendingDeviceChange` and returns early on a muted track, so a device picker would appear to do nothing until the track was unmuted. (F08)

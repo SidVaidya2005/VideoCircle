@@ -84,6 +84,7 @@ non-obvious library behaviour behind them.*
 only the reasoning and the non-obvious library behaviour behind them, which that
 file does not carry.*
 
+- **In the lobby, off releases the device — it never mutes.** A preview reading OFF while the camera light stays lit is what breaks trust in a lobby. It also keeps the SDK's muted-track trap out of reach: `setDeviceId` sets `pendingDeviceChange` and returns early on a muted track, so a device picker would appear to do nothing until the track was unmuted. (F08)
 - **`getUserMedia` is not guaranteed to settle.** It can hang indefinitely instead of rejecting — observed here, where audio never returned while the camera on the same machine opened normally. That is why acquisition is bounded by a timeout, and why the timeout never runs while a permission prompt may still be open: the person deciding is not a fault condition, and a flat timer turns the most ordinary path in the product into a rendered failure. (F07)
 - **Per-run effect state must never be hoisted into a shared ref.** React double-invokes effects in development: the first run's cleanup clears a shared flag, the second sets it again, and the first request then adopts its track alongside the second's — two live cameras, one owned by nothing. Use a `cancelled` local per effect run. (F08)
 - **Side effects never go inside a `setState` updater.** Updaters are double-invoked and must be pure; a `track.stop()` in one fires twice, against whatever snapshot each invocation happens to see. (F08)

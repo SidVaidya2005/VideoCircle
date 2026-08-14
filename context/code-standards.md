@@ -417,7 +417,7 @@ export default async function HistoryPage() {
 // src/hooks/use-chat-key.ts
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 
 import { importChatKey, readChatKeyFromHash } from '@/lib/crypto/chat-key';
 
@@ -426,16 +426,31 @@ type ChatKeyState =
   | { status: 'ready'; key: CryptoKey }
   | { status: 'missing' };
 
+const LOADING = { status: 'loading' } as const;
+const MISSING = { status: 'missing' } as const;
+
+/** Nothing to subscribe to: the fragment is read once and deliberately not watched. */
+function subscribe(): () => void {
+  return () => {};
+}
+
+function encodedKey(): string | null {
+  return readChatKeyFromHash(window.location.hash);
+}
+
 export function useChatKey(): ChatKeyState {
-  const [state, setState] = useState<ChatKeyState>({ status: 'loading' });
+  // A value the server cannot see, so it comes through useSyncExternalStore with a
+  // server snapshot — NOT through an effect. Reading it in an effect would mean a
+  // synchronous setState on mount whenever the link carries no key, which is a
+  // second render pass before paint. Only the genuinely async import uses state.
+  const encoded = useSyncExternalStore(subscribe, encodedKey, () => null);
+  const [imported, setImported] = useState<ChatKeyState | null>(null);
 
   useEffect(() => {
-    const encoded = readChatKeyFromHash(window.location.hash);
-    if (!encoded) {
-      setState({ status: 'missing' });
-      return;
-    }
+    if (!encoded) return;
 
+    // Per-run, never hoisted into a ref: React double-invokes effects in
+    // development, and a shared flag lets one run's cleanup clear the other's.
     let cancelled = false;
 
     // An effect callback cannot itself be async, so the work goes in an IIFE —
@@ -443,24 +458,27 @@ export function useChatKey(): ChatKeyState {
     void (async () => {
       try {
         const key = await importChatKey(encoded);
-        if (!cancelled) setState({ status: 'ready', key });
+        if (!cancelled) setImported({ status: 'ready', key });
       } catch {
         // A malformed key is indistinguishable from no key, and the UI is the same.
-        if (!cancelled) setState({ status: 'missing' });
+        if (!cancelled) setImported(MISSING);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [encoded]);
 
-  return state;
+  if (!encoded) return MISSING;
+
+  return imported ?? LOADING;
 }
 ```
 
-- Browser APIs are read inside effects, never at module scope.
-- Async effects guard against setting state after unmount with a `cancelled` flag.
+- Browser APIs are read inside effects, or through a `useSyncExternalStore` snapshot with a server snapshot beside it — never at module scope, and never bare during render.
+- **Never call `setState` synchronously in an effect body.** `react-hooks/set-state-in-effect` fails `npm run lint` over it, and it is an error, not a warning. State derived synchronously from a browser value belongs in `useSyncExternalStore`; state that genuinely resolves later belongs in an effect, set from the async callback.
+- Async effects guard against setting state after unmount with a `cancelled` flag declared per effect run.
 - Loading, ready, and failure are modelled as a discriminated union, not as separate booleans — the UI must render something deliberate in each state.
 
 ---
