@@ -678,7 +678,31 @@ prove the timestamps are the reader's.
 - Verify audio starts correctly after the Join gesture on iOS Safari
 - Confirm device pickers show real labels on mobile after permission
 
-**Verify:** Run the full guest-join flow on a real iOS device and a real Android device, not only in devtools emulation.
+**Decisions taken before building:**
+
+- **Everything needing a phone or a deployed URL is done as far as this machine allows, then carried to F25 as a blocking check.** `getUserMedia` needs a secure context, and LAN http is not one, so a real device cannot exercise a single media path against a local server. A tunnel would give a device a secure origin but still not the deployed instance, and would drag `NEXT_PUBLIC_SITE_URL` and Supabase's redirect list along with it. F25 already carries three blockers for exactly this reason; these join them rather than inventing a fourth environment. **Nothing here is dropped — it moves.**
+- **The audit is one new spec over shared helpers, and the ten existing per-feature 360px blocks are left alone.** Each of those is its own feature's regression guard, and F26 owns suite-wide consolidation alongside the `joinAs` duplication. The hit-area helper **polls rather than measuring once**: `animate-tile-in`'s `scale(0.96)` makes everything inside a freshly mounted tile measure fractionally small.
+- **The safe-area padding written at F09 has never done anything.** `env(safe-area-inset-*)` resolves to `0` without `viewport-fit=cover`, and nothing sets it — `src/app/layout.tsx` exports no `viewport` at all. So `room-experience.tsx`'s `pb-[env(safe-area-inset-bottom)]` is inert on every iOS device today. The `viewport` export is the actual fix; the CSS was already correct. **It reads as correct on a desktop browser either way, so this is confirmed only at F25.**
+- **No `maximumScale` or `userScalable: false` on that export.** Next documents both; blocking pinch-zoom is an accessibility regression, and this project's mobile target is real usability, not a locked-down app shell. `colorScheme` stays out of it too — `color-scheme: dark` is already declared in `globals.css`, and the same specific in two files is what `CLAUDE.md` forbids.
+- **Landscape is measured before it is treated.** The call is already a `min-h-0` flex column and may survive 740×360 intact. A short-viewport treatment is written only if a measurement asks for one — inventing layout ahead of evidence is expensive in the one tree that shares a thread with WebRTC encoding.
+- **The Home bundle is bounded work: measure, take local wins, record the rest.** `code-standards.md` → Performance already prescribes it — a target that cannot be met is recorded with its reason, never quietly lowered. Getting under 200 kB by moving Google sign-in to a route handler would rewrite the OAuth/PKCE and chat-key-stash path F04 and F17 settled, inside a mobile pass. The weight is not motion: `animejs` is not installed, and Home's own comment in `globals.css` explains why.
+- **`interactiveWidget: 'resizes-content'` is the Android half of the soft-keyboard fix and is knowingly incomplete.** It shrinks the layout viewport on Android Chrome; iOS Safari ignores it and may still need a `visualViewport` treatment. Taken because it is one field and unambiguous — the iOS half stays an F25 follow-up, with a device in hand.
+
+**Verify:** The sweep spec is run at all seven widths plus landscape and **seen to fail
+before it is trusted**, by breaking one width's expectation — `constraints.md` →
+Testing requires that of any new regression test. `viewport-fit=cover` is confirmed by
+grepping the meta tag out of a production server's HTML, not by reading the source that
+emits it. Home's bundle number is re-measured by summing the gzipped chunks it requests
+from `npm run start`, the same method that produced the 341 kB figure, before and after
+each win. Then the four gates.
+
+**Explicitly not claimed here, and written into Follow-ups against F25:** that safe-area
+insets render correctly on a notched phone; that audio starts after the Join gesture on
+iOS Safari; that device pickers show real labels on mobile; that a real desktop share
+reaches a real phone; that the composer clears a real soft keyboard; and that the
+performance targets hold on the deployed instance. All six need hardware or a URL that
+does not exist yet, and a mobile pass that claimed them from devtools emulation would be
+claiming the emulator.
 
 ### 23 Connection quality and recovery
 
