@@ -717,6 +717,33 @@ claiming the emulator.
 - Subscribe to LiveKit connection-quality and connection-state changes
 - Preserve mic/camera intent across a reconnect so a muted user does not come back unmuted
 
+**Decisions taken before building:**
+
+- **A deliberate leave and a dropped call are told apart by `DisconnectReason`, not by a flag of our own.** `onDisconnected` currently pushes Home for every disconnect, so today a call that drops is indistinguishable from pressing Leave — the terminal state cannot exist until that branch does. `CLIENT_INITIATED` keeps going Home; everything else renders the notice, with the reason shaping what the person is told. **The trap, written down because it is invisible:** the parameter is optional *and* `UNKNOWN_REASON` is `0`, so it must be compared explicitly — a `if (!reason)` guard would classify the commonest unknown drop as a deliberate leave.
+- **The quality marker is degraded-only and carries no colour.** It renders as a `· weak` / `· connection lost` suffix in the tile's existing label row, exactly as `· pinned` already does. This is where two context docs actually collided: `architecture.md` says `signal` red means the Leave control and your own muted mic and nothing else, while `code-standards.md` → Colour discipline offered `green-1`/`yellow-1`/`red-1` for connection quality — and `signal` *is* `red-1`. The invariant wins and the colour-discipline line is corrected, because red meaning exactly two things is worth more than a faster-reading dot, and twelve coloured dots on a twelve-person grid is the noise the invariant exists to prevent.
+- **`Unknown` is not degraded.** It is the value before the first quality report arrives, so treating it as bad would mark every tile the instant it mounts. Only `Poor` and `Lost` show anything. Note the installed `ConnectionQuality` has **five** members including `Lost`; the published Context7 docs list four and omit it, and `Lost` is the one this feature exists for — the installed types are the authority.
+- **The banner stays inside `CallStatus`.** One component and one source of truth about the connection; a second overlay could disagree with the first, and would cover faces at the moment you are squinting at them.
+- **Reconnecting outranks screen sharing in the strip.** `CallStatus` returns the sharing branch first today, so a reconnect *during* a share is invisible and the more urgent state loses. A pre-existing bug, fixed on the way past.
+- **Mic/camera restoration is measured before it is written.** The build plan asserts LiveKit loses mute intent across a reconnect and nothing here has ever checked. If the SDK already preserves it, the restoration code is not written — an unnecessary reapply is a race with the SDK's own restore that would surface only on a real flaky network.
+- **Rejoin reloads rather than returning to the lobby in place.** `stopPreview()` bumps the acquisition generations and the acquiring effect is mount-only, so re-entering `phase: 'lobby'` renders a lobby whose preview is permanently dead. The alternative is a new restart path through the most intricate hook in the codebase — generations, cancellation, double-invoke guards, and where a leaked camera would hide. A reload preserves the `#k=` fragment, re-runs the server-side meeting lookup, and re-acquires media by the ordinary first-visit path.
+
+**Verify:** The reason→copy mapping is unit-tested across all **seventeen**
+`DisconnectReason` members plus `undefined`, so a value nobody thought about fails a
+test rather than rendering a blank panel. Seventeen, not the thirteen this plan first
+said: the enum's last four members sit below the window the type file was first read
+through, and the test caught the omission on its first run. The pure quality predicate is tested across all five
+`ConnectionQuality` values, including that `Unknown` shows nothing. E2E: the banner
+appears and clears across an offline/online cycle; a reconnect *during* a share is
+visible, which fails on today's code; mic state is asserted across a reconnect, and
+that assertion is what decides whether restoration code exists at all.
+
+**Explicitly not claimed:** that the marker or the banner behave correctly on a
+genuinely bad real network. Playwright's offline toggle is binary where real
+degradation is gradual, so `Poor` is a state the suite can assert the rendering of but
+cannot naturally produce. That belongs with F25's real-device work. If a terminal
+disconnect proves impractically slow to reach by waiting out LiveKit's retry budget, it
+is recorded as manually verified rather than claimed as covered.
+
 ### 24 Error and edge states
 
 **UI:**

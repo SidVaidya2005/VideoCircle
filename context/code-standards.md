@@ -102,7 +102,7 @@ status colours, so the allocation is fixed here rather than decided per componen
 - **Red (`signal`)** — destructive and self-warning only: the Leave control, and *your own* mic showing as muted. Nothing else.
 - **White fill (`--white-1`) with dark text** — the active/engaged state for any toggle. This is the kit's own press-state inversion; it is what an enabled control looks like, not red.
 - **Neutral steps** — everything else. Remote participants' mute indicators are `text-muted`, not red; twelve red badges on a twelve-person grid would destroy the signal.
-- **Connection quality** — `green-1` / `yellow-1` / `red-1`, but only as a small marker, never a filled surface.
+- **Connection quality** — **no colour at all.** This line used to offer `green-1` / `yellow-1` / `red-1` as a small marker, and that was wrong: `signal` *is* `red-1`, and `architecture.md` reserves it for the Leave control and your own muted mic. A red quality dot would have been a third meaning for the one colour the brand uses sparingly, multiplied by up to twelve tiles. Degraded connections are marked typographically instead — a word in the tile's label row, rendered only for `Poor` and `Lost`. See `constraints.md` → The call. (Corrected at F23, the feature that first needed it.)
 - **Cyan and green accents** — reserved for the logo burst and completion moments, per the kit. Do not repurpose them for UI state.
 - **Any text over live video rides a scrim.** Every other contrast pairing assumes a known `--bg-*`; a tile label sits on arbitrary pixels, and a participant backlit by a window erases `--fg-3` outright. Use `--scrim-tile` for tile labels and `--scrim-flat` for full overlays, with `--fg-1` text on top — never a muted grey. See `preview/video-scrim.html`.
 
