@@ -30,6 +30,11 @@ import { cn } from '@/lib/utils';
  *     recipe, and its focus ring reuses the kit's inverted fill.
  *   - `font-semibold` → the brand's wide-tracked CAPS on Title. Only Regular and
  *     Bold are loaded, so 600 would synthesize.
+ *   - `p-4` on Content → `.sheet-surface`, added at F22. The sheet is pinned to the
+ *     right edge and runs the full height, so once `viewport-fit=cover` was set it
+ *     began passing under a phone's home indicator with the chat composer as its
+ *     last child. The class pays the bottom and right safe-area insets; the
+ *     literals live in `globals.css`, where literals belong.
  */
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
@@ -72,7 +77,7 @@ function SheetContent({
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          'bg-overlay border-line/60 animate-sheet-in fixed inset-y-0 right-0 z-50 flex h-full w-4/5 max-w-sm flex-col gap-4 border-l p-4',
+          'bg-overlay border-line/60 animate-sheet-in sheet-surface fixed inset-y-0 right-0 z-50 flex h-full w-4/5 max-w-sm flex-col gap-4 border-l',
           className,
         )}
         {...props}

@@ -258,6 +258,46 @@ html {
     100px 100px;
 }
 
+/* The call's outer padding, including the display's own cutouts.
+
+   The call is the one full-bleed surface in the product, so it is the only place
+   the insets matter — every other route sits inside the (shell) group's centred
+   container, well clear of a notch. The values are literals, so they live here
+   rather than as arbitrary-value utilities on the element, exactly as
+   `.history-row` does.
+
+   These `env()` values are non-zero only because `app/layout.tsx` sets
+   `viewport-fit=cover`; that is also what puts content under the cutouts in the
+   first place, so this block is the other half of that decision rather than a
+   defensive extra. Before it, `pb-[env(safe-area-inset-bottom)]` on the same
+   element resolved to zero on every device.
+
+   The inset is ADDED to the 0.75rem the stage already wanted, not `max()`'d with
+   it: on a phone with a home indicator that reads as breathing room above it, and
+   on every other device the insets are zero and this is plain 0.75rem padding.
+   Bottom takes the inset alone, because CallStage carries its own `pb-3`. */
+.call-surface {
+  padding-top: calc(0.75rem + env(safe-area-inset-top));
+  padding-right: calc(0.75rem + env(safe-area-inset-right));
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: calc(0.75rem + env(safe-area-inset-left));
+}
+
+/* The sheet's padding, and the two cutouts a right-edge panel actually meets.
+
+   Same reasoning as `.call-surface` above, and the same trigger: `viewport-fit=
+   cover` puts the sheet under the home indicator, and the chat composer is the
+   last thing in it. Right as well as bottom, because a phone held in landscape
+   puts its cutout on one of the short edges and the sheet is pinned to one.
+
+   Top and left keep the plain 1rem — the sheet does not reach the left edge, and
+   its own close button already sits below anything at the top. */
+.sheet-surface {
+  padding: 1rem;
+  padding-right: calc(1rem + env(safe-area-inset-right));
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+}
+
 /* Call History's desktop column widths, shared by the header strip and every row
    so the two stay aligned. Lives here rather than as an arbitrary-value utility
    because these are literals, and literals belong in this file.

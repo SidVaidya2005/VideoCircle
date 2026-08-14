@@ -83,11 +83,11 @@ export function RoomExperience({ code, profileName }: RoomExperienceProps) {
       // dvh, never vh, so mobile browser chrome cannot crop the control row off
       // the bottom.
       //
-      // The safe-area inset is padding on top of the stage's own pb-3, rather
-      // than a max() of the two: on a device with a home indicator that reads as
-      // twelve points of breathing room above it, and on every other device the
-      // inset is zero and this is just pb-3.
-      <main className="flex h-dvh flex-col px-3 pt-3 pb-[env(safe-area-inset-bottom)]">
+      // Padding — including the display's safe-area insets on all four edges —
+      // comes from `.call-surface` in globals.css, where the literals belong. It
+      // was `px-3 pt-3 pb-[env(safe-area-inset-bottom)]` here, which paid only the
+      // bottom inset and paid it in a viewport that never reported one.
+      <main className="call-surface flex h-dvh flex-col">
         <RoomShell
           serverUrl={join.grant.serverUrl}
           token={join.grant.token}
