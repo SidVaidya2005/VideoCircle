@@ -101,3 +101,75 @@ At that phase's checkpoint, the whole phase collapses to:
 - **Three defects traced to library and platform shapes rather than to logic**: `Uint8Array` now defaults to `ArrayBufferLike`, which neither `crypto.subtle` nor `publishData` accepts; `.call` on the four-times-overloaded `RTCDataChannel.send` resolves to the last overload; and `locator.type()` is deprecated. None was a reasoning error, and all three cost real time. (F18, F19)
 - **Test bugs outnumbered product bugs.** A 39-character key that `invite.spec.ts` can carry through a URL but `importChatKey` rejects; `getByRole('listitem')` matching video tiles as well as chat entries; an assertion naming the guest where the message is attributed to the host. Read the harness before blaming the product — the same lesson Phase 3 recorded. (F17, F18)
 - **Phase gates at close:** `lint`, `typecheck`, `build` clean; 189 unit tests and 87 e2e specs pass. The suite grew from 71 e2e at the start of the phase to 87.
+
+## Phase 5 — Call history
+
+### 2026-08-14 — F20 Participation recording
+
+The signed LiveKit webhook endpoint and the participation writes behind it. First
+server-side work since F09, and the first consumer of `WebhookReceiver`.
+
+**Decisions**
+
+- **Idempotency came from schema that already existed.** The obvious design is an
+  event-id ledger keyed on `WebhookEvent.id`, but F03's partial unique index
+  `meeting_participants_open_row_idx on (meeting_id, identity) where left_at is null`
+  already asserts a participant has at most one *open* row — so a redelivered join
+  collides on `23505` and is reported as `duplicate` rather than doubling the row,
+  and a genuine rejoin after a clean leave does not collide because the earlier row
+  is closed. No new table, no pruning job. The accepted hole is a join redelivered
+  *after* its own row was closed, which finds nothing to collide with; it needs a
+  retry to outlive an entire participation, and the sweep closes what it leaves.
+- **Every timestamp is LiveKit's, and the tests are built so a `now()` handler fails
+  rather than merely being wrong.** `joined_at` from `participant.joinedAt`,
+  `left_at` and `ended_at` from the event's `createdAt`. `now()` is only ever wrong
+  by delivery latency in the happy path — but a leave written on the third retry
+  records minutes of call time that did not happen, and F21 renders that duration.
+  A single clock source is also what keeps the `left_at >= joined_at` CHECK
+  unreachable; mixing sources would turn that constraint into a permanent 500 loop.
+  `ParticipantInfo` has `joinedAt` but no `disconnectedAt`, which is why a leave time
+  can only come from the event envelope.
+- **Verification is synthetic signed events; the dashboard waits for F25.** LiveKit
+  cannot reach `localhost`, so the suite plays the sender: real protobuf-JSON, a real
+  HS256 signature over a real digest, and no test-only path through the route. That
+  bought a repeatable redelivery test, which a manual check could never be. It did
+  not buy proof that LiveKit sends what we think — recorded as a follow-up blocking
+  F25.
+
+**Gotchas**
+
+- **F20 made a latent Phase 0 bug reachable, and it was worse than it looked.** The
+  sweep set `left_at = m.expires_at` on open rows, but `/api/token` only checks
+  expiry when it *mints*, so a token issued a second before `expires_at` produces a
+  join after it — and `meeting_participants_left_after_joined` rejects that. Both of
+  the sweep's statements share one plpgsql call, so a single late joiner in a single
+  meeting aborts the sweep for *every* meeting, silently, until someone reads the
+  cron logs. Reproduced against the live schema first (`23514`, raised from the
+  update), then fixed with `greatest(p.joined_at, m.expires_at)`, then re-run to see
+  it pass — the regression-must-be-seen-to-fail rule, applied to SQL.
+- **`target: ES2017` from the Next scaffold forbids BigInt literals.** The SDK reports
+  event times as `bigint`, so `0n` would not compile. Moved to ES2020, which is safe
+  here: `noEmit` is on, and every browser this product supports is far past it. The
+  first `typecheck` after the change still failed — a stale `tsconfig.tsbuildinfo`,
+  not the change.
+- **Test bugs outnumbered product bugs again, and both were mine.** The
+  tamper-detection test "tampered" by setting `room.name` to the value it already
+  had, so the body was byte-identical and the signature verified — a green test
+  proving nothing, the same shape as the vacuous-leak-check trap F18 recorded. And
+  the `room_finished` fixture back-dated events to before the meeting was created,
+  tripping `meetings_ended_after_creation`; the fix was to backdate the *meeting*,
+  since a call being recorded is one that started a while ago.
+- **The Supabase CLI is not logged in on this machine**, so `db push` cannot run.
+  Applied via MCP `apply_migration` under the same name as the file, which matches
+  what F03 evidently did — the remote migration versions already differ from the
+  local filenames while the names agree.
+
+**Verified:** 198 unit tests, 96 e2e (9 new), `lint`, `typecheck`, and `build` all
+clean. The webhook spec covers an unsigned request and a body altered after signing
+(both 401), a guest join carrying the event's own `joined_at`, a signed-in join
+resolving through the `profiles` foreign key, a join delivered twice leaving one row,
+a leave and its redelivery, `room_finished` closing a row whose leave never arrived —
+the killed-tab case made deterministic — an unknown room code answering 200 with
+nothing written, and an unhandled event type. Sweep clamp confirmed against the live
+database, seen failing first. Advisors show only the pre-existing
+`auth_leaked_password_protection`.

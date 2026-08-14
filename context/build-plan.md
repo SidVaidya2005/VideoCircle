@@ -595,15 +595,29 @@ a view that never moves would otherwise pass a one-sided test.
 - `POST /api/livekit/webhook` reading the raw body and verifying the signature before anything else
 - `participant_joined` → insert a participation row, resolving `user_id` from the `user:` identity prefix
 - `participant_left` → set `left_at` on the open row for that `(meeting_id, identity)`
-- `room_finished` → set `meetings.ended_at`, and close every still-open participation row for that meeting (`left_at = coalesce(left_at, now())`) as reconciliation for a dropped `participant_left`
+- `room_finished` → set `meetings.ended_at`, and close every still-open participation row for that meeting as reconciliation for a dropped `participant_left`
 - Idempotent handling; `500` on transient failure so LiveKit retries, `200` on events deliberately ignored
 - Confirm the nightly sweep from feature 03 closes meetings whose `room_finished` never arrived
 - Configure the webhook URL in the LiveKit Cloud dashboard
 
-**Verify:** Join and leave from two accounts and confirm exactly one row per join
-with correct timestamps; redeliver an event and confirm no duplicate; kill a browser
-tab without leaving cleanly and confirm `room_finished` still closes that row rather
-than leaving `left_at` null.
+**Decisions taken before building:**
+
+- **Idempotency comes from the existing partial unique index**, `meeting_participants_open_row_idx on (meeting_id, identity) where left_at is null` — no dedupe ledger and no schema change. `participant_joined` inserts and treats `23505` as "already recorded"; `participant_left` and `room_finished` scope their updates with `left_at is null` / `ended_at is null`, so a redelivery matches zero rows. The accepted hole: a join redelivered *after* its row was closed finds no conflict and inserts a spurious open row, which requires a retry to outlive an entire participation and which the nightly sweep closes.
+- **All three timestamps come from LiveKit's event clock**, never `now()`: `joined_at` ← `participant.joinedAt`, `left_at` and `ended_at` ← `event.createdAt` (both `bigint` seconds). Durations then survive delivery latency and retries, which matters because feature 21 renders them. One clock source is also what guarantees the `left_at >= joined_at` CHECK can never fire — mixing sources would turn that constraint into a permanent `500` retry loop.
+- **The nightly sweep needs a `greatest(p.joined_at, m.expires_at)` clamp.** It set `left_at = m.expires_at`, but a token minted a second before expiry produces a join *after* it, so the CHECK aborts the whole function and no meeting gets swept. Unreachable until this feature creates participation rows, which is why the fix lands here.
+- **A join is recorded even when the meeting is ended or expired.** LiveKit is reporting what happened, and expiry deliberately lets a connected call drain.
+- **Logic splits pure from IO**, per the feature 09 precedent: identity parsing and timestamp conversion live in a module Vitest can import, the Supabase writes behind `server-only`.
+- **Verification is synthetic signed events; the LiveKit Cloud dashboard is configured at feature 25.** LiveKit cannot reach `localhost`, so a Playwright spec signs payloads with `LIVEKIT_API_SECRET` (via `AccessToken`'s `sha256` setter, the same claim `WebhookReceiver` checks) and POSTs them. This makes redelivery a repeatable test rather than a manual one, at the stated cost that the handler is unproven against real traffic until deployment.
+
+**Verify:** Signed-payload e2e covering an unsigned request and a body mutated
+after signing (both `401`); a join writing exactly one row with the event's own
+`joined_at` and the right `user_id` for `user:` versus `guest:`; the identical
+payload posted twice leaving one row; a leave setting `left_at` and a redelivery
+leaving it unchanged; `room_finished` with no preceding `participant_left`
+closing the row and setting `ended_at` — the killed-tab case, made deterministic;
+and a valid-shaped code naming no meeting answering `200` with nothing written.
+Plus the sweep clamp, confirmed to fail before the fix. Real two-account traffic
+is verified at feature 25.
 
 ### 21 Call history page
 

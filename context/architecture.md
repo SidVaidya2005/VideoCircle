@@ -67,8 +67,9 @@ filled in by the feature that needs it. Built so far:
 - **F18** — `src/lib/crypto/chat-message.ts` and `src/hooks/use-encrypted-chat.ts`. The panel gained a plain input, a Send button and a message list; `call-stage.tsx` owns the transcript, because `CallPanel` unmounts its children when closed
 - **F19** — `src/lib/chat-time.ts` and the `textarea` primitive. `chat-panel.tsx` grew the real composer, the relative-time tick and the near-bottom scroll pin; `call-stage.tsx` gained the seen mark the unread count derives from, and `closePanel` beside `togglePanel` so the sheet's own dismiss stamps it too
 
-Not yet built: `api/livekit/webhook`, `lib/livekit/webhook.ts`, `types/meeting.ts`,
-the `history` page, and `render.yaml`.
+- **F20** — `src/app/api/livekit/webhook/`, `src/lib/livekit/{webhook,participation-event}.ts`, and `src/lib/participation.ts`. First server-side work since F09, and the first consumer of `WebhookReceiver`. A migration clamps the expiry sweep's `left_at`, which F20 is what makes reachable. `tsconfig.json`'s `target` moved ES2017 → ES2020: the SDK reports event times as `bigint`, and BigInt literals are illegal below that
+
+Not yet built: `types/meeting.ts`, the `history` page, and `render.yaml`.
 
 ```
 VideoCircle/
@@ -147,6 +148,8 @@ VideoCircle/
     │   │   ├── token-ttl.ts           → pure min(1h, expires_at − now) cap
     │   │   ├── room-options.ts        → adaptiveStream/dynacast + chosen devices
     │   │   ├── request-token.ts       → browser-side POST /api/token, parsed
+    │   │   ├── participation-event.ts → pure identity → user id, and bigint
+    │   │   │                            event seconds → ISO
     │   │   └── webhook.ts             → WebhookReceiver setup
     │   ├── crypto/
     │   │   ├── base64url.ts           → byte ⇄ base64url helpers
@@ -170,6 +173,7 @@ VideoCircle/
     │   ├── meeting-state.ts           → pure joinability decision (open/ended/expired)
     │   ├── env.livekit.server.ts      → Zod-parsed LiveKit secrets, server-only
     │   ├── meetings.ts                → meeting lookup by code, server-only
+    │   ├── participation.ts           → idempotent participation writes, server-only
     │   ├── room-code.ts               → generation and validation of meeting codes
     │   ├── parse-room-code.ts         → pulls a code + opaque fragment out of a pasted code or link
     │   ├── api.ts                     → apiOk / apiError response helpers
@@ -198,6 +202,7 @@ VideoCircle/
 | `src/lib/auth` | Sign-in entry points and the redirect validation the callback depends on. `sign-in.ts` is `'use client'` — it is the only module that touches the chat-key stash. |
 | `src/lib/crypto` | All Web Crypto usage. No other folder may call `crypto.subtle` directly. |
 | `src/lib/meetings.ts` | Meeting lookup by code, `server-only`. Uses `supabaseAdmin` deliberately: RLS hides a meeting from the very guest opening its link, so the anon client would make every valid code look unknown. Existing here rather than in the page is what keeps the service-role client out of `src/app`. |
+| `src/lib/participation.ts` | The participation writes, `server-only`. Every function is idempotent, which is what lets the webhook route answer `500` and let LiveKit redeliver. Takes a meeting id rather than a room code, so the lookup happens once per event instead of once per write, and decides nothing about whether the meeting *should* have been joined — LiveKit is reporting what already happened. |
 | `src/lib/media` | Turns media-device failures into states the UI can render. Holds no React and no track lifecycle — that belongs to `src/hooks`. |
 | `src/lib/meeting-state.ts` | The joinability decision, pure and free of `server-only` so every branch is testable without a database. The route handler does the IO and hands the row here. |
 | `src/lib/livekit/token-ttl.ts` | The TTL cap, split out for the same reason: `token.ts` cannot be imported without the LiveKit secrets present. |
@@ -308,17 +313,35 @@ LiveKit Cloud  ── webhook POST ──▶  /api/livekit/webhook
                           identity is not null and is the join↔leave correlation key;
                           user_id is parsed from the `user:<uuid>` identity prefix,
                           and is null for a `guest:<uuid>` identity.
-  → participant_left    → set left_at on the open row matched by (meeting, identity)
-  → room_finished       → set meetings.ended_at
-                        → AND close every still-open participation row for that
-                          meeting: left_at = coalesce(left_at, now()). This is the
-                          reconciliation for a dropped participant_left event.
+                          A 23505 here means the event was redelivered — the partial
+                          unique index IS the idempotency, so it is not an error.
+  → participant_left    → set left_at on the open row matched by (meeting, identity),
+                          scoped `left_at is null` so a redelivery matches nothing.
+  → room_finished       → close every still-open participation row for that meeting,
+                          then set meetings.ended_at. Both scoped so re-running is a
+                          no-op, which is why they need no transaction. Closing the
+                          open rows is the reconciliation for a dropped
+                          participant_left — what a killed browser tab produces.
+
+ALL THREE TIMESTAMPS COME FROM LIVEKIT'S CLOCK, never now(): joined_at from
+participant.joinedAt, left_at and ended_at from the event's own createdAt. A
+delivery that arrives late, or succeeds only on its third retry, still records when
+the thing happened rather than when we heard about it. One clock source is also what
+keeps the `left_at >= joined_at` CHECK unreachable.
+
+An event naming a room code with no meeting answers 200, not an error: LiveKit
+retries non-2xx, and no retry conjures a meeting that never existed.
 
 Nightly pg_cron sweep (backstop for a dropped room_finished), 03:17 UTC:
   → meetings where ended_at is null and expires_at < now() - interval '2 hours'
-      → close any participation rows still open, left_at = expires_at
+      → close any participation rows still open,
+        left_at = greatest(joined_at, expires_at)
       → then ended_at = expires_at
     The 2-hour grace is what lets it close open rows safely — see Expiry policy.
+    The greatest() is not decoration: /api/token only checks expiry when it MINTS,
+    so a token issued a second before expires_at produces a join after it, and an
+    unclamped left_at would violate the row's CHECK. Both statements share one
+    plpgsql call, so that one row would abort the sweep for every meeting.
 ```
 
 ### Reading call history
@@ -797,6 +820,8 @@ export function apiError(code: string, message: string, status: number) {
 - `/api/token` loads the meeting by code and refuses unless `ended_at is null and now() < expires_at`; a syntactically valid code is never sufficient to mint a token.
 - Every write to `meetings` and `meeting_participants` happens inside a route handler using `supabaseAdmin`; no browser code writes to Postgres.
 - `meeting_participants.is_guest` is a generated column and is never included in an insert or update.
+- Every participation timestamp is LiveKit's, never ours: `joined_at` from `participant.joinedAt`, `left_at` and `ended_at` from the event's `createdAt`. Nothing in the webhook path writes `now()` or relies on a column default for a time, because a retried delivery would then record a duration that never happened — and `tests/e2e/livekit-webhook.spec.ts` asserts against event times deliberately in the past, so a handler that used `now()` fails rather than merely being wrong.
+- Every webhook-driven write is idempotent, and that is what makes answering `500` safe. `participant_joined` relies on the partial unique index and treats `23505` as already-recorded; `participant_left` and `room_finished` scope their updates so a redelivery matches no rows. Never add a webhook write that a redelivery would duplicate.
 - No RLS policy on a table contains a subquery against that same table; co-participant checks go through the `private.is_meeting_participant` `security definer` function.
 - Every `security definer` function lives in the `private` schema, never `public`, and sets `search_path = ''` with fully-qualified relations. `private` is not exposed by PostgREST, so nothing in it has an HTTP surface.
 - Every RLS policy wraps `auth.uid()` in a subselect and names its role with `to authenticated`.
