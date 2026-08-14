@@ -11,6 +11,7 @@ import { ParticipantList } from '@/components/room/participant-list';
 import { ReactionsProvider } from '@/components/room/reactions-provider';
 import { VideoGrid } from '@/components/room/video-grid';
 import { useChatKey } from '@/hooks/use-chat-key';
+import { useEncryptedChat } from '@/hooks/use-encrypted-chat';
 
 /**
  * The call: status pinned top, grid between, controls pinned bottom.
@@ -32,6 +33,10 @@ export function CallStage({ code }: CallStageProps) {
   // settled long before anyone opens chat, whereas CallPanel unmounts its children
   // when closed and would re-import on every open.
   const chatKey = useChatKey();
+  // Above the panel, not inside it: CallPanel unmounts its children when closed,
+  // and a transcript that stops receiving the moment someone closes chat is not a
+  // transcript.
+  const chat = useEncryptedChat(chatKey);
 
   // One value, so only one panel can ever be open — the only workable behaviour
   // on a phone, and it keeps two panels from competing for the right column on a
@@ -63,7 +68,7 @@ export function CallStage({ code }: CallStageProps) {
           </CallPanel>
 
           <CallPanel title="Chat" open={openPanel === 'chat'} onClose={() => setOpenPanel(null)}>
-            <ChatPanel chatKey={chatKey} />
+            <ChatPanel chatKey={chatKey} messages={chat.messages} onSend={chat.send} />
           </CallPanel>
         </div>
 
