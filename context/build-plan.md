@@ -635,7 +635,27 @@ is verified at feature 25.
 - Duration derived from `joined_at`/`left_at`, falling back to the meeting's own timestamps
 - Query failure logs and renders the empty state
 
-**Verify:** A second account's history contains none of the first account's meetings.
+**Decisions taken before building:**
+
+- **One entry per meeting, not per participation row.** A rejoin contributes two rows to one entry, whose duration spans the user's first `joined_at` to their last `left_at`. `architecture.md` calls history "the set of meetings they have a participation record for" — a set. A dropped connection is the commonest source of a second row, and rendering it as two meetings sharing a code and a guest list reads as a bug.
+- **Duration has three states, not one.** Row open and meeting still joinable → an in-progress state, never a number. Row closed → the presence span. Row open but meeting over → `ended_at`, then `expires_at`. A single fallback chain would render a duration derived from a 24-hour expiry for a call the reader is sitting in.
+- **Two queries, not a nested embed.** The user's own rows joined to `meetings`, then one `.in('meeting_id', ids)` for every row in those meetings. Grouping and name extraction become a pure function unit tests can reach; a self-referencing double embed would bury that logic in a query shape they cannot.
+- **The session client, never `supabaseAdmin`.** `read participation in meetings you joined` already admits exactly these co-participant rows, so RLS enforces the scope underneath the explicit `.eq('user_id', …)`. This is the one page where that holds, and the admin client would discard a real defence.
+- **Times are formatted in the browser.** A Server Component using `Intl` formats in the *server's* zone — UTC on Render — so every timestamp would be wrong for everyone else. The `<time>` element carries the ISO value and `suppressHydrationWarning`; only the zone differs across the boundary.
+- **Co-participants: three names, then `+N more`.** Keeps rows scannable and holds at 360px, where eleven names wrap to five lines. Deduped by identity, so a rejoiner is named once, and the user's own rows are excluded.
+- **The signed-out redirect goes plainly to `/`.** `project-overview.md` said "with the sign-in prompt open", which no mechanism supports and which neither `architecture.md` nor this plan asks for; that sentence is corrected rather than implemented.
+
+**Verify:** A second account's history contains none of the first account's meetings —
+proved by JWT impersonation in SQL rather than in a browser, because sign-in is
+Google OAuth only and the password path would mean enabling the email provider an
+open follow-up says to disable. `library-docs.md` already names impersonation as the
+only check that exercises the policies the way PostgREST will, and it is run from
+both users' perspectives so a policy returning nothing for everyone cannot pass.
+Rendering for a signed-in user stays manual until feature 25. Alongside it: unit
+coverage of grouping across a rejoin, all three duration states, co-participant
+dedupe and self-exclusion, and the `+N more` split; e2e for the signed-out redirect,
+360px overflow and hit areas; and a `TZ=UTC` server rendered to a non-UTC browser to
+prove the timestamps are the reader's.
 
 ---
 

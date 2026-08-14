@@ -69,7 +69,9 @@ filled in by the feature that needs it. Built so far:
 
 - **F20** — `src/app/api/livekit/webhook/`, `src/lib/livekit/{webhook,participation-event}.ts`, and `src/lib/participation.ts`. First server-side work since F09, and the first consumer of `WebhookReceiver`. A migration clamps the expiry sweep's `left_at`, which F20 is what makes reachable. `tsconfig.json`'s `target` moved ES2017 → ES2020: the SDK reports event times as `bigint`, and BigInt literals are illegal below that
 
-Not yet built: `types/meeting.ts`, the `history` page, and `render.yaml`.
+- **F21** — `src/app/(shell)/history/page.tsx`, `src/lib/history.ts`, and `src/components/history/{history-list,history-empty,history-time}.tsx`. The `.history-row` column widths join `globals.css`. `tests/e2e/support/session.ts` arrived with it: the suite mints real Supabase sessions through the admin API, so signed-in pages are testable without Google's consent screen
+
+Not yet built: `types/meeting.ts` and `render.yaml`.
 
 ```
 VideoCircle/
@@ -129,7 +131,9 @@ VideoCircle/
     │   │                                leave-control, reactions-provider, reaction-menu,
     │   │                                and invite-dialog
     │   ├── chat/                      → chat-panel: transcript, composer, key-missing notice
-    │   └── history/                   → history table, empty state
+    │   └── history/                   → history-list (cards below sm:, grid above),
+    │                                    history-empty, history-time (client leaf:
+    │                                    formats in the reader's timezone)
     ├── hooks/                         → use-media-preview (owns the lobby's tracks),
     │                                    use-media-devices, use-copy-to-clipboard,
     │                                    use-call-shortcuts, use-is-screen-share-supported,
@@ -174,6 +178,8 @@ VideoCircle/
     │   ├── env.livekit.server.ts      → Zod-parsed LiveKit secrets, server-only
     │   ├── meetings.ts                → meeting lookup by code, server-only
     │   ├── participation.ts           → idempotent participation writes, server-only
+    │   ├── history.ts                 → pure grouping into one entry per meeting,
+    │   │                                the three duration states, and HH:MM:SS
     │   ├── room-code.ts               → generation and validation of meeting codes
     │   ├── parse-room-code.ts         → pulls a code + opaque fragment out of a pasted code or link
     │   ├── api.ts                     → apiOk / apiError response helpers
@@ -350,9 +356,24 @@ Nightly pg_cron sweep (backstop for a dropped room_finished), 03:17 UTC:
 /history (Server Component)
   → createServerClient() → supabase.auth.getUser()
   → null user → redirect('/')
-  → select meetings joined via meeting_participants where user_id = auth.uid()
-       (RLS independently enforces the same scope)
-  → render list with duration and co-participant display names
+  → [1] meeting_participants embedding meetings, where user_id = auth.uid(),
+        newest first, limit 50   (RLS independently enforces the same scope)
+  → [2] meeting_participants where meeting_id in (those meetings)
+        The co-participant names. Two queries rather than one nested embed, so the
+        grouping below is a pure function unit tests can reach.
+  → buildHistoryEntries(): ONE ENTRY PER MEETING, not per row. A rejoin — which a
+        dropped connection produces routinely — contributes two rows to one entry,
+        whose span runs from the user's first join to their last leave.
+  → duration is one of three states, never a single fallback chain:
+        row closed                        → recorded
+        row open, meeting still joinable  → in-progress   (a live call)
+        row open, meeting over            → estimated from ended_at ?? expires_at
+  → render; timestamps are formatted in the BROWSER — see the invariant below
+
+The session client throughout, never supabaseAdmin. `read participation in
+meetings you joined` admits exactly these rows, so RLS enforces the scope a second
+time underneath the explicit .eq(). This is the only surface where that holds:
+every other read serves guests, who have no session at all.
 ```
 
 ---
@@ -828,6 +849,7 @@ export function apiError(code: string, message: string, status: number) {
 - Every decrypted chat payload is validated with `ChatPlaintextSchema` before use; a bare `JSON.parse` result is never treated as a message.
 - RLS is enabled on every table in the `public` schema, and every table has an explicit `select` policy scoped through `auth.uid()`.
 - Every history query is scoped to the current user's `auth.uid()` in the query itself, not only by RLS.
+- **A timestamp shown to a person is formatted in the browser, never on the server.** `Intl` on the server uses the *server's* zone, which is UTC on Render — a server-rendered time is wrong for everyone outside it. The client must genuinely re-render: `suppressHydrationWarning` does not work here, because suppressing the warning means keeping the server's text, and the bug survives silently. Use a hydration flag through `useSyncExternalStore`, as `history-time.tsx` does. `tests/e2e/history.spec.ts` pins it from a UTC+14 browser.
 - Server-side session reads use `supabase.auth.getUser()`; `supabase.auth.getSession()` is never used to authorize anything.
 - A display name comes from `profiles`, never from `user_metadata`. Supabase's `raw_user_meta_data` is user-editable and surfaces in `auth.jwt()`, so it is unsafe for any authorization decision, and using it for a name would put a second derivation next to the `auth.users` trigger's, free to drift from what call history shows.
 - Database schema changes are made only by adding a file to `supabase/migrations/`, never by application code at runtime.

@@ -173,3 +173,72 @@ the killed-tab case made deterministic — an unknown room code answering 200 wi
 nothing written, and an unhandled event type. Sweep clamp confirmed against the live
 database, seen failing first. Advisors show only the pre-existing
 `auth_leaked_password_protection`.
+
+### 2026-08-14 — F21 Call history page
+
+`/history`: one entry per meeting, newest first, with duration, room code,
+co-participant names, a gated Rejoin, and an empty state. The first reader of what
+F20 writes.
+
+**Decisions**
+
+- **One entry per meeting, not per participation row.** A rejoin — which a dropped
+  connection produces routinely — writes a second row, and two entries sharing a
+  code and a guest list read as a bug rather than as history. The span therefore
+  runs from the user's first join to their last leave, deliberately including the
+  gap rather than summing the sessions: the row already shows a start time, and a
+  duration that disagrees with the wall clock beside it invites the question it
+  cannot answer.
+- **Three duration states, not one fallback chain.** `recorded` from a closed row,
+  `in-progress` when the row is open and the meeting still joinable, `estimated`
+  when the row is open but the meeting is over. The middle one is the reason: a
+  single `left_at ?? ended_at ?? expires_at` renders a duration derived from a
+  24-hour expiry for a call the reader is sitting in. `estimated` stays visibly
+  distinct — a `~` and a screen-reader note — because it can overstate by hours.
+- **Two queries rather than one nested embed.** Embedding `meeting_participants`
+  twice through `meetings` works, but it puts the grouping inside a query shape no
+  unit test can reach, and the grouping is where every decision above lives.
+- **The session client, not `supabaseAdmin`.** The only page in the product where
+  that is possible: the `read participation in meetings you joined` policy admits
+  exactly these rows, so RLS enforces the scope a second time beneath the explicit
+  `.eq()`. Everything else serves guests, who have no session at all.
+
+**Gotchas**
+
+- **A server-rendered timestamp is wrong for everyone outside the server's
+  timezone, and the first fix made it worse.** `Intl` on the server formats in the
+  server's zone — UTC on Render. Reaching for `suppressHydrationWarning` looked
+  right and was exactly backwards: it suppresses the warning *by keeping the
+  server's text*, so the page kept rendering the wrong zone with nothing to
+  indicate it. The e2e caught both — first showing the machine's IST, then UTC —
+  before a hydration flag through `useSyncExternalStore` made the client genuinely
+  re-render. Seen failing twice before it passed.
+- **The plan conceded coverage it did not have to.** It recorded that a signed-in
+  page could not be tested, since Playwright cannot drive Google's consent screen
+  and the password path would mean enabling a provider an open follow-up says to
+  close. `auth.admin.generateLink` + `verifyOtp` mints a real session with no mail
+  sent, and writing it into the browser in `@supabase/ssr`'s cookie shape
+  (`sb-<ref>-auth-token`, `base64-` + base64url JSON, chunked past 3180 chars)
+  signs the context in for real. Probing that took minutes and turned a manual
+  deferral into eight browser tests, including the build plan's headline claim.
+  Worth probing before conceding, next time.
+- **`Cookie should have either url or path`** — Playwright takes `url` OR
+  `domain` + `path`, never both.
+- **An arbitrary-value grid template is a lint error here, and rightly.** The
+  column widths moved into `globals.css` as `.history-row`, beside `.grid-backdrop`.
+  Only the track widths live there: `display`, `align-items` and `gap` stay as
+  Tailwind variants, so `hidden sm:grid` on the header strip resolves by Tailwind's
+  own variant ordering rather than by this file's position in the cascade.
+- **`project-overview.md` was the outlier on the signed-out redirect**, promising a
+  sign-in prompt that no mechanism supports and that neither `architecture.md` nor
+  the build plan asked for. Corrected rather than implemented.
+
+**Verified:** 216 unit tests, 104 e2e (8 new), `lint`, `typecheck` and `build` all
+clean. Isolation proved twice over: JWT impersonation in SQL, run as both users and
+as a third who was in neither meeting — so a policy returning nothing for everyone
+could not pass — and again in a browser, where a second account's page contains
+neither the first's room code nor their display name. Alongside those: the empty
+state, a rejoin collapsing to one entry at `00:20:00`, `00:12:07` from a 727-second
+row, Rejoin present on an open meeting and absent on an ended one, `+8 more` at
+360px with no overflow and every target at 44px, and the timezone check from a
+UTC+14 browser.

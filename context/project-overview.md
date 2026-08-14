@@ -48,8 +48,8 @@ entirely.
 `/room/[code]` is one route with two states: the lobby renders until the user
 presses Join, at which point the same page connects to LiveKit and renders the
 meeting. Leaving a call returns the user to Home. `/history` is reachable from the
-header only while signed in; an unauthenticated request to it redirects to Home
-with the sign-in prompt open. Signing in never interrupts a call — the auth
+account menu only while signed in; an unauthenticated request to it redirects to
+Home. Signing in never interrupts a call — the auth
 callback returns the user to the page they started from.
 
 ## Core User Flow
