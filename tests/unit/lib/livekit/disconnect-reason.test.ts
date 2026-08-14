@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 
 import { describeDisconnect, isDeliberateLeave } from '@/lib/livekit/disconnect-reason';
 
+import { forbiddenCopyReason } from '../../../support/forbidden-copy';
+
 /**
  * Every member of the enum, plus `undefined`, because a reason nobody thought
  * about must fail a test here rather than render a blank panel in a call that
@@ -45,14 +47,18 @@ describe('describeDisconnect', () => {
   // `code-standards.md` → Error Handling: a user-facing message never carries an
   // error code, a provider name, or an enum member. Asserted rather than reviewed,
   // because copy is exactly what gets edited later without re-reading the rule.
+  //
+  // Through the shared set rather than patterns of its own, added at F24: two
+  // copies of "what counts as a leak" would drift, and the half that drifted
+  // looser is the half that would stop catching anything.
   it('never leaks a code, an enum member, or a provider name', () => {
     for (const reason of [...ALL_REASONS, undefined]) {
       const { title, message } = describeDisconnect(reason);
-      const copy = `${title} ${message}`.toLowerCase();
 
-      expect(copy).not.toMatch(/livekit|websocket|signal|token|sfu/);
-      expect(copy).not.toMatch(/_/); // no SCREAMING_SNAKE enum member leaked through
-      expect(copy).not.toMatch(/\b\d{3}\b/); // no status-code-shaped number
+      for (const [field, text] of Object.entries({ title, message })) {
+        const leak = forbiddenCopyReason(text);
+        expect(leak, `${String(reason)}.${field} contains ${leak}: ${text}`).toBeNull();
+      }
     }
   });
 
