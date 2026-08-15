@@ -27,15 +27,18 @@ services:
     startCommand: npm run start
 
     # `healthCheckPath` is deliberately UNSET, though /healthz exists and works.
+    # This is settled, not pending a measurement — do not add it.
     #
     # Render's docs say a free instance spins down after 15 minutes without "any
     # inbound traffic", and do not say whether their own health-check requests
-    # count. If they do, configuring one here is exactly the keep-alive pinger
-    # `constraints.md` → Hosting refuses, added by accident and billed against the
-    # same 750 hours. Enabling it is one line once that is confirmed; discovering
-    # the free tier was exhausted is not as cheap.
+    # count. That uncertainty is the whole argument, because the downside is not
+    # local to this service: the 750 free instance-hours are **per workspace**,
+    # this account runs several free services, and a month is ~730 hours — so one
+    # service kept awake consumes essentially the entire budget and suspends every
+    # other free service in the workspace with it.
     #
-    # healthCheckPath: /healthz
+    # The upside is an automatic restart of a wedged instance. The downside is
+    # taking down unrelated projects. Not close.
 
     envVars:
       # Pinned so a Render-side default change cannot alter the build. The floor
