@@ -11,13 +11,13 @@ and the key.
 
 ## Demo
 
-_No demo URL yet — the service is not deployed. See First deploy to Render below._
+**[videocircle-blw4.onrender.com](https://videocircle-blw4.onrender.com)**
 
-> **When there is one, the first visit will take about a minute.** It runs on a
-> Render free instance, which spins down after 15 minutes without traffic. Render
-> serves its own loading page while it wakes — that happens before any of this
-> code runs, so it cannot be branded or shortened. Once awake it is quick. Nothing
-> is wrong; it is the cost of running for free.
+> **The first visit takes about a minute.** It runs on a Render free instance,
+> which spins down after 15 minutes without traffic. Render serves its own loading
+> page while it wakes — that happens before any of this code runs, so it cannot be
+> branded or shortened. Once awake it is quick. Nothing is wrong; it is the cost of
+> running for free.
 
 ## Status
 
@@ -113,9 +113,16 @@ real camera.
 Order matters in one place: **every environment variable must be set before the
 first build, not after it.** The four `NEXT_PUBLIC_*` values are compiled into the
 bundle at build time and parsed by Zod at import, so a missing one fails the build
-rather than the request — and fixing one afterwards costs a full redeploy. The
-origin is predictable before the service exists: it is `https://<name>.onrender.com`
-for the service `name` in `render.yaml`.
+rather than the request — and fixing one afterwards costs a full redeploy.
+
+**The origin is not predictable.** Render appends a random suffix when the
+subdomain your service name would take is already claimed — this deployment asked
+for `videocircle` and got `videocircle-blw4`. So you cannot know
+`NEXT_PUBLIC_SITE_URL` until the service exists, and it is the one variable that
+must be right at build time. Create the service, read the real URL from the
+dashboard, set `NEXT_PUBLIC_SITE_URL` to it, and redeploy. Getting it wrong is
+quiet rather than loud: the app builds and runs, and only share links and the
+OAuth redirect point at an origin that is not this one.
 
 1. Create a Render **Blueprint** from this repo, so `render.yaml` is what deploys.
    A Web Service created by hand in the dashboard ignores that file.

@@ -48,8 +48,10 @@ services:
       # by the compiler and parsed by Zod at import, so a missing one fails the
       # build rather than the request — and correcting one costs a full redeploy.
       #
-      # The origin is predictable before the service exists: it is
-      # https://<name>.onrender.com for the `name` above.
+      # NOT predictable from `name` above: Render appends a random suffix when
+      # that subdomain is taken. This deployment asked for `videocircle` and got
+      # `videocircle-blw4`. Read the real origin off the dashboard once the
+      # service exists, then set this and redeploy — see the README.
       - key: NEXT_PUBLIC_SITE_URL
         sync: false
       - key: NEXT_PUBLIC_SUPABASE_URL
