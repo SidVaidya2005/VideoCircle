@@ -121,6 +121,15 @@ npm run lint && npm run typecheck && npm run test && npm run test:e2e
 only check that connects to LiveKit Cloud and Supabase for real, so it is the only
 one that can catch a broken call.
 
+**Read a red suite carefully before believing it.** Run bare, it starts `next dev`,
+which starves its own outbound connections under four parallel workers and invents
+failures the product does not have — a full suite once produced 23 handler errors
+on `next dev` and none at all against a production build. Before treating any red
+as a bug, re-run it against `npm run build && npm run start -- --port 3100` with
+the suite pointed at that server. And note `CI=true` sets `retries: 2`, so a CI
+summary reading "all passed" can be concealing a first-attempt failure; read the
+retry lines, not the total.
+
 ### First deploy to Render
 
 Order matters in one place: **every environment variable must be set before the

@@ -814,17 +814,25 @@ suite-hardening pass the follow-ups have been assigning to it since F08.
 **Logic:**
 
 - **`joinAs` has one home.** It is copy-pasted into **12** specs in **7** variants — the follow-up recording "eight, now identical" was wrong on both counts. The variants reduce to two axes: an optional `hash`, and whether to wait for `Connected` or merely for the control bar to mount. `until` defaults to `connected`, which is strictly stronger; the three specs that currently wait on Leave pass `mounted`, so no spec changes behaviour
-- **The three media failure states get reached two different ways, deliberately.** A second Playwright project without `--use-fake-ui-for-media-stream` covers *denied* and *no-device*, where the browser can refuse for real; a stub covers *in-use* (`NotReadableError`), which no flag combination produces. Never claim the stub proves the browser's behaviour
-- **Any test that forces a LiveKit full restart must assert it got one.** `support/reconnect.ts` records peer-connection constructions — a restart makes new ones, a resume makes none. Without that assertion the test passes on the resume path and proves nothing, which is the failure mode the vacuous proxy-cookie assertion already demonstrated
+- **The three media failure states are reached by stub, and the two-project plan this bullet used to describe does not work.** It called for a second Playwright project without `--use-fake-ui-for-media-stream` to cover *denied* and *no-device* for real, with a stub only for *in-use*. Seven flag and permission combinations were measured at `7.26.3` and none of them works: `--use-fake-ui-for-media-stream` auto-grants and **overrides Playwright's own context permissions**, so nothing can be denied while it is on; with it off, the bundled headless Chromium refuses all capture with `NotSupportedError`, which is none of the wanted states; keeping it while dropping `--use-fake-device-for-media-stream` still synthesizes a device; and no real Chrome is installed to fall back on. So `stubMediaFailure` rejects with a real `DOMException` per state, and the suite keeps **one** project. What that proves is the wiring — that a rejection reaches the right rendered copy — and never that the browser produces the rejection. Never claim otherwise
+- **No test forces a LiveKit full restart, because none can.** This bullet used to require that such a test assert it got a restart, via the peer-connection recorder in `support/reconnect.ts` — a restart constructs new ones, a resume constructs none. That instrumentation was built and is what disproved the premise: `context.setOffline` fails with a `SignalReconnectError`, and `attemptReconnect`'s catch explicitly **excludes** that from promoting the next attempt to a full reconnect, so it retries *resume* forever. Measured at 10s, 20s, 30s and 45s offline: zero new peer connections every time. The only three things that set `fullReconnectOnNext` are unreachable from Playwright, and `room.simulateScenario('node-failure')` would need a test-only path through production code. **`republishAllTracks` is therefore unreachable from the suite, and the mic-across-a-full-restart question is settled by reading livekit-client instead** — the best available evidence, not a gap to reopen. The recorder stays: it is what keeps any future reconnect test from passing on the resume path and proving nothing
 - Diagnose the intermittent `/api/meetings` 500 under a timebox, capturing the handler's own `[api/meetings]` log from a *failing* run — never once seen. Mitigate with a retry only if the timebox expires, recording what was ruled out
 - Retry spec-side Supabase reads on transport errors, mirroring `createMeeting`
 - Measure the reconnect-banner flake before touching its timeout; raising it blindly masks the cause
 - Confirm the F08/F24 duplicate-track flake is closed by the lobby-leak fix
 - Wire `npm run test:e2e` into the documented pre-deploy checklist
 
-**Verify:** Full suite green across both projects, plus `npm run test`, `lint` and
-`typecheck`. Each previously-flaky spec green over 40 consecutive runs — fewer is
-not evidence. The full-restart test seen to fail when pointed at a resume.
+**Verify:** Full suite green, plus `npm run test`, `lint` and `typecheck`. Each
+previously-flaky spec green over 40 consecutive runs — fewer is not evidence.
+
+Two clauses were removed from this line because the bullets above them were
+disproven, not because they were inconvenient. "Across both projects" assumed a
+second Playwright project that measurement shows cannot exist; "the full-restart
+test seen to fail when pointed at a resume" assumed a test that cannot be written
+from Playwright at all. Both are corrected in place above, with what was measured.
+Every run is against a **production build** with `retries: 0` — `next dev`
+starves outbound connections under parallel load, and `CI=true` sets `retries: 2`,
+either of which turns this line into a green that means nothing.
 
 ---
 
