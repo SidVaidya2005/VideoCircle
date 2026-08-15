@@ -108,6 +108,43 @@ test('someone joining after a hand goes up still sees it', async ({ page, browse
   }
 });
 
+test('a raised hand the room never receives puts the control back', async ({
+  page,
+  context,
+  request,
+}) => {
+  test.setTimeout(90_000);
+
+  const code = await createMeeting(request);
+  await joinAs(page, code, 'Ada Lovelace');
+
+  // Offline is what makes this deterministic. The attribute write is a signal
+  // round trip, so with no network it cannot land however long it waits. The
+  // failure this covers was originally reached by accident instead — by a suite
+  // whose join gate returned early, raising a hand 2.7s before the room had
+  // connected, where livekit-client refuses the request outright.
+  await context.setOffline(true);
+
+  try {
+    await reactionsControl(page).click();
+    await handToggle(page).click();
+
+    // Optimistic first: the control moves immediately, because a toggle that
+    // waits on a round trip before moving reads as a dead button.
+    await expect(page.getByRole('button', { name: 'Lower hand' })).toBeVisible();
+
+    // And then back, because the room never heard it. The write used to be fired
+    // into a `void`, so this stayed up forever — telling the one person it was
+    // NOT raised for that it was, with nothing able to correct it: your own hand
+    // is local state and everyone else's is read from the attribute.
+    await expect(page.getByRole('button', { name: 'Raise hand' })).toBeVisible({
+      timeout: 45_000,
+    });
+  } finally {
+    await context.setOffline(false);
+  }
+});
+
 test('reactions are reachable and sized on a phone', async ({ page, request }) => {
   await page.setViewportSize(MOBILE);
   const code = await createMeeting(request);

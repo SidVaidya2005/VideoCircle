@@ -53,16 +53,42 @@ export function ReactionsProvider({ children }: { children: React.ReactNode }) {
   //
   // Unlike the screen-share state this deliberately does not mirror, nothing but
   // this toggle can change it: there is no equivalent of the browser's own stop
-  // bar for a raised hand, so a local copy has nothing to drift against. A failed
-  // attribute write is the one gap, and it is rarer than the case it fixes.
+  // bar for a raised hand, so a local copy has nothing to drift against. The one
+  // gap is a failed attribute write, which is handled below rather than assumed
+  // rare — it was measured at F26, and the failure is silent from the inside.
   const [handRaised, setHandRaised] = useState(false);
+
+  // Bumped on every toggle, so a write that fails slowly only reverts the control
+  // when nothing has been pressed since. Without it, a rejection arriving after a
+  // second press would clobber the newer intent. Same generation guard
+  // `use-media-preview.ts` uses to drop a superseded acquisition.
+  const handGeneration = useRef(0);
 
   const toggleHand = useCallback(() => {
     const next = !handRaised;
+    const generation = ++handGeneration.current;
+
+    // Optimistic: the write is a signal round trip, and a control that waits on
+    // one before moving reads as broken.
     setHandRaised(next);
-    // An empty string rather than a delete: setAttributes merges, so a key can
-    // only be emptied, and an empty value reads as "not raised" everywhere.
-    void localParticipant.setAttributes({ [HAND_ATTRIBUTE]: next ? HAND_RAISED : '' });
+
+    void (async () => {
+      try {
+        // An empty string rather than a delete: setAttributes merges, so a key can
+        // only be emptied, and an empty value reads as "not raised" everywhere.
+        await localParticipant.setAttributes({ [HAND_ATTRIBUTE]: next ? HAND_RAISED : '' });
+      } catch (error) {
+        // Discarding this rejection is worse than it looks, which is why it is no
+        // longer discarded. Your own hand is local state and everyone else's is
+        // read from the attribute, so a write that never lands leaves the button
+        // and the badge saying "hand up" to the one person it is not raised for —
+        // and nothing else can ever correct it. Putting the control back is the
+        // only honest option: it says the room did not hear you.
+        if (handGeneration.current !== generation) return;
+        setHandRaised(!next);
+        console.warn('[reactions] raised-hand attribute did not sync', error);
+      }
+    })();
   }, [handRaised, localParticipant]);
 
   // Last accepted time per identity, including our own. A ref because nothing
