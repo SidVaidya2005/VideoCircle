@@ -125,9 +125,8 @@ At that phase's checkpoint, the whole phase collapses to:
 
 ## Phase 7 — Ship *(compacted 2026-08-15)*
 
-*Feature 25 is deployed and serving, but its box is still open: its Verify is a
-signed-in two-device call on the deployed URL, and the call that has been done was
-joined as a guest. F25 and `7.26.1`–`7.26.5` were never journalled as they landed
+*Compacted while feature 25's box was still open; it closed later the same day —
+see the entry below the bullets. F25 and `7.26.1`–`7.26.5` were never journalled as they landed
 and are deliberately **not** reconstructed — a backfilled entry carries the
 confidence of a record without the evidence of one. What still binds from them is
 promoted into `constraints.md`; `git log` holds the rest.*
@@ -139,4 +138,24 @@ promoted into `constraints.md`; `git log` holds the rest.*
 - **The one product bug the phase found was a swallowed rejection.** `toggleHand` fired its attribute write into a `void`, so a write that never landed left the raiser as the only person who believed their hand was up — your own hand is local state, everyone else's is the synced attribute, and nothing could reconcile them. It now awaits the write and reverts the control, generation-guarded so a slow rejection cannot clobber a newer press. (F26)
 - **`next dev` is not a fair test environment, and a CI summary is not a result.** Under four workers dev starves its own outbound connections — 23 handler errors against zero on a production build — and `CI=true` sets `retries: 2`, so "all passed" can conceal a first-attempt failure. Both are now warnings in the README's pre-deploy section, because the person most likely to be misled is the one following the checklist. (F26)
 - **Making the gate honest cost 23 red tests before it paid.** The first truthful full-suite run failed 23 of 131, ten of them the connect gate genuinely expiring: Playwright defaults to 4 workers on 8 cores and the call specs open two contexts each, so the suite asks one laptop for eight concurrent WebRTC sessions. The 20s budget had never measured anything; it is now one documented `CONNECT_TIMEOUT_MS`, explicitly about the suite's parallelism and not about the product. (F26)
-- **Phase gates at close:** `lint`, `typecheck` and `build` clean; **233 unit tests and 135 e2e specs pass** against a production build with `retries: 0`. The suite grew from 124 e2e at the start of the phase to 135. Gates were run with retries off deliberately: `CI=true` would have set `retries: 2`, and this phase is the one that learned what a retried green conceals. **The phase is not closed** — feature 25's box is still open, because its Verify wants a *signed-in* two-device call on the deployed URL and the call that has been done was joined as a guest.
+- **Phase gates at close:** `lint`, `typecheck` and `build` clean; **233 unit tests and 135 e2e specs pass** against a production build with `retries: 0`. The suite grew from 124 e2e at the start of the phase to 135. Gates were run with retries off deliberately: `CI=true` would have set `retries: 2`, and this phase is the one that learned what a retried green conceals. The phase was left open at this point, feature 25's box still unticked, because its Verify wants a *signed-in* two-device call on the deployed URL and the call that had been done was joined as a guest.
+
+### Feature 25 — Render deployment *(closed 2026-08-15)*
+
+Closed on device verification rather than on a change: no file under `src/` moved,
+so the gates recorded above still stand.
+
+- **The sign-in clause is met, and it is the only one that could not have been faked from here.** A Google sign-in succeeded on `https://videocircle-blw4.onrender.com`. Supabase echoes `redirect_to` into the Google URL and validates it only at callback time, so the Supabase redirect allow-list and the Google client's authorized URI were indistinguishable from broken ones until a round trip completed. One sign-in cleared both dashboards and exercised the callback's origin comparison along the way.
+- **Four of F22's five carried checks came back working, and they are not all worth the same.** Sign-in and mobile device-picker labels are things a person sees. Safe-area insets on a notched phone and the chat composer over the iOS keyboard were reported from an end-to-end session rather than looked for — and both fail as slightly wrong padding rather than as a fault, which is precisely how the inset bug survived unnoticed from F09 to F22. They are recorded as reported, not verified, and `constraints.md` keeps the iOS `visualViewport` question open rather than declaring it unnecessary. **The tick is honest because the record distinguishes them, not because they were equal.**
+- **One check stays open and gates nothing:** Lighthouse on mobile throttling, and a ten-minute four-participant call. F25's Verify names neither, and `code-standards.md` → Performance already prescribes recording an unmet target with its reason rather than lowering it. It is carried as a follow-up because it needs four people, not a change.
+- **What this makes true for the first time:** every feature in `build-plan.md` is built and ticked, and the product has been used end to end, signed in, by a real person on real hardware against the deployed instance.
+
+### Phase 7 checkpoint — re-run *(2026-08-15)*
+
+The light re-run the tracker promised, `7.00.1` having already reconciled
+`architecture.md`, compacted this file, and promoted F25's hosting decisions.
+
+- **Gates, production build, `retries: 0`:** `lint`, `typecheck` and `build` clean; **233 unit tests and 135 e2e specs pass.** The diff since `7.00.1` was context docs only, so no reconciliation was owed — checked rather than assumed, against the build's own route list, which matches `architecture.md`'s route table exactly.
+- **The first suite run failed 1 of 135, and the failure was worth more than the green.** `POST /api/meetings` answered 500 carrying `PGRST303 — JWT issued at future` from Supabase. That is **not** the transport starvation this route has a long follow-up about: there, no response arrives at all. Here Supabase answered, rejecting a service-role key whose `iat` is fixed at project creation and which nothing local can move — so the skew is on their clock, and the local one was checked against a network source and was correct to the second. A free instance resuming from idle is the plausible cause.
+- **The retry was deliberately not widened to cover it.** `createMeeting` retries a thrown transport error and never a non-201, which is what keeps a genuine 500 loud; `PGRST303` is shaped exactly like a real JWT or permission fault, so catching it would hide those. Recorded as a Follow-up to watch. This is the same trade F26 made when it refused to raise a timeout it had not measured.
+- **The second run was clean**, and the server log across both runs holds exactly one occurrence — which is the evidence for calling it transient, rather than a re-run being the evidence.
