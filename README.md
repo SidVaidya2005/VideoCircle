@@ -137,9 +137,23 @@ first build, not after it.** The four `NEXT_PUBLIC_*` values are compiled into t
 bundle at build time and parsed by Zod at import, so a missing one fails the build
 rather than the request — and fixing one afterwards costs a full redeploy.
 
-**The origin is not predictable.** Render appends a random suffix when the
-subdomain your service name would take is already claimed — this deployment asked
-for `videocircle` and got `videocircle-blw4`. So you cannot know
+**The origin is not predictable, and the reason is now confirmed rather than
+assumed.** Render appends a random suffix when the subdomain your service name
+would take is already claimed — this deployment asked for `videocircle` and got
+`videocircle-blw4`. `videocircle.onrender.com` is a live service belonging to
+somebody else: it serves a Create React App bundle from `/static/js/`, answers
+`/healthz` with an HTML fallback rather than `{"status":"ok"}`, and pulls its
+typeface from Google's CDN, which this project forbids. Do not mistake it for
+this app, and do not point anything at it.
+
+**The service name and the origin are different things**, which matters because a
+Blueprint sync matches services by `name`. The name is `videocircle` — what was
+asked for, and what `render.yaml` declares; `-blw4` is only the hostname's
+collision suffix. If the dashboard ever shows a different service _name_, fix
+`render.yaml` to match it **before** syncing, or the sync creates a second free
+service and the workspace's 750 instance-hours start being shared.
+
+So you cannot know
 `NEXT_PUBLIC_SITE_URL` until the service exists, and it is the one variable that
 must be right at build time. Create the service, read the real URL from the
 dashboard, set `NEXT_PUBLIC_SITE_URL` to it, and redeploy. Getting it wrong is
