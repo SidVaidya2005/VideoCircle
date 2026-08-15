@@ -216,6 +216,10 @@ export function useMediaPreview(): MediaPreviewController {
     let cancelled = false;
     mounted.current = true;
     const tracks = openTracks.current;
+    // Snapshot taken before the first await. Everything that supersedes this run
+    // — a toggle, or `stopPreview()` at Join — bumps one of these, and comparing
+    // against the snapshot is the only way this run can tell it has been.
+    const mine = { ...generation.current };
 
     void (async () => {
       // Read here rather than in a useState initializer: this runs on the server
@@ -306,9 +310,21 @@ export function useMediaPreview(): MediaPreviewController {
         micResult = { track: findAudio(result.tracks), failure: result.failure };
       }
 
-      if (cancelled) {
-        // Resolved after this effect run was torn down, so nothing downstream
-        // will ever hold these.
+      // `cancelled` covers this effect run being torn down, and nothing else.
+      // It does NOT cover Join: `stopPreview()` leaves the hook mounted and
+      // signals abandonment by bumping the generation counters instead. Every
+      // toggle path reads those; this one — the original acquisition — did not,
+      // so a microphone request still in flight at Join resolved with nothing
+      // cancelled and was adopted into a lobby that had already handed off. The
+      // device then stayed open for the whole call, under a control reading
+      // muted. See `tests/e2e/join.spec.ts`.
+      const superseded =
+        generation.current.camera !== mine.camera ||
+        generation.current.microphone !== mine.microphone;
+
+      if (cancelled || superseded) {
+        // Resolved after this run stopped being the current one, so nothing
+        // downstream will ever hold these.
         release(cameraResult.track);
         release(micResult.track);
         return;

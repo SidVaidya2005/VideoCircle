@@ -65,6 +65,33 @@ export function liveTrackCounts(page: Page): Promise<{ video: number; audio: num
 }
 
 /**
+ * Holds the microphone request open, so Join can be pressed while it is in flight.
+ *
+ * The device is real and the constraints are untouched — only the moment of
+ * resolution moves. That is the difference between a test that reproduces the
+ * lobby-handoff race and one that depends on machine speed: acquisition normally
+ * finishes first on `next dev`, and finishes *second* on a production build,
+ * which is why this leak was invisible locally and present on 6 of 6 production
+ * runs.
+ *
+ * A slow microphone is not a contrivance either — it is what a real device does
+ * on first use, and `constraints.md` records `getUserMedia` hanging outright on
+ * this machine.
+ */
+export async function delayMicrophoneAcquisition(page: Page, ms: number): Promise<void> {
+  await page.addInitScript((delay: number) => {
+    const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = async (constraints) => {
+      const stream = await original(constraints);
+      if (stream.getAudioTracks().length > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+      return stream;
+    };
+  }, ms);
+}
+
+/**
  * Replaces the browser's screen-share picker with a canvas the page paints itself.
  *
  * Only the picker is stubbed. LiveKit still publishes a real `MediaStreamTrack`,

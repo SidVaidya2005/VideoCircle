@@ -1,6 +1,12 @@
 import { expect, test } from '@playwright/test';
 
-import { createMeeting, liveTrackCounts, MOBILE, trackMediaAcquisition } from './support/media';
+import {
+  createMeeting,
+  delayMicrophoneAcquisition,
+  liveTrackCounts,
+  MOBILE,
+  trackMediaAcquisition,
+} from './support/media';
 
 /**
  * These connect to LiveKit Cloud for real. Mocking the SFU would mean testing the
@@ -32,6 +38,33 @@ test('the preview is released before the room connects', async ({ page, request 
   // The room acquires its own camera, so one live track is expected — but never
   // two. A leaked preview track holds the device the room is asking for and, on
   // some hardware, stops it acquiring at all.
+  await expect.poll(async () => (await liveTrackCounts(page)).video).toBeLessThanOrEqual(1);
+});
+
+test('a device still being acquired when Join is pressed is released, not adopted', async ({
+  page,
+  request,
+}) => {
+  await trackMediaAcquisition(page);
+  await delayMicrophoneAcquisition(page, 2_000);
+  const code = await createMeeting(request);
+
+  await page.goto(`/room/${code}`);
+
+  // The race, made deterministic. `stopPreview()` signals abandonment by bumping
+  // the generation counters, and the mount acquisition was the one path that never
+  // read them — so a request still in flight at Join resolved, found nothing
+  // cancelled, and was held by a lobby that had already handed off.
+  //
+  // Not an exotic case: it is what anyone who opens a share link and joins
+  // straight away does, and the device then stays open for the whole call under a
+  // control that reads muted. Left to chance it reproduces on a production build
+  // and not on `next dev`, which is precisely how it stayed invisible.
+  await page.getByLabel('Your name').fill('Joiner');
+  await page.getByRole('button', { name: 'Join now' }).click();
+  await expect(page.getByRole('button', { name: 'Leave' })).toBeVisible({ timeout: 20_000 });
+
+  await expect.poll(async () => (await liveTrackCounts(page)).audio).toBeLessThanOrEqual(1);
   await expect.poll(async () => (await liveTrackCounts(page)).video).toBeLessThanOrEqual(1);
 });
 
