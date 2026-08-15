@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { createMeeting, stubDisplayMedia } from './support/media';
+import { joinAs } from './support/join';
 
 /**
  * The two edge cases F24 closes, both open since Phase 3 and 4.
@@ -16,13 +17,6 @@ const chatPanel = (page: Page) => page.getByRole('complementary', { name: 'Chat'
 const transcript = (page: Page) => chatPanel(page).getByRole('list');
 const composer = (page: Page) => page.getByRole('textbox', { name: 'Message' });
 const jumpToLatest = (page: Page) => page.getByRole('button', { name: 'New messages' });
-
-async function joinAs(page: Page, code: string, name: string, hash = ''): Promise<void> {
-  await page.goto(`/room/${code}${hash}`);
-  await page.getByLabel('Your name').fill(name);
-  await page.getByRole('button', { name: 'Join now' }).click();
-  await expect(page.getByRole('button', { name: 'Leave' })).toBeVisible({ timeout: 20_000 });
-}
 
 test('the share control is not pressable before the room is connected', async ({
   page,
@@ -62,7 +56,7 @@ test('the share control is not pressable before the room is connected', async ({
     });
   });
 
-  await joinAs(page, code, 'Ada Lovelace');
+  await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
 
   // The control bar renders as soon as the room tree mounts, well before the
   // handshake finishes — which is exactly the bug: pressing share here used to
@@ -86,8 +80,8 @@ test('a message arriving while you read back is not silent', async ({ page, brow
   const guest = await second.newPage();
 
   try {
-    await joinAs(page, code, 'Ada Lovelace', `#k=${KEY}`);
-    await joinAs(guest, code, 'Grace Hopper', `#k=${KEY}`);
+    await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${KEY}` });
+    await joinAs(guest, code, 'Grace Hopper', { hash: `#k=${KEY}` });
 
     await page.getByRole('button', { name: /show chat/i }).click();
     await guest.getByRole('button', { name: /show chat/i }).click();
@@ -128,8 +122,8 @@ test('scrolling back in a quiet conversation shows nothing', async ({ page, brow
   const guest = await second.newPage();
 
   try {
-    await joinAs(page, code, 'Ada Lovelace', `#k=${KEY}`);
-    await joinAs(guest, code, 'Grace Hopper', `#k=${KEY}`);
+    await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${KEY}` });
+    await joinAs(guest, code, 'Grace Hopper', { hash: `#k=${KEY}` });
 
     await page.getByRole('button', { name: /show chat/i }).click();
     await guest.getByRole('button', { name: /show chat/i }).click();

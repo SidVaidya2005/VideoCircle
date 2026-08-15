@@ -1,21 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { createMeeting, MOBILE } from './support/media';
-
-/**
- * Two participants, for real, against LiveKit Cloud.
- *
- * A call that works alone has not been tested — every claim in this file is about
- * what one person's browser shows about *another* person's, which a single context
- * cannot observe. Mocking the SFU would test the mock, which is the layer that
- * does not break.
- */
-async function joinAs(page: Page, code: string, name: string): Promise<void> {
-  await page.goto(`/room/${code}`);
-  await page.getByLabel('Your name').fill(name);
-  await page.getByRole('button', { name: 'Join now' }).click();
-  await expect(page.getByRole('button', { name: 'Leave' })).toBeVisible({ timeout: 20_000 });
-}
+import { joinAs } from './support/join';
 
 const tiles = (page: Page) => page.getByRole('listitem');
 
@@ -26,8 +12,8 @@ test('two people in one room see each other', async ({ page, browser, request })
   const guest = await second.newPage();
 
   try {
-    await joinAs(page, code, 'Ada Lovelace');
-    await joinAs(guest, code, 'Grace Hopper');
+    await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
+    await joinAs(guest, code, 'Grace Hopper', { until: 'mounted' });
 
     // Each sees two tiles: their own, pinned first, and the other's.
     await expect(tiles(page)).toHaveCount(2, { timeout: 20_000 });
@@ -57,8 +43,8 @@ test('a participant who leaves stops holding a tile', async ({ page, browser, re
   const guest = await second.newPage();
 
   try {
-    await joinAs(page, code, 'Ada Lovelace');
-    await joinAs(guest, code, 'Grace Hopper');
+    await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
+    await joinAs(guest, code, 'Grace Hopper', { until: 'mounted' });
     await expect(tiles(page)).toHaveCount(2, { timeout: 20_000 });
 
     // Two presses since F11: the first arms the control, the second disconnects.
@@ -105,7 +91,7 @@ test('a dropped connection reconnects without tearing down the call', async ({
   test.setTimeout(90_000);
 
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace');
+  await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
   await expect(page.getByText('Connected')).toBeVisible();
 
   await context.setOffline(true);
@@ -127,7 +113,7 @@ test('the call has no horizontal overflow at 360px', async ({ page, request }) =
   await page.setViewportSize(MOBILE);
   const code = await createMeeting(request);
 
-  await joinAs(page, code, 'Ada Lovelace');
+  await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
 
   const overflows = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,

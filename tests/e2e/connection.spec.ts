@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { createMeeting, stubDisplayMedia } from './support/media';
+import { joinAs } from './support/join';
 import { readReconnectEvidence, recordReconnectEvidence } from './support/reconnect';
 
 /**
@@ -33,13 +34,6 @@ test.afterEach(async ({ page }, testInfo) => {
   });
 });
 
-async function joinAs(page: Page, code: string, name: string): Promise<void> {
-  await page.goto(`/room/${code}`);
-  await page.getByLabel('Your name').fill(name);
-  await page.getByRole('button', { name: 'Join now' }).click();
-  await expect(page.getByRole('button', { name: 'Leave' })).toBeVisible({ timeout: 20_000 });
-}
-
 test('the reconnect banner appears while recovering and clears afterwards', async ({
   page,
   context,
@@ -48,7 +42,7 @@ test('the reconnect banner appears while recovering and clears afterwards', asyn
   test.setTimeout(90_000);
 
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace');
+  await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
   await expect(page.getByText('Connected')).toBeVisible();
 
   await context.setOffline(true);
@@ -86,8 +80,8 @@ test('a reconnect during a screen share is still visible', async ({
   const guest = await second.newPage();
 
   try {
-    await joinAs(page, code, 'Ada Lovelace');
-    await joinAs(guest, code, 'Grace Hopper');
+    await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
+    await joinAs(guest, code, 'Grace Hopper', { until: 'mounted' });
 
     await page.getByRole('button', { name: 'Share your screen' }).click();
     await expect(page.getByText('Sharing your screen')).toBeVisible({ timeout: 20_000 });
@@ -120,7 +114,7 @@ test('a call that cannot recover ends in a notice, not silently at Home', async 
   test.setTimeout(180_000);
 
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace');
+  await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
   await expect(page.getByText('Connected')).toBeVisible();
 
   await context.setOffline(true);
@@ -150,7 +144,7 @@ test('a muted microphone is still muted after a reconnect', async ({ page, conte
   await recordReconnectEvidence(page);
 
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace');
+  await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
   await expect(page.getByText('Connected')).toBeVisible();
 
   // aria-pressed rather than the accessible name: the control is a toggle and

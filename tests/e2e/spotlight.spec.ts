@@ -1,17 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { createMeeting, MIN_HIT_AREA, MOBILE, stubDisplayMedia } from './support/media';
+import { joinAs } from './support/join';
 
 const tiles = (page: Page) => page.getByRole('listitem');
-
-async function joinAs(page: Page, code: string, name: string): Promise<void> {
-  await page.goto(`/room/${code}`);
-  await page.getByLabel('Your name').fill(name);
-  await page.getByRole('button', { name: 'Join now' }).click();
-  // Connected, not merely mounted — a share requested mid-handshake publishes
-  // into a room that is not there yet.
-  await expect(page.getByText('Connected')).toBeVisible({ timeout: 20_000 });
-}
 
 /**
  * Spotlight renders a list named for the focused participant; the grid renders one

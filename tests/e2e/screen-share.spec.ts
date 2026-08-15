@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { joinAs } from './support/join';
+
 import {
   blockDisplayMedia,
   createMeeting,
@@ -11,16 +13,6 @@ import {
 
 const shareControl = (page: Page) =>
   page.getByRole('button', { name: /^(share your screen|stop sharing your screen)$/i });
-
-async function joinAs(page: Page, code: string, name: string): Promise<void> {
-  await page.goto(`/room/${code}`);
-  await page.getByLabel('Your name').fill(name);
-  await page.getByRole('button', { name: 'Join now' }).click();
-  // Connected, not merely mounted. The control bar renders as soon as the tree
-  // does, so waiting on Leave would let a share be requested mid-handshake, which
-  // publishes into a room that is not there yet and is immediately unpublished.
-  await expect(page.getByText('Connected')).toBeVisible({ timeout: 20_000 });
-}
 
 test('a browser that cannot share has no share control anywhere', async ({ page, request }) => {
   await blockDisplayMedia(page);

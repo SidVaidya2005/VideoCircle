@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { createMeeting } from './support/media';
+import { joinAs } from './support/join';
 import { createAccount, deleteAccount, signIn } from './support/session';
 import { expectSweepClean, VIEWPORTS } from './support/viewport';
 import { serviceClient } from './support/webhook';
@@ -31,13 +32,6 @@ const CONTROLS_INLINE_FROM = 640;
 const PANEL_INLINE_FROM = 1024;
 
 type PanelName = 'participants' | 'chat';
-
-async function joinAs(page: Page, code: string, name: string): Promise<void> {
-  await page.goto(`/room/${code}`);
-  await page.getByLabel('Your name').fill(name);
-  await page.getByRole('button', { name: 'Join now' }).click();
-  await expect(page.getByRole('button', { name: 'Leave' })).toBeVisible({ timeout: 20_000 });
-}
 
 /** The control's accessible name states what pressing it will do, so it flips when open. */
 function panelControl(panel: PanelName, open: boolean): RegExp {
@@ -98,7 +92,7 @@ test('the call and both panels hold at every width', async ({ page, request }) =
   test.setTimeout(180_000);
 
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace');
+  await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
   await expect(page.getByText('Connected')).toBeVisible({ timeout: 20_000 });
 
   for (const viewport of VIEWPORTS) {

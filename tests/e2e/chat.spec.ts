@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { createMeeting, MIN_HIT_AREA, MOBILE } from './support/media';
+import { joinAs } from './support/join';
 
 declare global {
   interface Window {
@@ -27,13 +28,6 @@ const chatControlNamed = (page: Page, name: RegExp) => page.getByRole('button', 
 
 function scrollTopOf(page: Page): Promise<number> {
   return transcript(page).evaluate((node) => node.scrollTop);
-}
-
-async function joinAs(page: Page, code: string, name: string, hash = ''): Promise<void> {
-  await page.goto(`/room/${code}${hash}`);
-  await page.getByLabel('Your name').fill(name);
-  await page.getByRole('button', { name: 'Join now' }).click();
-  await expect(page.getByText('Connected')).toBeVisible({ timeout: 20_000 });
 }
 
 /** Types and sends into an already-open panel. Separate from opening it, because the
@@ -96,8 +90,8 @@ test('a message reaches the other participant', async ({ page, browser, request 
   const guest = await second.newPage();
 
   try {
-    await joinAs(page, code, 'Ada Lovelace', `#k=${KEY}`);
-    await joinAs(guest, code, 'Grace Hopper', `#k=${KEY}`);
+    await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${KEY}` });
+    await joinAs(guest, code, 'Grace Hopper', { hash: `#k=${KEY}` });
     await expect(page.getByRole('listitem')).toHaveCount(2, { timeout: 20_000 });
 
     await sendMessage(page, 'the analytical engine weaves patterns');
@@ -125,8 +119,8 @@ test('nothing readable leaves the browser', async ({ page, browser, request }) =
   await recordDataChannelSends(page);
 
   try {
-    await joinAs(page, code, 'Ada Lovelace', `#k=${KEY}`);
-    await joinAs(guest, code, 'Grace Hopper', `#k=${KEY}`);
+    await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${KEY}` });
+    await joinAs(guest, code, 'Grace Hopper', { hash: `#k=${KEY}` });
     await expect(page.getByRole('listitem')).toHaveCount(2, { timeout: 20_000 });
 
     await sendMessage(page, 'zebracrossing');
@@ -162,10 +156,10 @@ test('a message under a different key reads as unreadable, not as a crash', asyn
   guest.on('pageerror', (error) => errors.push(error.message));
 
   try {
-    await joinAs(page, code, 'Ada Lovelace', `#k=${KEY}`);
+    await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${KEY}` });
     // Same room, different key: what a forwarded link from another meeting, or a
     // mangled fragment, produces.
-    await joinAs(guest, code, 'Grace Hopper', `#k=${OTHER_KEY}`);
+    await joinAs(guest, code, 'Grace Hopper', { hash: `#k=${OTHER_KEY}` });
     await expect(page.getByRole('listitem')).toHaveCount(2, { timeout: 20_000 });
 
     await sendMessage(page, 'this should not be readable');
@@ -193,7 +187,7 @@ test('a link with no key shows the explanation, not a wall of placeholders', asy
   const guest = await second.newPage();
 
   try {
-    await joinAs(page, code, 'Ada Lovelace', `#k=${KEY}`);
+    await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${KEY}` });
     await joinAs(guest, code, 'Grace Hopper');
     await expect(page.getByRole('listitem')).toHaveCount(2, { timeout: 20_000 });
 
@@ -214,7 +208,7 @@ test('Enter sends and Shift+Enter does not', async ({ page, request }) => {
   test.setTimeout(90_000);
 
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace', `#k=${KEY}`);
+  await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${KEY}` });
 
   await chatControl(page).click();
 
@@ -242,8 +236,8 @@ test('a typed newline survives the round trip', async ({ page, browser, request 
   const guest = await second.newPage();
 
   try {
-    await joinAs(page, code, 'Ada Lovelace', `#k=${KEY}`);
-    await joinAs(guest, code, 'Grace Hopper', `#k=${KEY}`);
+    await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${KEY}` });
+    await joinAs(guest, code, 'Grace Hopper', { hash: `#k=${KEY}` });
     await expect(page.getByRole('listitem')).toHaveCount(2, { timeout: 20_000 });
 
     await chatControl(page).click();
@@ -277,8 +271,8 @@ test('the badge counts what landed while chat was shut, and clears on open', asy
   const guest = await second.newPage();
 
   try {
-    await joinAs(page, code, 'Ada Lovelace', `#k=${KEY}`);
-    await joinAs(guest, code, 'Grace Hopper', `#k=${KEY}`);
+    await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${KEY}` });
+    await joinAs(guest, code, 'Grace Hopper', { hash: `#k=${KEY}` });
     await expect(page.getByRole('listitem')).toHaveCount(2, { timeout: 20_000 });
 
     await chatControl(guest).click();
@@ -316,7 +310,7 @@ test('a new message moves the view only when you are already at the bottom', asy
   test.setTimeout(120_000);
 
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace', `#k=${KEY}`);
+  await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${KEY}` });
 
   await chatControl(page).click();
   for (let index = 0; index < 15; index += 1) {
@@ -347,7 +341,7 @@ test('the sheet form carries the whole panel on a phone', async ({ page, request
 
   await page.setViewportSize(MOBILE);
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace', `#k=${KEY}`);
+  await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${KEY}` });
 
   // Below sm: every secondary control lives in MORE.
   await page.getByRole('button', { name: 'More options' }).click();
@@ -391,8 +385,8 @@ test('switching to another panel still marks chat read', async ({ page, browser,
   const guest = await second.newPage();
 
   try {
-    await joinAs(page, code, 'Ada Lovelace', `#k=${KEY}`);
-    await joinAs(guest, code, 'Grace Hopper', `#k=${KEY}`);
+    await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${KEY}` });
+    await joinAs(guest, code, 'Grace Hopper', { hash: `#k=${KEY}` });
     await expect(page.getByRole('listitem')).toHaveCount(2, { timeout: 20_000 });
 
     await chatControl(page).click();

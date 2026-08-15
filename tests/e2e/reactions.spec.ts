@@ -1,16 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { createMeeting, MIN_HIT_AREA, MOBILE } from './support/media';
+import { joinAs } from './support/join';
 
 const reactionsControl = (page: Page) => page.getByRole('button', { name: /^Reactions/ });
 const handToggle = (page: Page) => page.getByRole('button', { name: /^(Raise|Lower) hand$/ });
-
-async function joinAs(page: Page, code: string, name: string): Promise<void> {
-  await page.goto(`/room/${code}`);
-  await page.getByLabel('Your name').fill(name);
-  await page.getByRole('button', { name: 'Join now' }).click();
-  await expect(page.getByText('Connected')).toBeVisible({ timeout: 20_000 });
-}
 
 test('a reaction lands on the sender’s tile and expires on its own', async ({
   page,

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { createMeeting, MOBILE } from './support/media';
+import { joinAs } from './support/join';
 
 test.use({ permissions: ['camera', 'microphone'] });
 
@@ -17,16 +18,9 @@ const chatControl = (page: Page) => page.getByRole('button', { name: /^show chat
 const unavailable = (page: Page) => page.getByText('does not carry', { exact: false });
 const ready = (page: Page) => page.getByText('No messages yet', { exact: false });
 
-async function joinAs(page: Page, code: string, name: string, hash = ''): Promise<void> {
-  await page.goto(`/room/${code}${hash}`);
-  await page.getByLabel('Your name').fill(name);
-  await page.getByRole('button', { name: 'Join now' }).click();
-  await expect(page.getByText('Connected')).toBeVisible({ timeout: 20_000 });
-}
-
 test('a link carrying the key opens chat ready to use', async ({ page, request }) => {
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace', `#k=${CHAT_KEY}`);
+  await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${CHAT_KEY}` });
 
   await chatControl(page).click();
 
@@ -50,7 +44,7 @@ test('a link with no fragment explains itself instead of failing', async ({ page
 test('a malformed key lands in the same state as no key at all', async ({ page, request }) => {
   const code = await createMeeting(request);
   // Valid base64url characters, wrong length for AES-GCM, so importKey rejects.
-  await joinAs(page, code, 'Ada Lovelace', '#k=tooshort');
+  await joinAs(page, code, 'Ada Lovelace', { hash: '#k=tooshort' });
 
   await chatControl(page).click();
 
@@ -70,7 +64,7 @@ test('opening chat never puts the key on the network', async ({ page, request })
     if (body?.includes(CHAT_KEY)) leaked.push(`body ${sent.url()}`);
   });
 
-  await joinAs(page, code, 'Ada Lovelace', `#k=${CHAT_KEY}`);
+  await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${CHAT_KEY}` });
   await chatControl(page).click();
   await expect(ready(page)).toBeVisible();
 
@@ -81,7 +75,7 @@ test('opening chat never puts the key on the network', async ({ page, request })
 
 test('chat and participants never occupy the column together', async ({ page, request }) => {
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace', `#k=${CHAT_KEY}`);
+  await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${CHAT_KEY}` });
 
   await chatControl(page).click();
   await expect(ready(page)).toBeVisible();

@@ -1,18 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { createMeeting, MIN_HIT_AREA, MOBILE } from './support/media';
+import { joinAs } from './support/join';
 
 const participantsControl = (page: Page) =>
   page.getByRole('button', { name: /^(show|hide) participants/i });
 
 const panelRows = (page: Page) => page.getByRole('listitem').filter({ hasText: /mic (on|off)/i });
-
-async function joinAs(page: Page, code: string, name: string): Promise<void> {
-  await page.goto(`/room/${code}`);
-  await page.getByLabel('Your name').fill(name);
-  await page.getByRole('button', { name: 'Join now' }).click();
-  await expect(page.getByText('Connected')).toBeVisible({ timeout: 20_000 });
-}
 
 test('the panel lists everyone and marks your own row', async ({ page, browser, request }) => {
   test.setTimeout(90_000);

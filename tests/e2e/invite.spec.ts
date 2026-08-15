@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { createMeeting, MIN_HIT_AREA, MOBILE } from './support/media';
+import { joinAs } from './support/join';
 
 // Chromium refuses navigator.clipboard.writeText without this, which reads as a
 // broken copy button rather than a missing grant. The project's own hook treats a
@@ -14,16 +15,9 @@ const CHAT_KEY = 'aB3-_xYZ09kQwErTyUiOpAsDfGhJkLzXcVbNm12';
 const inviteControl = (page: Page) => page.getByRole('button', { name: 'Invite others' });
 const linkField = (page: Page) => page.getByRole('textbox', { name: 'Invite link' });
 
-async function joinAs(page: Page, code: string, name: string, hash = ''): Promise<void> {
-  await page.goto(`/room/${code}${hash}`);
-  await page.getByLabel('Your name').fill(name);
-  await page.getByRole('button', { name: 'Join now' }).click();
-  await expect(page.getByText('Connected')).toBeVisible({ timeout: 20_000 });
-}
-
 test('the dialog shows the live link, fragment and all', async ({ page, request }) => {
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace', `#k=${CHAT_KEY}`);
+  await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${CHAT_KEY}` });
 
   await inviteControl(page).click();
 
@@ -49,7 +43,7 @@ test('a link with no key says so instead of warning about one', async ({ page, r
 
 test('copying confirms', async ({ page, request }) => {
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace', `#k=${CHAT_KEY}`);
+  await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${CHAT_KEY}` });
 
   await inviteControl(page).click();
   await page.getByRole('button', { name: 'Copy invite link' }).click();
@@ -68,7 +62,7 @@ test('a refused clipboard leaves the link selected instead of stranded', async (
   });
 
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace', `#k=${CHAT_KEY}`);
+  await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${CHAT_KEY}` });
 
   await inviteControl(page).click();
   await page.getByRole('button', { name: 'Copy invite link' }).click();
@@ -91,7 +85,7 @@ test('the chat key never reaches the network', async ({ page, request }) => {
     if (body?.includes(CHAT_KEY)) leaked.push(`body ${sent.url()}`);
   });
 
-  await joinAs(page, code, 'Ada Lovelace', `#k=${CHAT_KEY}`);
+  await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${CHAT_KEY}` });
   await inviteControl(page).click();
   await page.getByRole('button', { name: 'Copy invite link' }).click();
   await expect(page.getByRole('button', { name: 'Link copied' })).toBeVisible();
@@ -104,7 +98,7 @@ test('the chat key never reaches the network', async ({ page, request }) => {
 test('the invite dialog is reachable and sized on a phone', async ({ page, request }) => {
   await page.setViewportSize(MOBILE);
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace', `#k=${CHAT_KEY}`);
+  await joinAs(page, code, 'Ada Lovelace', { hash: `#k=${CHAT_KEY}` });
 
   // Below sm: every secondary control lives in MORE.
   await page.getByRole('button', { name: 'More options' }).click();

@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { joinAs } from './support/join';
+
 import {
   createMeeting,
   liveTrackCounts,
@@ -14,17 +16,10 @@ const leave = (page: Page) => page.getByRole('button', { name: 'Leave the meetin
 const confirmLeave = (page: Page) =>
   page.getByRole('button', { name: 'Confirm leaving the meeting' });
 
-async function joinAs(page: Page, code: string, name: string): Promise<void> {
-  await page.goto(`/room/${code}`);
-  await page.getByLabel('Your name').fill(name);
-  await page.getByRole('button', { name: 'Join now' }).click();
-  await expect(leave(page)).toBeVisible({ timeout: 20_000 });
-}
-
 test('the camera control releases the device, not just the picture', async ({ page, request }) => {
   await trackMediaAcquisition(page);
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace');
+  await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
 
   await expect.poll(async () => (await liveTrackCounts(page)).video).toBe(1);
   await expect(camera(page)).toHaveAttribute('aria-pressed', 'false');
@@ -51,8 +46,8 @@ test('a camera turned off in the call reaches the other participant', async ({
   const guest = await second.newPage();
 
   try {
-    await joinAs(page, code, 'Ada Lovelace');
-    await joinAs(guest, code, 'Grace Hopper');
+    await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
+    await joinAs(guest, code, 'Grace Hopper', { until: 'mounted' });
     await expect(guest.getByRole('listitem')).toHaveCount(2, { timeout: 20_000 });
 
     // Ada's tile on Grace's screen is the second one — Grace is pinned first.
@@ -71,7 +66,7 @@ test('a camera turned off in the call reaches the other participant', async ({
 
 test('d and e toggle the microphone and camera', async ({ page, request }) => {
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace');
+  await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
 
   await expect(mic(page)).toHaveAttribute('aria-pressed', 'false');
   await page.keyboard.press('d');
@@ -85,7 +80,7 @@ test('d and e toggle the microphone and camera', async ({ page, request }) => {
 
 test('a modified keystroke is not a shortcut', async ({ page, request }) => {
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace');
+  await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
 
   // Cmd-D must stay a bookmark. The typing guard has no composer to prove it
   // against until F19, so it is unit-tested instead.
@@ -96,7 +91,7 @@ test('a modified keystroke is not a shortcut', async ({ page, request }) => {
 
 test('Leave takes two presses', async ({ page, request }) => {
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace');
+  await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
   const roomUrl = page.url();
 
   await leave(page).click();
@@ -111,7 +106,7 @@ test('Leave takes two presses', async ({ page, request }) => {
 
 test('pressing another control disarms Leave', async ({ page, request }) => {
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace');
+  await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
 
   await leave(page).click();
   await expect(confirmLeave(page)).toBeVisible();
@@ -125,7 +120,7 @@ test('pressing another control disarms Leave', async ({ page, request }) => {
 
 test('every control on the bar acts', async ({ page, request }) => {
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace');
+  await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
 
   // No stubs remain: screen share stopped being one at F12, participants at F14,
   // reactions and raise hand at F15, chat at F17. A disabled control in a call is
@@ -152,7 +147,7 @@ test('every control on the bar acts', async ({ page, request }) => {
 test('the phone bar keeps mic, camera, MORE and Leave', async ({ page, request }) => {
   await page.setViewportSize(MOBILE);
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace');
+  await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
 
   await expect(mic(page)).toBeVisible();
   await expect(camera(page)).toBeVisible();
@@ -168,7 +163,7 @@ test('the phone bar keeps mic, camera, MORE and Leave', async ({ page, request }
 test('no control shrinks below the hit-area floor at 360px', async ({ page, request }) => {
   await page.setViewportSize(MOBILE);
   const code = await createMeeting(request);
-  await joinAs(page, code, 'Ada Lovelace');
+  await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
 
   // Polled, not measured once: animate-tile-in runs a 700ms scale(0.96), so every
   // control inside a freshly mounted tile measures fractionally small while it
