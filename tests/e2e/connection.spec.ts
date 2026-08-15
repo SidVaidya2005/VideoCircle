@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { createMeeting, stubDisplayMedia } from './support/media';
+import { readReconnectEvidence, recordReconnectEvidence } from './support/reconnect';
 
 /**
  * What a call does while it is degrading, recovering, or over.
@@ -13,6 +14,24 @@ import { createMeeting, stubDisplayMedia } from './support/media';
 
 const mic = (page: Page) => page.getByRole('button', { name: /^(mute|unmute) microphone$/i });
 const banner = (page: Page) => page.getByText('Reconnecting');
+
+/**
+ * Attaches the recording to whichever test installed one, however that test ended.
+ *
+ * In an `afterEach` rather than a `finally` around the assertion, because the
+ * first instrumented run died at the *reconnect banner* — well before the mic
+ * assertion — and took its evidence with it. A failure anywhere in the test is
+ * exactly when the recording is worth having.
+ */
+test.afterEach(async ({ page }, testInfo) => {
+  const evidence = await readReconnectEvidence(page).catch(() => null);
+  if (!evidence) return; // This test did not install the recorder.
+
+  await testInfo.attach('reconnect-evidence', {
+    body: JSON.stringify(evidence, null, 2),
+    contentType: 'application/json',
+  });
+});
 
 async function joinAs(page: Page, code: string, name: string): Promise<void> {
   await page.goto(`/room/${code}`);
@@ -124,6 +143,12 @@ test('a call that cannot recover ends in a notice, not silently at Home', async 
 test('a muted microphone is still muted after a reconnect', async ({ page, context, request }) => {
   test.setTimeout(90_000);
 
+  // This test fails about once in eighteen runs and the assertion alone cannot say
+  // why: a resume and a full restart are different code paths, and only the
+  // restart republishes tracks. The recording below is what tells them apart, and
+  // it is attached on every run so the rare red one arrives already diagnosed.
+  await recordReconnectEvidence(page);
+
   const code = await createMeeting(request);
   await joinAs(page, code, 'Ada Lovelace');
   await expect(page.getByText('Connected')).toBeVisible();
@@ -143,5 +168,6 @@ test('a muted microphone is still muted after a reconnect', async ({ page, conte
   // The build plan assumed this needs restoring code. Whether it does is exactly
   // what this asserts: coming back unmuted from a network blip you did not choose
   // means saying something to a room you thought could not hear you.
+  //
   await expect(mic(page)).toHaveAttribute('aria-pressed', 'true');
 });
