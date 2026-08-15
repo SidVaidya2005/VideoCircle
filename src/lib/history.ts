@@ -61,8 +61,10 @@ export interface HistoryEntry {
   joinable: boolean;
 }
 
-/** Beyond this, the rest collapse into a count. Keeps every row one height. */
-export const MAX_VISIBLE_PARTICIPANT_NAMES = 3;
+/** Beyond this, the rest collapse into a count. Keeps every row one height.
+ *  Not exported: `splitParticipantNames` is the whole of this rule's surface, and
+ *  a caller reading the cap without going through it would be re-implementing it. */
+const MAX_VISIBLE_PARTICIPANT_NAMES = 3;
 
 export function splitParticipantNames(names: readonly string[]): {
   shown: string[];
