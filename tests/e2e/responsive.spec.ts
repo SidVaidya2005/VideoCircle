@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { createMeeting } from './support/media';
-import { joinAs } from './support/join';
+import { CONNECT_TIMEOUT_MS, connectedStatus, joinAs } from './support/join';
 import { createAccount, deleteAccount, signIn } from './support/session';
 import { expectSweepClean, VIEWPORTS } from './support/viewport';
 import { serviceClient } from './support/webhook';
@@ -93,7 +93,7 @@ test('the call and both panels hold at every width', async ({ page, request }) =
 
   const code = await createMeeting(request);
   await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
-  await expect(page.getByText('Connected')).toBeVisible({ timeout: 20_000 });
+  await expect(connectedStatus(page)).toBeVisible({ timeout: CONNECT_TIMEOUT_MS });
 
   for (const viewport of VIEWPORTS) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });

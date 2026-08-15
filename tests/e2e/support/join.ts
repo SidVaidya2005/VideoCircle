@@ -8,6 +8,44 @@ import { expect, type Page } from '@playwright/test';
  * fragment, and how far to wait.
  */
 
+/**
+ * The status strip reading exactly `Connected`.
+ *
+ * `exact` is the whole point, and leaving it off was a silent defect for the life
+ * of the suite. `getByText('Connected')` defaults to a case-insensitive
+ * *substring* match, and the strip's first state is `Disconnected` — which
+ * contains it. So every wait for a connected room resolved against the room
+ * before it had connected at all, and returned instantly.
+ *
+ * Measured, not reasoned: it let `reactions.spec.ts` fire `setAttributes` 2.7s
+ * before the signal was up, where livekit-client refuses the request outright
+ * (`cannot send signal request before connected`) and the raised hand is never
+ * recorded — 7 failures in 40 at one worker, 24 in 40 at four. It is also why the
+ * reconnect banner sometimes never appeared: `setOffline` was hitting a room that
+ * had nothing to disconnect from.
+ *
+ * Every spec waiting on a connected room uses this rather than its own locator,
+ * so the mistake has one place it could come back.
+ */
+export const connectedStatus = (page: Page) => page.getByText('Connected', { exact: true });
+
+/**
+ * How long to allow a room to reach `Connected`.
+ *
+ * This was 20s while the gate was vacuous, which means it was never a measurement
+ * of anything. With a real gate it is: Playwright defaults to 4 workers on an
+ * 8-core machine and the call specs open two contexts each, so the suite asks one
+ * laptop for eight concurrent WebRTC sessions with synthetic video. At one worker
+ * a connect landed inside 20s in 38 of 40 runs; at four, a quarter of them did
+ * not.
+ *
+ * So this budget is about the suite's own parallelism, and it is deliberately not
+ * a statement about the product — `project-overview.md`'s criterion is under 10s
+ * of application time for one person on a warm deployed instance, which this
+ * neither measures nor relaxes.
+ */
+export const CONNECT_TIMEOUT_MS = 45_000;
+
 export type JoinUntil = 'connected' | 'mounted';
 
 export interface JoinOptions {
@@ -40,9 +78,7 @@ export async function joinAs(
   await page.getByRole('button', { name: 'Join now' }).click();
 
   const target =
-    until === 'connected'
-      ? page.getByText('Connected')
-      : page.getByRole('button', { name: 'Leave' });
+    until === 'connected' ? connectedStatus(page) : page.getByRole('button', { name: 'Leave' });
 
-  await expect(target).toBeVisible({ timeout: 20_000 });
+  await expect(target).toBeVisible({ timeout: CONNECT_TIMEOUT_MS });
 }

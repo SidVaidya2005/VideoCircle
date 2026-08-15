@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { joinAs } from './support/join';
+import { connectedStatus, joinAs } from './support/join';
 
 import {
   blockDisplayMedia,
@@ -84,7 +84,7 @@ test('a share reaches the other participant, promoted to the first tile', async 
     await page.getByRole('button', { name: 'Stop', exact: true }).click();
 
     await expect(page.getByText('Sharing your screen')).toHaveCount(0);
-    await expect(page.getByText('Connected')).toBeVisible();
+    await expect(connectedStatus(page)).toBeVisible();
     await expect(guest.getByRole('listitem')).toHaveCount(2, { timeout: 20_000 });
   } finally {
     await second.close();

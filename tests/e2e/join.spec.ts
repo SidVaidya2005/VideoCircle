@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 
+import { CONNECT_TIMEOUT_MS, connectedStatus } from './support/join';
 import {
   createMeeting,
   delayMicrophoneAcquisition,
@@ -19,7 +20,11 @@ test('pressing Join connects to the room', async ({ page, request }) => {
   await page.getByLabel('Your name').fill('Joiner');
   await page.getByRole('button', { name: 'Join now' }).click();
 
-  await expect(page.getByText('Connected', { exact: false })).toBeVisible({ timeout: 20_000 });
+  // `exact` matters more here than anywhere: this is the test whose whole claim is
+  // that pressing Join connects, and it was written `{ exact: false }` — which
+  // matches the strip's own `Disconnected`, so it passed without the room ever
+  // connecting. Corrected at F26; see `connectedStatus`.
+  await expect(connectedStatus(page)).toBeVisible({ timeout: CONNECT_TIMEOUT_MS });
   await expect(page.getByRole('button', { name: 'Leave' })).toBeVisible();
 });
 

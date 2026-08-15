@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { createMeeting, stubDisplayMedia } from './support/media';
-import { joinAs } from './support/join';
+import { CONNECT_TIMEOUT_MS, connectedStatus, joinAs } from './support/join';
 import { readReconnectEvidence, recordReconnectEvidence } from './support/reconnect';
 
 /**
@@ -43,7 +43,7 @@ test('the reconnect banner appears while recovering and clears afterwards', asyn
 
   const code = await createMeeting(request);
   await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
-  await expect(page.getByText('Connected')).toBeVisible();
+  await expect(connectedStatus(page)).toBeVisible({ timeout: CONNECT_TIMEOUT_MS });
 
   await context.setOffline(true);
   await expect(banner(page)).toBeVisible({ timeout: 30_000 });
@@ -57,7 +57,7 @@ test('the reconnect banner appears while recovering and clears afterwards', asyn
   await expect(page.getByRole('button', { name: 'Leave' })).toBeEnabled();
 
   await context.setOffline(false);
-  await expect(page.getByText('Connected')).toBeVisible({ timeout: 30_000 });
+  await expect(connectedStatus(page)).toBeVisible({ timeout: 30_000 });
   await expect(banner(page)).toBeHidden();
 });
 
@@ -115,7 +115,7 @@ test('a call that cannot recover ends in a notice, not silently at Home', async 
 
   const code = await createMeeting(request);
   await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
-  await expect(page.getByText('Connected')).toBeVisible();
+  await expect(connectedStatus(page)).toBeVisible({ timeout: CONNECT_TIMEOUT_MS });
 
   await context.setOffline(true);
 
@@ -145,7 +145,7 @@ test('a muted microphone is still muted after a reconnect', async ({ page, conte
 
   const code = await createMeeting(request);
   await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
-  await expect(page.getByText('Connected')).toBeVisible();
+  await expect(connectedStatus(page)).toBeVisible({ timeout: CONNECT_TIMEOUT_MS });
 
   // aria-pressed rather than the accessible name: the control is a toggle and
   // `aria-pressed` is what it exposes as its state, so this asserts the thing a
@@ -157,7 +157,7 @@ test('a muted microphone is still muted after a reconnect', async ({ page, conte
   await expect(banner(page)).toBeVisible({ timeout: 30_000 });
 
   await context.setOffline(false);
-  await expect(page.getByText('Connected')).toBeVisible({ timeout: 30_000 });
+  await expect(connectedStatus(page)).toBeVisible({ timeout: 30_000 });
 
   // The build plan assumed this needs restoring code. Whether it does is exactly
   // what this asserts: coming back unmuted from a network blip you did not choose

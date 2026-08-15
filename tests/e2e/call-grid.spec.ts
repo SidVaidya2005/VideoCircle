@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { createMeeting, MOBILE } from './support/media';
-import { joinAs } from './support/join';
+import { CONNECT_TIMEOUT_MS, connectedStatus, joinAs } from './support/join';
 
 const tiles = (page: Page) => page.getByRole('listitem');
 
@@ -92,7 +92,7 @@ test('a dropped connection reconnects without tearing down the call', async ({
 
   const code = await createMeeting(request);
   await joinAs(page, code, 'Ada Lovelace', { until: 'mounted' });
-  await expect(page.getByText('Connected')).toBeVisible();
+  await expect(connectedStatus(page)).toBeVisible({ timeout: CONNECT_TIMEOUT_MS });
 
   await context.setOffline(true);
   await expect(page.getByText('Reconnecting')).toBeVisible({ timeout: 30_000 });
@@ -105,7 +105,7 @@ test('a dropped connection reconnects without tearing down the call', async ({
   await expect(page.getByRole('button', { name: 'Leave' })).toBeEnabled();
 
   await context.setOffline(false);
-  await expect(page.getByText('Connected')).toBeVisible({ timeout: 30_000 });
+  await expect(connectedStatus(page)).toBeVisible({ timeout: 30_000 });
   await expect(tiles(page)).toHaveCount(1);
 });
 
