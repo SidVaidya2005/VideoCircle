@@ -278,6 +278,32 @@ test('a well-formed code naming no meeting is accepted and writes nothing', asyn
   expect(data).toHaveLength(0);
 });
 
+test('a join carrying no participant is accepted and writes nothing', async ({ request }) => {
+  // `participant` is a message field, so an event without one decodes to undefined
+  // rather than failing to parse. Reaching for `.identity` on it would throw into
+  // the 500 below and have LiveKit redeliver forever — a payload no retry improves.
+  const meeting = await openMeeting(request);
+
+  try {
+    const response = await postWebhook(request, {
+      ...participantJoinedPayload({
+        roomCode: meeting.code,
+        identity: guestIdentity(),
+        displayName: 'Ada',
+        at: at(meeting, 60),
+      }),
+      // `JSON.stringify` drops an undefined value, so the signed body carries no
+      // `participant` key at all — which is what LiveKit's proto would send.
+      participant: undefined,
+    });
+
+    expect(response.status()).toBe(200);
+    expect(await participationRows(meeting.db, meeting.meetingId)).toHaveLength(0);
+  } finally {
+    await deleteMeeting(meeting.db, meeting.meetingId);
+  }
+});
+
 test('an event we do not handle is accepted without a meeting lookup', async ({ request }) => {
   const response = await postWebhook(request, {
     ...roomFinishedPayload({ roomCode: UNKNOWN_CODE, at: looseEventTime() }),

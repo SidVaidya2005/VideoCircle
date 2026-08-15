@@ -1,3 +1,4 @@
+import type { WebhookEvent } from 'livekit-server-sdk';
 import type { NextRequest } from 'next/server';
 
 import { apiError, apiOk } from '@/lib/api';
@@ -22,6 +23,74 @@ function isHandledEvent(event: string): event is HandledEvent {
   return (HANDLED_EVENTS as readonly string[]).includes(event);
 }
 
+/** Named off the event rather than `@livekit/protocol`, which is a transitive
+ *  dependency and not one this project declares. */
+type WebhookParticipant = NonNullable<WebhookEvent['participant']>;
+
+/**
+ * The participant both join and leave match a row by.
+ *
+ * `identity` is the join↔leave correlation key, and it can go missing two ways:
+ * `participant` is a message field, so an absent one decodes to `undefined`,
+ * while `identity` is a scalar, so an absent one decodes to the empty string.
+ * One check covers both, and neither can be matched to a row. No redelivery
+ * supplies what the first delivery lacked, so this warns and drops rather than
+ * throwing through to the 500 that would have LiveKit retry it forever.
+ */
+function identifiedParticipant(
+  event: WebhookEvent,
+  eventName: HandledEvent,
+): WebhookParticipant | null {
+  const participant = event.participant;
+  if (!participant?.identity) {
+    console.warn('[api/livekit/webhook] event carried no identity', eventName);
+    return null;
+  }
+
+  return participant;
+}
+
+async function handleParticipantJoined(
+  event: WebhookEvent,
+  meetingId: string,
+  now: Date,
+): Promise<void> {
+  const participant = identifiedParticipant(event, 'participant_joined');
+  if (!participant) return;
+
+  const outcome = await recordParticipantJoined({
+    meetingId,
+    identity: participant.identity,
+    displayName: participant.name,
+    joinedAt: eventTimestampIso(participant.joinedAt, now),
+  });
+
+  if (outcome === 'duplicate') {
+    console.warn('[api/livekit/webhook] join already recorded', participant.identity);
+  }
+}
+
+async function handleParticipantLeft(
+  event: WebhookEvent,
+  meetingId: string,
+  now: Date,
+): Promise<void> {
+  const participant = identifiedParticipant(event, 'participant_left');
+  if (!participant) return;
+
+  // The leave time is the event's own `createdAt`, never the participant's
+  // `joinedAt`, which the payload also carries.
+  const outcome = await recordParticipantLeft({
+    meetingId,
+    identity: participant.identity,
+    leftAt: eventTimestampIso(event.createdAt, now),
+  });
+
+  if (outcome === 'no_open_row') {
+    console.warn('[api/livekit/webhook] no open row to close', participant.identity);
+  }
+}
+
 /**
  * Records who joined a meeting, who left, and when it ended.
  *
@@ -43,7 +112,7 @@ export async function POST(request: NextRequest) {
     return apiError('unauthorized', 'Missing signature.', 401);
   }
 
-  let event;
+  let event: WebhookEvent;
   try {
     event = await webhookReceiver.receive(rawBody, authorization);
   } catch (error) {
@@ -79,52 +148,21 @@ export async function POST(request: NextRequest) {
     const now = new Date();
 
     switch (eventName) {
-      case 'participant_joined': {
-        const participant = event.participant;
-        if (!participant?.identity) {
-          console.warn('[api/livekit/webhook] participant_joined carried no identity');
-          break;
-        }
-
-        const outcome = await recordParticipantJoined({
-          meetingId: meeting.id,
-          identity: participant.identity,
-          displayName: participant.name,
-          joinedAt: eventTimestampIso(participant.joinedAt, now),
-        });
-
-        if (outcome === 'duplicate') {
-          console.warn('[api/livekit/webhook] join already recorded', participant.identity);
-        }
+      case 'participant_joined':
+        await handleParticipantJoined(event, meeting.id, now);
         break;
-      }
 
-      case 'participant_left': {
-        const participant = event.participant;
-        if (!participant?.identity) {
-          console.warn('[api/livekit/webhook] participant_left carried no identity');
-          break;
-        }
-
-        const outcome = await recordParticipantLeft({
-          meetingId: meeting.id,
-          identity: participant.identity,
-          leftAt: eventTimestampIso(event.createdAt, now),
-        });
-
-        if (outcome === 'no_open_row') {
-          console.warn('[api/livekit/webhook] no open row to close', participant.identity);
-        }
+      case 'participant_left':
+        await handleParticipantLeft(event, meeting.id, now);
         break;
-      }
 
-      case 'room_finished': {
+      case 'room_finished':
+        // No guard of its own: the event names a room, not a participant.
         await closeMeeting({
           meetingId: meeting.id,
           endedAt: eventTimestampIso(event.createdAt, now),
         });
         break;
-      }
     }
 
     return apiOk({ received: true });
