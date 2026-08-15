@@ -16,6 +16,7 @@ import { TileMenu } from '@/components/room/tile-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { toInitials } from '@/lib/initials';
 import { connectionQualityLabel } from '@/lib/livekit/connection-quality';
+import { tileLabels } from '@/lib/room-tile';
 import { cn } from '@/lib/utils';
 
 /** How long a press has to hold before it counts as a pin. */
@@ -29,11 +30,6 @@ interface ParticipantTileProps {
   onTogglePin?: () => void;
 }
 
-/** Shown for a remote participant whose token carried no name. Never their identity,
- *  which is `guest:<uuid>` and is neither readable nor ours to display. */
-const UNNAMED = 'Guest';
-const LOCAL_LABEL = 'You';
-
 function ParticipantTileImpl({
   trackRef,
   size = 'grid',
@@ -44,6 +40,12 @@ function ParticipantTileImpl({
   const isLocal = participant.isLocal;
   const isScreenShare = trackRef.source === Track.Source.ScreenShare;
 
+  // Muting, speaking, a raised hand and a degraded connection all describe the
+  // *person*, and a person sharing their screen already has a camera tile of
+  // their own to carry them. Stated once here rather than argued at each of the
+  // four sites that honour it.
+  const showsPersonSignals = !isScreenShare;
+
   const micPublication = participant.getTrackPublication(Track.Source.Microphone);
   // The hook reads an absent publication as unmuted, which is backwards for a
   // label: a participant publishing no microphone at all cannot be heard. Absent
@@ -52,30 +54,23 @@ function ParticipantTileImpl({
     useIsMuted({ participant, source: Track.Source.Microphone, publication: micPublication }) ||
     micPublication === undefined;
 
-  // Suppressed on a share: the ring and the mute dot say something about the
-  // person, and the person already has a camera tile of their own to say it on.
-  const isSpeaking = useIsSpeaking(participant) && !isScreenShare;
+  // The white ring on the tile, which is the kit's engaged state.
+  const isSpeaking = useIsSpeaking(participant) && showsPersonSignals;
 
   // Both read this participant only, never the room — the same rule the mute and
-  // speaking state follow. A share tile carries neither: they describe the person,
-  // and the person has a camera tile of their own to carry them.
+  // speaking state follow.
   const reaction = useParticipantReaction(participant.identity);
-  const handRaised = useHandRaised(participant) && !isScreenShare;
+  const handRaised = useHandRaised(participant) && showsPersonSignals;
 
   // This participant's connection, not the room's — the same rule every other
   // hook on this tile follows, and the reason a twelve-tile grid does not
-  // re-render twelve times per quality report.
-  //
-  // Suppressed on a share for the same reason mute and speaking are: a connection
-  // belongs to a person, and that person already has a camera tile to say it on.
-  // Rendered only when degraded, and without colour — see `connection-quality.ts`
-  // for why the red invariant wins over a faster-reading dot.
+  // re-render twelve times per quality report. Rendered only when degraded, and
+  // without colour — see `connection-quality.ts` for why the red invariant wins
+  // over a faster-reading dot.
   const { quality } = useConnectionQualityIndicator({ participant });
-  const qualityLabel = isScreenShare ? null : connectionQualityLabel(quality);
+  const qualityLabel = showsPersonSignals ? connectionQualityLabel(quality) : null;
 
-  const name = participant.name?.trim() || (isLocal ? LOCAL_LABEL : UNNAMED);
-  const personLabel = isLocal ? LOCAL_LABEL : name;
-  const label = isScreenShare ? `${personLabel} — screen` : personLabel;
+  const { displayName, label } = tileLabels({ name: participant.name, isLocal, isScreenShare });
 
   // Read through the hook, never off `trackRef.publication.isMuted` directly.
   // LiveKit mutates the publication in place, so a component memoised on that
@@ -152,7 +147,7 @@ function ParticipantTileImpl({
               Hidden from assistive tech: the name sits directly below it. */}
           {isScreenShare ? null : (
             <span aria-hidden="true" className="text-muted text-2xl font-bold">
-              {toInitials(name)}
+              {toInitials(displayName)}
             </span>
           )}
         </div>
@@ -168,7 +163,7 @@ function ParticipantTileImpl({
       />
 
       <p className="absolute inset-x-2 bottom-2 flex items-center gap-1.5 text-xs tracking-wide uppercase">
-        {micMuted && !isScreenShare ? (
+        {micMuted && showsPersonSignals ? (
           <>
             {/* Red marks your own muted mic and nothing else. Twelve red badges on a
                 twelve-person grid would destroy the signal exactly when Leave needs it. */}

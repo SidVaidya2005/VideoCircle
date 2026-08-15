@@ -212,6 +212,8 @@ VideoCircle/
     │   ├── chat-time.ts               → pure elapsed → `just now` / `2m` / `3h` / `2d`
     │   ├── room-focus.ts              → pure focus resolution (pin, then share, then grid)
     │   │                                and the focused/filmstrip split
+    │   ├── room-tile.ts               → pure tile captions: the person's own name for
+    │   │                                the initials, `You` / `— screen` for the label
     │   ├── participants.ts            → pure roster ordering: you first, then join order
     │   ├── reactions.ts               → the fixed label set, the Zod-validated wire
     │   │                                payload, and the pure rate-limit decision
