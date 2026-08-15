@@ -108,6 +108,19 @@ have open is never reused by mistake.
 Playwright launches Chromium with fake media devices, so call flows run without a
 real camera.
 
+### Before every deploy
+
+Run all four and read the output — Render builds whatever is on `main`, and none
+of these run there:
+
+```bash
+npm run lint && npm run typecheck && npm run test && npm run test:e2e
+```
+
+`test:e2e` is the one that matters most and the one most often skipped: it is the
+only check that connects to LiveKit Cloud and Supabase for real, so it is the only
+one that can catch a broken call.
+
 ### First deploy to Render
 
 Order matters in one place: **every environment variable must be set before the

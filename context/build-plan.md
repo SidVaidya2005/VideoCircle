@@ -804,13 +804,27 @@ decision, which may well be "accept and document".
 
 ### 26 End-to-end test suite
 
+**The original bullets were satisfied incidentally, feature by feature**, and are
+recorded here as done rather than rebuilt: guest joins via link, lobby toggles
+carry into the call, two contexts see each other, chat round-trips between two
+contexts, and a link without `#k=` disables chat all have specs, and every
+two-participant test already uses separate browser contexts. F26 is therefore the
+suite-hardening pass the follow-ups have been assigning to it since F08.
+
 **Logic:**
 
-- Playwright specs: guest joins via link; lobby toggles carry into the call; two contexts see each other; chat round-trips between two contexts; a link without `#k=` disables chat
-- Two-participant tests use separate browser contexts
+- **`joinAs` has one home.** It is copy-pasted into **12** specs in **7** variants — the follow-up recording "eight, now identical" was wrong on both counts. The variants reduce to two axes: an optional `hash`, and whether to wait for `Connected` or merely for the control bar to mount. `until` defaults to `connected`, which is strictly stronger; the three specs that currently wait on Leave pass `mounted`, so no spec changes behaviour
+- **The three media failure states get reached two different ways, deliberately.** A second Playwright project without `--use-fake-ui-for-media-stream` covers *denied* and *no-device*, where the browser can refuse for real; a stub covers *in-use* (`NotReadableError`), which no flag combination produces. Never claim the stub proves the browser's behaviour
+- **Any test that forces a LiveKit full restart must assert it got one.** `support/reconnect.ts` records peer-connection constructions — a restart makes new ones, a resume makes none. Without that assertion the test passes on the resume path and proves nothing, which is the failure mode the vacuous proxy-cookie assertion already demonstrated
+- Diagnose the intermittent `/api/meetings` 500 under a timebox, capturing the handler's own `[api/meetings]` log from a *failing* run — never once seen. Mitigate with a retry only if the timebox expires, recording what was ruled out
+- Retry spec-side Supabase reads on transport errors, mirroring `createMeeting`
+- Measure the reconnect-banner flake before touching its timeout; raising it blindly masks the cause
+- Confirm the F08/F24 duplicate-track flake is closed by the lobby-leak fix
 - Wire `npm run test:e2e` into the documented pre-deploy checklist
 
-**Verify:** The full suite passes locally against a running dev server.
+**Verify:** Full suite green across both projects, plus `npm run test`, `lint` and
+`typecheck`. Each previously-flaky spec green over 40 consecutive runs — fewer is
+not evidence. The full-restart test seen to fail when pointed at a resume.
 
 ---
 
