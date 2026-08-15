@@ -21,9 +21,17 @@ and the key.
 
 ## Status
 
-**Phases 0–6 complete: 24 of 26 features.** Sign-in, the lobby, calls, screen
-sharing, encrypted chat, and call history all work. What remains is Phase 7 —
-deployment (feature 25) and the end-to-end suite (feature 26).
+**25 of 26 features complete.** Sign-in, the lobby, calls, screen sharing,
+encrypted chat, and call history all work, and the app is deployed and serving at
+the demo link above.
+
+The one feature still open is **25, Render deployment** — not because anything is
+unbuilt, but because its verification is a two-device call on the deployed URL.
+Everything it owns that does not need hardware is verified against the live
+instance; what is left is a real iPhone and a real Android, iOS audio after the
+Join gesture, safe-area insets on a notched phone, mobile device labels, a desktop
+share received on a phone, Lighthouse on mobile throttling, and a ten-minute
+four-participant call. A call that works alone has not been tested.
 
 `context/progress-tracker.md` is the live status and is more current than this
 section by construction.
