@@ -9,18 +9,29 @@ encrypted in the browser with AES-GCM, using a key carried in the share link's U
 fragment — which browsers never send to a server. The link is both the invitation
 and the key.
 
+## Demo
+
+_No demo URL yet — the service is not deployed. See First deploy to Render below._
+
+> **When there is one, the first visit will take about a minute.** It runs on a
+> Render free instance, which spins down after 15 minutes without traffic. Render
+> serves its own loading page while it wakes — that happens before any of this
+> code runs, so it cannot be branded or shortened. Once awake it is quick. Nothing
+> is wrong; it is the cost of running for free.
+
 ## Status
 
-**Not built yet.** The repository currently contains planning documentation only.
-`context/progress-tracker.md` is the live status; the build is 0 of 26 features,
-starting at Phase 0.
+**Phases 0–6 complete: 24 of 26 features.** Sign-in, the lobby, calls, screen
+sharing, encrypted chat, and call history all work. What remains is Phase 7 —
+deployment (feature 25) and the end-to-end suite (feature 26).
 
-Everything below describes the target, not what runs today.
+`context/progress-tracker.md` is the live status and is more current than this
+section by construction.
 
 ## Stack
 
 TypeScript · Next.js 16 (App Router) · React 19 · LiveKit Cloud · Supabase (Auth +
-Postgres) · Tailwind CSS 4 · shadcn/ui · Vitest · Playwright · deployed on Render.
+Postgres) · Tailwind CSS 4 · shadcn/ui · Vitest · Playwright · deploys to Render.
 
 ## Documentation
 
@@ -40,15 +51,14 @@ working in this repo.
 
 ## Running it
 
-> **Partly working.** The app builds, runs, and is styled; the database, its RLS
-> policies and the Supabase clients are in place. There is no sign-in and no call
-> yet — Google OAuth arrives in feature 04 and LiveKit in feature 09, so the
-> LiveKit variables below are placeholders for now and the two buttons on Home do
-> nothing. Live status is `context/progress-tracker.md`.
+Everything below works locally: sign in with Google, start a meeting, share the
+link, join from a second browser context, share a screen, and chat end-to-end
+encrypted. All seven environment variables are real requirements now — none is a
+placeholder.
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 20.9+ (pinned as `engines.node`; Render builds on 22)
 - A [LiveKit Cloud](https://cloud.livekit.io) project (API key, secret, and `wss://` URL)
 - A [Supabase](https://supabase.com) project with the Google OAuth provider enabled
 - A Google Cloud OAuth 2.0 client, with Supabase's callback URL registered
@@ -100,12 +110,47 @@ real camera.
 
 ### First deploy to Render
 
-1. Create a Render **Web Service** from this repo; `render.yaml` defines the build and start commands.
-2. Set every environment variable above in the Render dashboard. Secrets are declared `sync: false` and must be entered by hand.
-3. Set `NEXT_PUBLIC_SITE_URL` to the deployed origin.
-4. Add `https://<your-app>.onrender.com/auth/callback` to Supabase's allowed redirect URLs **and** to the Google OAuth client's authorized redirect URIs.
-5. In the LiveKit Cloud dashboard, point the webhook at `https://<your-app>.onrender.com/api/livekit/webhook`.
-6. Verify: sign in, create a meeting, and complete a call across two devices.
+Order matters in one place: **every environment variable must be set before the
+first build, not after it.** The four `NEXT_PUBLIC_*` values are compiled into the
+bundle at build time and parsed by Zod at import, so a missing one fails the build
+rather than the request — and fixing one afterwards costs a full redeploy. The
+origin is predictable before the service exists: it is `https://<name>.onrender.com`
+for the service `name` in `render.yaml`.
+
+1. Create a Render **Blueprint** from this repo, so `render.yaml` is what deploys.
+   A Web Service created by hand in the dashboard ignores that file.
+2. Set all seven environment variables in the Render dashboard. Every one is
+   declared `sync: false`, so none is committed and all must be entered by hand.
+   Set `NEXT_PUBLIC_SITE_URL` to `https://<name>.onrender.com` now, before the
+   first build.
+3. Deploy, and confirm `https://<name>.onrender.com/healthz` returns
+   `{"status":"ok"}`.
+4. Add `https://<name>.onrender.com/auth/callback` to Supabase's allowed redirect
+   URLs **and** to the Google OAuth client's authorized redirect URIs.
+5. In the Supabase dashboard, **disable the email/password provider** under
+   Authentication → Providers if it is enabled. Google is the only intended
+   sign-in method, and nothing in the code enforces that — an enabled email
+   provider is a live account-creation surface reachable straight from the Auth
+   API, outside every route handler here.
+6. In the LiveKit Cloud dashboard, point the webhook at
+   `https://<name>.onrender.com/api/livekit/webhook`. Until this is done, call
+   history records nothing: LiveKit cannot reach `localhost`, so the participation
+   handler has only ever been exercised against payloads the test suite signs
+   itself.
+7. Paste the URL into the Demo section at the top of this file.
+
+**Then verify on the deployed origin**, because none of this is provable locally:
+
+- Sign in with Google, create a meeting, and complete a call across two real devices.
+- Check `/history` shows that meeting with the right duration and the other participant.
+- Open a share link on a real iPhone and a real Android phone, and join from each.
+- Confirm audio starts after the Join gesture on iOS Safari.
+- Confirm the device pickers show real labels once permission is granted.
+- Confirm the safe-area insets render correctly on a notched phone — `viewport-fit=cover`
+  and the `.call-surface` / `.sheet-surface` padding are a no-op on every desktop
+  browser, so nothing has confirmed them.
+- Share a desktop screen and confirm a phone receives it.
+- Run Lighthouse on mobile throttling, and hold a four-participant call for ten minutes.
 
 ## Licence
 

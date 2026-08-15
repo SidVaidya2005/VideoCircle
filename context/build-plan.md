@@ -788,15 +788,19 @@ decision, which may well be "accept and document".
 
 **Logic:**
 
-- `render.yaml` defining the Node web service on the **free** plan, build and start commands, and every env var with `sync: false` for secrets
-- A `/healthz` route for Render's health check. **No external keep-alive pinger** — see `constraints.md` → Hosting for why
-- README states above the demo link that a first visit after an idle spell takes about a minute to wake
-- Set `NEXT_PUBLIC_SITE_URL` to the deployed origin
+- `render.yaml` defining the Node web service on the **free** plan, build and start commands, and every env var with `sync: false` — including the four `NEXT_PUBLIC_*`, which are not secret but must be present at build time
+- `engines.node` in `package.json` as the floor, `NODE_VERSION` in `render.yaml` as the exact build version. An unpinned Node makes the deploy non-reproducible
+- A `/healthz` route, **liveness only** — it deliberately reads no dependency, against Render's own advice, because a free Supabase project pauses after ~7 days idle and a readiness check would turn that into a restart loop that cannot fix it
+- **`healthCheckPath` is left unset** in `render.yaml`, with the line commented in place. Render's docs say a free instance spins down after 15 minutes without "any inbound traffic" and do not say whether their own health checks count; if they do, configuring one is the keep-alive pinger `constraints.md` → Hosting refuses, added by accident. **No external pinger either**
+- `startCommand: npm run start` with no `--port`. The installed Next 16 CLI reference lists `env: PORT` on `--port`, and hostname defaults to `0.0.0.0`
+- README rewritten, not merely appended to: Status and Running both claimed the app was unbuilt. Cold-start disclosure sits above the demo link
+- Set `NEXT_PUBLIC_SITE_URL` to the deployed origin **before the first build** — it is inlined by the compiler and Zod-parsed at import, so a missing value fails the build
 - Add the deployed origin to Supabase's allowed redirect URLs and to the Google OAuth client
-- Point the LiveKit webhook at the deployed `/api/livekit/webhook`
-- Health check and a documented first-deploy checklist in the README
+- Disable Supabase's email/password provider if enabled — `architecture.md` says Google is the only sign-in method and nothing in the code enforces it
+- Point the LiveKit webhook at the deployed `/api/livekit/webhook`, which is what first proves F20 against real traffic
+- A first-deploy checklist in the README, separating the steps that configure from the checks that verify
 
-**Verify:** Sign in, create a meeting, and complete a two-device call end to end on the deployed URL.
+**Verify:** Sign in, create a meeting, and complete a two-device call end to end on the deployed URL. The artifacts are verified locally — `render.yaml`'s env keys diffed against `.env.example`, `/healthz` curled against a production `next start` on `$PORT`, the proxy exclusion asserted in `tests/unit/proxy-matcher.test.ts` — but everything involving the deployed origin, the four dashboards, and real phones is checklist, not test.
 
 ### 26 End-to-end test suite
 
