@@ -1,11 +1,10 @@
 <!--
-  VideoCircle wordmark: the red square dotting the i in "Circle".
+  VideoCircle wordmark: a red square separating "Video" from "Circle".
 
-  This is the kit's own gesture. Upstream dots the i in its wordmark with a red
-  square; this is the same move on our name. One family, no tracking, because
-  the brand reserves wide tracking for CAPS overlines.
-
-  Set in PascalCase, with BOTH i's carrying a red square tittle.
+  The square is the brand's only native glyph, and assets/mark.svg is that same
+  square on its own — so the compact mark reads as a compression of the wordmark
+  rather than as a second, unrelated shape. One family, no tracking, because the
+  brand reserves wide tracking for CAPS overlines.
 
   IN THE APP, RENDER THE WORDMARK AS LIVE TEXT, NOT THIS FILE. It is a mono
   wordmark, so real text in next/font's JetBrains Mono stays crisp at every
@@ -13,34 +12,36 @@
   preview/logo.html for the HTML/CSS recipe. This SVG exists only for places
   live text is unavailable: OG images, README embeds, external decks.
 
-  Both i's are U+0131 DOTLESS I, so each red square is the only tittle on its
-  letter; an ordinary "i" would show its own dot underneath.
+  Geometry mirrors the .wordmark-dot rule in src/app/globals.css, which is the
+  source of intent: a 0.2em square with 0.14em either side, its bottom edge
+  0.22em above the baseline. Nothing here is measured from a glyph. The square
+  this replaced dotted both i's and had to be aligned to JetBrains Mono's own
+  stem centre, which is a measurement no other face reproduces; keep it that way
+  if the family ever changes.
 
-  Dot placement is measured, not assumed. In JetBrains Mono Bold the advance is
-  0.6em but the i's stem is centred at 0.245em and the font's own tittle at
-  0.25em — so centring on the advance box (0.3em) hangs the square noticeably to
-  the right of the letter. Use 0.25em:
+  At font-size 48 the mono advance is 28.8, so:
 
-      x = charIndex * 0.6 * fontSize + 0.25 * fontSize - squareWidth / 2
-
-  Casing does not affect this: a monospace cap has the same advance as its
-  lowercase. If the family ever changes, re-measure the stem centre.
+      "Video" spans 0 to 144          (5 advances)
+      separator spans 144 to 167.04   (0.48em total, narrower than one advance)
+      "Circle" spans 167.04 to 339.84 (6 advances)
 
   Colours are literals because an SVG cannot read CSS custom properties. They
   match the fg-1 and red-1 tokens in colors_and_type.css; keep them in sync by
   hand. (Token names appear without their CSS prefix: an XML comment may not
   contain a double hyphen.)
 -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" width="320" height="80" role="img" aria-label="VideoCircle">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 80" width="340" height="80" role="img" aria-label="VideoCircle">
   <title>VideoCircle</title>
 
   <text x="0" y="60"
         font-family="'JetBrains Mono','IoskeleyMono','IBM Plex Mono',ui-monospace,monospace"
         font-size="48" font-weight="700" letter-spacing="0" fill="#dddcda"
-        xml:space="preserve">V&#x0131;deoC&#x0131;rcle</text>
+        xml:space="preserve">Video</text>
 
-  <!-- tittles at indices 1 and 6 of "VideoCircle": stem centres at
-       1 * 28.8 + 12 = 40.8 and 6 * 28.8 + 12 = 184.8, less half the 8px square -->
-  <rect x="36.8" y="24" width="8" height="8" fill="#ff4b4b" />
-  <rect x="180.8" y="24" width="8" height="8" fill="#ff4b4b" />
+  <rect x="150.72" y="39.84" width="9.6" height="9.6" fill="#ff4b4b" />
+
+  <text x="167.04" y="60"
+        font-family="'JetBrains Mono','IoskeleyMono','IBM Plex Mono',ui-monospace,monospace"
+        font-size="48" font-weight="700" letter-spacing="0" fill="#dddcda"
+        xml:space="preserve">Circle</text>
 </svg>

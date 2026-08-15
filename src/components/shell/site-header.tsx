@@ -13,8 +13,11 @@ export function SiteHeader({ actions }: SiteHeaderProps) {
     // one sanctioned shadow: a scroll mask under a sticky header, never a depth
     // cue. Solid bg-canvas rather than a translucent fill — the brand has no
     // backdrop-blur, and semi-opaque chrome over scrolling text reads as muddy.
-    <header className="bg-canvas border-line/60 shadow-soft sticky top-0 z-10 border-b px-4 py-4 sm:px-6">
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
+    // `.site-header` pins the height so the hero can subtract it — see the rule
+    // in globals.css. Vertical padding is gone with it: the height plus centring
+    // does the same job without the two being able to disagree.
+    <header className="site-header bg-canvas border-line/60 shadow-soft sticky top-0 z-10 flex items-center border-b px-4 sm:px-6">
+      <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4">
         <Link
           href="/"
           aria-label="VideoCircle home"

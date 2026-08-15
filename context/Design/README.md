@@ -55,14 +55,29 @@ upstream itself names as the closest match.
 ## The mark
 
 The wordmark is `VideoCircle`, PascalCase, in the brand mono, with a **red square
-dotting both i's** — the same gesture upstream uses on the `i` in its own
-wordmark, applied to our name and doubled. Each i is U+0131 DOTLESS I so the red
-square is the only tittle on that letter; an ordinary `i` would keep its own dot
-underneath the square.
+separating the two words** — `Video▪Circle`. Set in mono, that separator reads as
+an identifier rather than as punctuation, which suits a product whose whole
+surface is a link.
 
-This is the one place red appears twice on a single element, and it stays within
-"used sparingly" because the mark is not UI: it carries no state, so it cannot
-compete with the Leave control or a muted-mic warning for meaning.
+**The square is the same glyph as the compact mark**, so `mark.svg` reads as a
+compression of the wordmark rather than as a second, unrelated shape. Red appears
+once, so the mark needs no exemption from "used sparingly".
+
+**It is also the kit's own construction**, which an earlier version of this
+section got wrong: it claimed upstream dots the `i` in its wordmark, and the kit
+in this folder never does. `ui_kits/site/Nav.jsx`, `Hero.jsx` and `Footer.jsx`
+all render `anime` · red square · `js` — a separator between two words, exactly
+this shape. The dotted-i mark we shipped until `7.00.6` was the departure from
+upstream, not the inheritance, and the reason recorded for it was never true.
+
+**The separator is a box in the text flow, never a decoration pinned to a glyph.**
+This is the binding rule, and it was learned the hard way: the earlier mark dotted
+both i's with a red square, which meant positioning that square against JetBrains
+Mono's own stem centre (0.245em, not the 0.3em advance centre) and tittle height.
+Those numbers are wrong for any other face, and `next/font`'s generated fallback
+does not reproduce them — it matches advance and ascent but not glyph shapes — so
+the mark visibly shifted during the swap window on every cold load. A separator in
+the flow has nothing to align to and nothing to re-measure.
 
 **In the app, render it as live text, not an image.** It is a mono wordmark, so
 real text stays crisp at every size, scales with the type ramp, and is readable
@@ -114,6 +129,7 @@ Everything feels measured, slightly retro, and hand-wired — a tool, not a toy.
 - **Cyan `#4BFFFD` and green `#00FF5D`** are reserved for completion moments and the mark. Do not repurpose them for UI state.
 - **Extended palette:** 16 hues × 6 stops, a chromatic terminal palette where every hue pops on the near-black. Available, rarely correct — most surfaces are neutrals plus one signal.
 - **Usage rule:** at most **one** accent-1 hue per screen.
+- **One named exception to "sparingly": Home's scope canvas**, the row of red squares under the hero's entry controls, which is the kit's own gesture kept whole. It is the largest use of red in the product and it is deliberate. It holds on the same argument the mark does — the row carries no state and is `aria-hidden`, so it cannot compete with the Leave control or a muted-mic warning for meaning — plus one the mark does not need: Home and the call are different routes, so those reds are never on screen together. **Do not read this as licence to spend red elsewhere.** Inside a call the allocation below is absolute, and this exception is written down precisely so the next surface has to earn its own rather than cite this one.
 
 ### Type
 - **Single family: JetBrains Mono**, loaded via `next/font/google` so it self-hosts at build time. Regular + Bold only. Everything is this font — hero, chat, fine print, no exceptions.

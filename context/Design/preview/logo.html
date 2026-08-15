@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- @dsCard group="Brand" name="Wordmark" subtitle="Red square dots the i" viewport="700x400" -->
+<!-- @dsCard group="Brand" name="Wordmark" subtitle="Red square between the words" viewport="700x400" -->
 <html><head><meta charset="utf-8"><title>Wordmark</title>
 <link rel="stylesheet" href="../colors_and_type.css">
 <style>
@@ -15,22 +15,19 @@
     line-height:var(--leading-tight);
     letter-spacing:var(--tracking-normal);
     color:var(--fg-1);
-    display:inline-flex;
-    align-items:flex-start;
+    display:inline-block;
   }
-  /* U+0131 dotless i on BOTH i's, so each red square is the only tittle */
-  .wordmark .i{position:relative}
-  .wordmark .i::before{
-    content:'';
-    position:absolute;
-    /* 0.25em, not 50%: JetBrains Mono centres the i stem at 0.245em while the
-       0.6em advance box centres at 0.3em, so a box-centred square hangs right
-       of the letter. Measured; see src/app/globals.css. */
-    left:.25em;
-    transform:translateX(-50%);
-    top:.235em;  /* measured; see src/app/globals.css */
-    width:.17em;
-    height:.17em;
+  /* The separator is a box in the text flow, not a decoration pinned to a glyph.
+     Nothing here is measured from the face, so it survives a family change —
+     unlike the square this replaced, which dotted both i's and had to be aligned
+     to JetBrains Mono's own stem centre. See src/app/globals.css. */
+  .wordmark .dot{
+    display:inline-block;
+    width:.2em;
+    height:.2em;
+    margin-inline:.14em;
+    vertical-align:.22em;      /* centres on the x-height, so it reads as a
+                                  separator rather than a full stop */
     background:var(--red-1);   /* the one signal colour on the mark */
   }
 
@@ -41,8 +38,8 @@
 </style></head><body>
 
 <div>
-  <div class="lbl">wordmark — live text, one family, PascalCase, both i&#39;s dotted</div>
-  <div class="wordmark">V<span class="i">&#x0131;</span>deoC<span class="i">&#x0131;</span>rcle</div>
+  <div class="lbl">wordmark — live text, one family, PascalCase, red square between the words</div>
+  <div class="wordmark">Video<span class="dot"></span>Circle</div>
 </div>
 
 <div>
@@ -50,8 +47,8 @@
   <div class="row">
     <div class="mark"><i></i></div>
     <div class="sizes">
-      <span class="wordmark" style="font-size:var(--text-lg)">V<span class="i">&#x0131;</span>deoC<span class="i">&#x0131;</span>rcle</span>
-      <span class="wordmark" style="font-size:var(--text-base)">V<span class="i">&#x0131;</span>deoC<span class="i">&#x0131;</span>rcle</span>
+      <span class="wordmark" style="font-size:var(--text-lg)">Video<span class="dot"></span>Circle</span>
+      <span class="wordmark" style="font-size:var(--text-base)">Video<span class="dot"></span>Circle</span>
     </div>
   </div>
 </div>

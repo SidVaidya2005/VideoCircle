@@ -126,7 +126,8 @@ VideoCircle/
     │   ├── globals.css                → Tailwind import + :root token mirror + @theme
     │   │                                inline, then the few component classes whose
     │   │                                values are literals (.grid-backdrop, the
-    │   │                                wordmark dot, .history-row, and .call-surface
+    │   │                                wordmark separator, .scope-square's drift
+    │   │                                distance, .history-row, and .call-surface
     │   │                                / .sheet-surface, which pay the safe-area
     │   │                                insets the viewport export turns on)
     │   ├── (shell)/                   → route group: header + footer chrome
@@ -155,8 +156,9 @@ VideoCircle/
     │   │                                dropdown-menu, input, popover, sheet, textarea, tooltip),
     │   │                                plus section-overline, the brand's own
     │   ├── shell/                     → wordmark, site header, site footer, auth menu
-    │   ├── home/                      → hero, call preview, how-it-works, feature grid, join-by-code
-    │   │                                form, start-meeting + share panel, auth-error notice
+    │   ├── home/                      → hero (two-column from lg:), scope canvas, call preview,
+    │   │                                how-it-works, feature grid, join-by-code form,
+    │   │                                start-meeting + share panel, auth-error notice
     │   ├── lobby/                     → self-preview, media-state notice, device toggles and
     │   │                                pickers, display-name field, copy-invite, join-failure
     │   │                                notice, lobby controls

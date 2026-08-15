@@ -1,3 +1,4 @@
+import { AnnotationLabel } from '@/components/ui/annotation-label';
 import { cn } from '@/lib/utils';
 
 interface CallPreviewProps {
@@ -37,10 +38,7 @@ export function CallPreview({ className, participants = DEFAULT_PARTICIPANTS }: 
     >
       {/* status strip — pinned top, the kit's fixed-strip layout */}
       <div className="border-line/60 flex items-center justify-between border-b px-3 py-2">
-        <span className="text-muted flex items-center gap-2 text-xs tracking-wider uppercase">
-          <span className="bg-signal animate-live-dot inline-block size-1 shrink-0" />
-          Preview · Live
-        </span>
+        <AnnotationLabel live>preview.call · live</AnnotationLabel>
         <span className="text-faint text-xs tracking-wide uppercase">00:12:07</span>
       </div>
 

@@ -29,5 +29,5 @@ Built from `examples/animejs-v4-logo-animation/` and upstream animejs.com visual
 
 The hero / overline / feature-card rhythm is a reasonable model for Home and the
 lobby — the surfaces where `animejs` is allowed. Note that `Hero.jsx` renders the
-**Anime.js** wordmark; ours is `videocircle` with the red square dotting the i in
-"circle" (see `preview/logo.html`).
+**Anime.js** wordmark; ours is `VideoCircle` with a red square separating the two
+words (see `preview/logo.html`).

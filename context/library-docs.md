@@ -760,32 +760,20 @@ html {
     100px 100px;
 }
 
-/* The red square that dots the i in "videocircle". Sized in em so it tracks the
-   wordmark at every size. Lives here rather than in the component because the
-   offsets are literals, and literals belong in this file.
+/* The red square separating "Video" from "Circle". Sized in em so it tracks the
+   wordmark at every size. Lives here rather than in the component because em
+   values are literals rather than tokens, and literals belong in this file.
 
-   `top` is 0.234em, not the 0.30em in preview/logo.html. That specimen was
-   authored against IoskeleyMono; we ship JetBrains Mono, whose metrics differ,
-   and at 0.30em the square lands exactly on the x-height and collides with the
-   glyph. Derived from the shipped face, measured via canvas TextMetrics:
-     font ascent            1.020em above the baseline (top of the inline box)
-     dotted "i" tittle top  0.786em above the baseline
-     dotless "ı" ink top    0.550em above the baseline (x-height)
-   so top = 1.020 - 0.786 = 0.234em puts the square where the real tittle sits,
-   clearing the stem by 0.066em. Design/README.md is the specification and the
-   specimens are sketches, so matching the intent beats copying the number. */
-.wordmark-i {
-  position: relative;
-}
-
-.wordmark-i::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 0.234em;
-  width: 0.17em;
-  height: 0.17em;
-  transform: translateX(-50%);
+   It is a box in the text flow, not a decoration pinned to a glyph — see
+   Design/README.md → The mark for why that distinction is the binding rule and
+   not a style preference. Nothing here is measured from the face, so a family
+   change needs no re-measurement. */
+.wordmark-dot {
+  display: inline-block;
+  width: 0.2em;
+  height: 0.2em;
+  margin-inline: 0.14em;
+  vertical-align: 0.22em;
   background: var(--red-1);
 }
 

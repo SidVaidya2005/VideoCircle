@@ -198,6 +198,7 @@
   --animate-speaking-ring: vc-speaking-ring 6s var(--ease-in-out-quint) infinite;
   --animate-level: vc-level 900ms var(--ease-in-out-quint) infinite;
   --animate-live-dot: vc-live-dot 2s var(--ease-in-out-quint) infinite;
+  --animate-scope-drift: vc-scope-drift 1600ms var(--ease-in-out-quint) infinite alternate;
 
   /* A reaction rising off a tile and fading. One-shot: the element is removed
      once its TTL expires, so there is no exit state to animate. */
@@ -318,46 +319,55 @@ html {
   }
 }
 
-/* The red square that dots each i in "VideoCircle" — both of them. Sized in em so
-   it tracks the wordmark at every size. Lives here rather than in the component
-   because the offsets are literals, and literals belong in this file.
+/* The red square separating "Video" from "Circle". Sized in em so it tracks the
+   wordmark at every size, from the header's text-lg to the hero's text-5xl.
+   Lives here rather than in the component because em values are literals rather
+   than tokens, and literals belong in this file.
 
-   Both offsets are measured from the shipped face rather than copied from
-   preview/logo.html, which was authored against IoskeleyMono. Scanning rendered
-   pixels of JetBrains Mono Bold gives, in ems:
+   IT IS A BOX IN THE TEXT FLOW, NOT A DECORATION PINNED TO A GLYPH, and that is
+   the whole point of the shape. The square this replaced dotted both i's, so it
+   had to be positioned against JetBrains Mono's own stem centre (0.245em) and
+   tittle height — measurements that are wrong for any other face, and that the
+   next/font fallback does not reproduce during the swap window, which is why the
+   mark visibly shifted on a cold load. Nothing here is measured from a glyph, so
+   there is nothing to re-measure if the family ever changes.
 
-     advance width                      0.600   (so 50% of the box is 0.300)
-     dotless "ı" stem spans             0.100 - 0.390, centred at 0.245
-     real tittle on "i" spans           0.100 - 0.400, centred at 0.250
-     real tittle top / bottom           0.785 / 0.550 above the baseline
-     font ascent (top of inline box)    1.020 above the baseline
+   `vertical-align` centres the square on the x-height rather than the baseline,
+   so it reads as a separator between the two words rather than as a full stop
+   under them. For an inline-block with no in-flow line content the baseline IS
+   the bottom margin edge, so the value is the square's bottom edge above the
+   baseline: JetBrains Mono's x-height is 0.55em, so its midline is 0.275em and a
+   0.2em square centres there with its bottom at 0.275 - 0.1 = 0.175em. Verified
+   by measurement in the browser, not by eye.
 
-   HORIZONTAL: `left` is 0.25em — the centre of the font's own tittle, which sits
-   over the stem. It is NOT `left: 50%`: the stem is centred at 0.245em while the
-   advance box is centred at 0.300em, so a box-centred square hangs ~0.055em to
-   the right of the letter it is meant to dot. That is the misalignment you can
-   see at hero sizes.
-
-   VERTICAL: `top` is 0.235em = 1.020 - 0.785, putting the square's top where the
-   font puts its tittle's top. The square keeps the kit's 0.17em size rather than
-   the font's 0.30em, so it reads as a mark rather than a replica, and clears the
-   stem by 0.065em instead of sitting flush.
-
-   Design/README.md is the specification and the specimens are sketches, so
-   matching the intent beats copying the number. */
-.wordmark-i {
-  position: relative;
+   The margins are optical: a monospace advance already leaves space on both
+   sides of the box, so the square needs less than a normal letter would. */
+.wordmark-dot {
+  display: inline-block;
+  width: 0.2em;
+  height: 0.2em;
+  margin-inline: 0.14em;
+  vertical-align: 0.175em;
+  background: var(--red-1);
 }
 
-.wordmark-i::before {
-  content: '';
-  position: absolute;
-  left: 0.25em;
-  top: 0.235em;
-  width: 0.17em;
-  height: 0.17em;
-  transform: translateX(-50%);
-  background: var(--red-1);
+/* The mark at hero size. `10vw` is the kit's own hero factor — see
+   ui_kits/site/Hero.jsx — but its raw clamp(56px, 10vw, 120px) is not usable
+   here: 120px sits off the type ramp entirely, and the ramp tops out at
+   --text-5xl. Clamping between ramp steps is how preview/logo.html already
+   expresses this mark, so the recipe stays a clamp between tokens rather than a
+   bare pixel value. */
+.wordmark-hero {
+  font-size: clamp(var(--text-3xl), 10vw, var(--text-5xl));
+  letter-spacing: var(--tracking-tight);
+}
+
+/* The kit glows the separator square, and only in the hero — Nav.jsx and
+   Footer.jsx render the same mark without it. That restraint is the point: a
+   24px glow behind a 4px square at the header's text-lg is a smudge, not an
+   embellishment. Scoped to the hero for exactly that reason. */
+.wordmark-hero .wordmark-dot {
+  box-shadow: var(--glow-red);
 }
 
 /* ---- Home motion ---------------------------------------------------------
@@ -405,6 +415,68 @@ html {
   }
   50% {
     transform: scaleY(1);
+  }
+}
+
+/* The hero's scope: a row of squares drifting across the grid, staggered from the
+   centre outwards. The kit's own trademark gesture, and after the call preview
+   moved down the page it is the only moving thing in the hero.
+
+   The drift distance is a variable rather than a literal in the keyframes because
+   the kit's fixed 120px would push the row past a 360px viewport. `.scope-square`
+   carries the phone value and widens once there is room; the keyframes read
+   whatever is set, so there is one animation rather than two.
+
+   The reduced-motion block below forces animation-iteration-count to 1, which
+   collapses this loop along with every other one on the page. */
+@keyframes vc-scope-drift {
+  from {
+    opacity: 0.5;
+    transform: translateX(calc(var(--scope-drift) * -1)) rotate(-180deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(var(--scope-drift)) rotate(0deg);
+  }
+}
+
+/* ---- Site chrome and the full-height hero --------------------------------
+   NOT part of the kit's token mirror above: this is an app layout value, not a
+   brand token, so it lives in its own :root down here with the other component
+   classes. `_verify.mjs` compares the mirrored block only.
+
+   The header's height is PINNED rather than content-derived, because the hero
+   subtracts it and a content-derived height would let the two drift silently —
+   the hero would overshoot the viewport by however much the header grew, and
+   nothing would fail. The value is what the content-sized header already
+   measured, so nothing moves.
+
+   `svh`, not `dvh`: `dvh` changes as mobile browser chrome hides and shows, which
+   would resize the hero mid-scroll and slide the axis rule under the reader's
+   thumb. `svh` is the smallest stable height, so the hero's bottom edge is never
+   clipped. Never `vh` — `code-standards.md` → Responsive. */
+:root {
+  --site-header-h: 4.8125rem;
+}
+
+.site-header {
+  height: var(--site-header-h);
+}
+
+.hero-viewport {
+  min-height: calc(100svh - var(--site-header-h));
+}
+
+.scope-square {
+  --scope-drift: 2rem;
+}
+
+/* The kit drifts 26px squares by 120px (site/Hero.jsx). That is a desktop-only
+   page; the phone value stays small because nine squares plus their drift has to
+   clear 360px without a scrollbar. Only the wide end moves toward the kit. */
+@media (width >= 40rem) {
+  .scope-square {
+    --scope-drift: 6rem;
   }
 }
 
