@@ -1,0 +1,68 @@
+# Render Blueprint. Create the service *from* this file so the settings below are
+# what deploys — a service created by hand in the dashboard ignores it.
+#
+# Every variable here is also in `.env.example`, and the two lists must match
+# exactly. A variable added to one and not the other is a deploy that builds and
+# then throws at the first request that needs it.
+
+services:
+  - type: web
+    name: videocircle
+    runtime: node
+    # Free is a deliberate choice, and it spins down after 15 minutes without
+    # inbound traffic — roughly a minute to wake. See `constraints.md` → Hosting.
+    # Do NOT add a keep-alive pinger: one always-on service consumes ~730 of the
+    # 750 free instance-hours per month, and exceeding that suspends every free
+    # service in the workspace.
+    plan: free
+    region: oregon
+    branch: main
+
+    # `npm ci` rather than `npm install`: the lockfile is the input, so a deploy
+    # cannot silently resolve a different tree from the one the tests ran against.
+    buildCommand: npm ci && npm run build
+    # No `--port` flag needed. `next start` reads PORT from the environment (the
+    # installed Next 16 CLI reference lists `env: PORT` on `--port`) and binds
+    # 0.0.0.0 by default, which is what Render requires.
+    startCommand: npm run start
+
+    # `healthCheckPath` is deliberately UNSET, though /healthz exists and works.
+    #
+    # Render's docs say a free instance spins down after 15 minutes without "any
+    # inbound traffic", and do not say whether their own health-check requests
+    # count. If they do, configuring one here is exactly the keep-alive pinger
+    # `constraints.md` → Hosting refuses, added by accident and billed against the
+    # same 750 hours. Enabling it is one line once that is confirmed; discovering
+    # the free tier was exhausted is not as cheap.
+    #
+    # healthCheckPath: /healthz
+
+    envVars:
+      # Pinned so a Render-side default change cannot alter the build. The floor
+      # lives in package.json `engines`; this is the exact version.
+      - key: NODE_VERSION
+        value: '22'
+
+      # ---- Public: compiled into the client bundle at BUILD time --------------
+      # These must be set before the first build, not after it. They are inlined
+      # by the compiler and parsed by Zod at import, so a missing one fails the
+      # build rather than the request — and correcting one costs a full redeploy.
+      #
+      # The origin is predictable before the service exists: it is
+      # https://<name>.onrender.com for the `name` above.
+      - key: NEXT_PUBLIC_SITE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: NEXT_PUBLIC_LIVEKIT_URL
+        sync: false
+
+      # ---- Secret: entered by hand in the dashboard, never committed ----------
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
