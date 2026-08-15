@@ -77,8 +77,13 @@ filled in by the feature that needs it. Built so far:
 
 - **F24** — `src/app/{error,global-error}.tsx`, `src/lib/media/media-failure-copy.ts` (moved out of `media-state-notice.tsx` so the three unreachable states are testable), and `tests/support/forbidden-copy.ts`, shared by the unit and e2e halves of the leak check. `control-bar.tsx` gates screen share on `Connected`; `chat-panel.tsx` gained jump-to-latest. **No `loading.tsx` anywhere, deliberately** — see `constraints.md` → Error and loading surfaces
 
-Not yet built: `types/meeting.ts` and `render.yaml`. Deliberately absent: any
-`loading.tsx`, and any toast primitive.
+- **F25** — `render.yaml`, `src/app/healthz/route.ts`, `engines.node` in `package.json`, and `tests/e2e/healthz.spec.ts`. `src/proxy.ts`'s matcher gained a `/healthz` exclusion, pinned by `tests/unit/proxy-matcher.test.ts` — the e2e assertion written for it **passed with the exclusion removed**, because `updateSession` only sets cookies when there is a session to refresh, so it was replaced by a unit test on the matcher that fails correctly
+
+- **F26** — `tests/e2e/support/join.ts` (`joinAs`, `connectedStatus` and `CONNECT_TIMEOUT_MS`, lifted out of 12 specs in 7 variants) and `tests/e2e/media-failures.spec.ts`, with `stubMediaFailure` added to `support/media.ts`. The only `src/` change was `reactions-provider.tsx`: `toggleHand` now awaits the attribute write and reverts the control when it fails, because a lost write left the raiser as the only person who thought their hand was up
+
+Not yet built: `types/meeting.ts` — domain types still live beside their consumers,
+and nothing has yet needed a shared one. Deliberately absent: any `loading.tsx`,
+and any toast primitive.
 
 ```
 VideoCircle/
@@ -103,8 +108,12 @@ VideoCircle/
 │   ├── unit/                          → Vitest specs
 │   └── e2e/                           → Playwright specs
 │       └── support/                   → media stubs, signed webhook payloads,
-│                                        session.ts (signs a context in for real), and
-│                                        viewport.ts (the measured responsive sweep)
+│                                        session.ts (signs a context in for real),
+│                                        viewport.ts (the measured responsive sweep),
+│                                        reconnect.ts (peer-connection recorder), and
+│                                        join.ts — joinAs plus connectedStatus and
+│                                        CONNECT_TIMEOUT_MS, the ONLY way a spec may
+│                                        wait on a connected room
 └── src/
     ├── proxy.ts                       → Supabase session refresh on every request
     ├── app/
@@ -129,6 +138,11 @@ VideoCircle/
     │   ├── auth/
     │   │   ├── callback/route.ts      → OAuth PKCE code → session exchange
     │   │   └── signout/route.ts       → sign out, redirect Home
+    │   ├── healthz/route.ts           → liveness only. Reads NO dependency, against
+    │   │                                Render's own advice: a free Supabase project
+    │   │                                pauses after ~7 days idle, and a readiness
+    │   │                                check would turn that into a restart loop it
+    │   │                                cannot fix. Excluded from the proxy matcher
     │   ├── room/[code]/
     │   │   ├── page.tsx               → resolves code, renders <RoomExperience/>
     │   │   └── not-found.tsx          → invalid or unknown room code
@@ -557,7 +571,8 @@ read would be storage without purpose.
 - Provider: Supabase Auth
 - Methods: Google OAuth (PKCE flow) — the only sign-in method. Guests are unauthenticated and have no Supabase session at all.
 - Protected: `/history` (redirects to `/` when there is no session)
-- Public: `/`, `/room/[code]`, `/auth/callback`, `/auth/signout`, `/api/token`, `/api/meetings`, `/api/livekit/webhook`
+- Public: `/`, `/room/[code]`, `/auth/callback`, `/auth/signout`, `/api/token`, `/api/meetings`, `/api/livekit/webhook`, `/healthz`
+- `/healthz` is public **and excluded from the proxy matcher**, so it never touches Supabase — a liveness probe that refreshed a session would make the platform's own health check a dependency of the auth service. The exclusion is pinned by `tests/unit/proxy-matcher.test.ts`, not by an e2e assertion: the e2e written for it passed with the exclusion removed, because `updateSession` only sets cookies when there is a session to refresh, so an anonymous request sets none either way.
 - `src/proxy.ts` runs on every non-static request and refreshes the Supabase session cookie so pages never render against a stale token. Next 16 renamed this file convention from `middleware`; it is a pure rename, and the old name printed a deprecation notice on every build.
 - Session reads on the server always use `supabase.auth.getUser()`, never `getSession()` — `getUser()` revalidates against the auth server, `getSession()` trusts the cookie.
 - Sign-in never blocks a call. Every public route works with a null user, and the auth callback returns the user to the path they came from.

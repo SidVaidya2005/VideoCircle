@@ -28,6 +28,13 @@ only what is still true.
 
 ## Hosting
 
+*Promoted from `build-journal.md` at the Phase 7 checkpoint.*
+
+- **`healthCheckPath` stays unset in `render.yaml`, and this is settled rather than pending a measurement.** Render's docs say a free instance spins down after 15 minutes without "any inbound traffic" and do not say whether their own health checks count. The cost of being wrong is not local to this service: the 750 free instance-hours are **per workspace**, this account runs several free services, and a month is ~730 hours — so one service kept awake consumes the entire budget and suspends the others with it. An automatic restart of a wedged instance does not justify taking unrelated projects down. (F25)
+- **`/healthz` is liveness only and reads no dependency**, deliberately against Render's own advice. A free Supabase project pauses after ~7 days idle, so a readiness check that touched it would turn a paused database into a restart loop that restarting cannot fix. It is also excluded from the proxy matcher, so the platform's health probe never reaches the auth service — pinned by `tests/unit/proxy-matcher.test.ts`, because the e2e written for it passed with the exclusion removed. (F25)
+- **The deployed origin is not predictable from the service name, and the two are different things.** Render appends a random suffix when the subdomain is taken: this deployment asked for `videocircle` and got `videocircle-blw4`, because `videocircle.onrender.com` is a live service belonging to somebody else (verified — it serves a Create React App bundle and answers `/healthz` with HTML). A **Blueprint sync matches services by `name`**, so `render.yaml`'s `name` must equal the dashboard's, or the sync creates a second free service and starts sharing the workspace's hours. (F25)
+- **Every `NEXT_PUBLIC_*` must be set before the *first* build, not after it.** They are inlined by the compiler and Zod-parsed at import, so a missing one fails the build rather than a request — and `NEXT_PUBLIC_SITE_URL` cannot be known until the service exists. Create, read the real origin off the dashboard, set, redeploy. Getting it wrong is quiet: the app builds and runs, and only share links and the OAuth redirect point somewhere else. (F25)
+
 *Adopted before the build started, during planning — not promoted from a completed
 feature. The feature refs below point at where each one will be applied.*
 
