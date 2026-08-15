@@ -156,11 +156,39 @@ export async function postTamperedWebhook(
  * endpoint to read participation until feature 21 — and asserting on the rows is
  * what the feature is actually about.
  */
+/**
+ * Retries once, and only on a *thrown* transport error.
+ *
+ * Three webhook specs failed a full-suite run with `TypeError: fetch failed`
+ * caused by `read ECONNRESET`, then all nine passed in isolation immediately
+ * after — the free Supabase project resetting connections when the whole suite
+ * queries it at once. That is the connection, not the query.
+ *
+ * The retry deliberately covers nothing else: a response that arrives is
+ * returned as-is however bad its status, so a genuine 4xx or 5xx from PostgREST
+ * stays exactly as loud as it was. Same rule as `createMeeting` in `media.ts`.
+ */
+async function retryOnTransportError(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch {
+    return await fetch(input, init);
+  }
+}
+
 export function serviceClient(): SupabaseClient<Database> {
   return createClient<Database>(
     requiredEnv('NEXT_PUBLIC_SUPABASE_URL'),
     requiredEnv('SUPABASE_SERVICE_ROLE_KEY'),
-    { auth: { persistSession: false, autoRefreshToken: false } },
+    {
+      auth: { persistSession: false, autoRefreshToken: false },
+      // Every read in the webhook and history specs goes through this client, so
+      // the retry belongs here rather than at each call site.
+      global: { fetch: retryOnTransportError },
+    },
   );
 }
 
