@@ -65,6 +65,38 @@ export function liveTrackCounts(page: Page): Promise<{ video: number; audio: num
 }
 
 /**
+ * Makes every device request reject with a chosen DOMException.
+ *
+ * **This is a stub, and it has to be** — the three failure states cannot be
+ * produced by any browser flag available here. Measured across seven
+ * combinations: `--use-fake-ui-for-media-stream` auto-grants and overrides
+ * Playwright's own context permissions, so nothing can be denied; without that
+ * flag the bundled headless Chromium refuses all capture with
+ * `NotSupportedError`, which is not any of the states we want; keeping the flag
+ * but dropping `--use-fake-device-for-media-stream` still synthesizes a device,
+ * so no-device is unreachable too; and no real Chrome is installed to fall back
+ * on. `constraints.md` → Testing said a second Playwright project would close
+ * this; it does not.
+ *
+ * What this therefore proves is the **wiring** — that a given rejection reaches
+ * the right rendered state through `classifyMediaError`. It does not prove the
+ * browser produces that rejection in the first place, and no test here can.
+ */
+export async function stubMediaFailure(
+  page: Page,
+  errorName: 'NotAllowedError' | 'NotFoundError' | 'NotReadableError',
+): Promise<void> {
+  await page.addInitScript((name: string) => {
+    navigator.mediaDevices.getUserMedia = async () => {
+      // A real DOMException, because LiveKit's `MediaDeviceFailure.getFailure`
+      // classifies on `.name` — a plain Error would fall through to `error` and
+      // the test would pass for the wrong reason.
+      throw new DOMException(`stubbed ${name}`, name);
+    };
+  }, errorName);
+}
+
+/**
  * Holds the microphone request open, so Join can be pressed while it is in flight.
  *
  * The device is real and the constraints are untouched — only the moment of
