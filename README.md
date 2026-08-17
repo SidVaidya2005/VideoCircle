@@ -1,6 +1,9 @@
 # VideoCircle
 
 [![Live demo](https://img.shields.io/badge/demo-videocircle--blw4.onrender.com-ff4b4b)](https://videocircle-blw4.onrender.com)
+[![CodeQL](https://github.com/SidVaidya2005/VideoCircle/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/SidVaidya2005/VideoCircle/actions/workflows/github-code-scanning/codeql)
+[![Code health](https://api.repowise.dev/badge/health/sidvaidya2005/videocircle.svg)](https://repowise.dev/repo/sidvaidya2005/videocircle)
+[![repowise](https://api.repowise.dev/badge/wiki/sidvaidya2005/videocircle.svg)](https://repowise.dev/repo/sidvaidya2005/videocircle)
 [![License: MIT](https://img.shields.io/badge/license-MIT-white)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6)](https://www.typescriptlang.org/)
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-white)](https://nextjs.org/)
@@ -14,6 +17,15 @@ Chat inside the call is end-to-end encrypted in the browser, with the key carrie
 the link's URL fragment. The server relays bytes it cannot read.
 
 ![The Home page](docs/screenshots/home.png)
+
+## Contents
+
+[Demo](#demo) · [Features](#features) · [How it works](#how-it-works) ·
+[Architecture](#architecture) · [Security](#security) ·
+[Screenshots](#screenshots) · [Stack](#stack) ·
+[Project structure](#project-structure) · [Getting started](#getting-started) ·
+[Non-goals](#non-goals) · [Status](#status) · [Documentation](#documentation) ·
+[Licence](#licence)
 
 ## Demo
 
@@ -36,6 +48,8 @@ wakes, before any application code runs. Once awake it is quick.
 - Participant list showing everyone's mic and camera state
 - Reactions and raise-hand over the data channel
 - Call history for signed-in users: meeting, time, duration, and co-participants
+- Keyboard shortcuts in the call — `d` toggles the microphone, `e` the camera,
+  both suppressed while you are typing
 - Connection-quality indicators and automatic reconnection handling
 - Mobile web support — responsive layouts and 44px touch targets down to 360px
 
@@ -90,6 +104,9 @@ that caught two long-standing "flakes" which turned out to be one vacuous wait:
 `getByText('Connected')` was matching the status strip's own `Disconnected` as a
 substring, so every wait for a connected room had been returning instantly.
 
+That one and seven others are written up in
+[`docs/ENGINEERING-NOTES.md`](docs/ENGINEERING-NOTES.md).
+
 ## Architecture
 
 ```mermaid
@@ -124,6 +141,61 @@ Secrets have exactly one home each — `SUPABASE_SERVICE_ROLE_KEY` in
 `src/lib/supabase/admin.ts`, `LIVEKIT_API_SECRET` in `src/lib/livekit/token.ts` —
 and both files begin with `import 'server-only'`.
 
+## Security
+
+### What is end-to-end encrypted, and what is not
+
+**Chat is.** A 256-bit AES-GCM key is generated in the browser and imported
+non-extractable, so a key that arrived from a link cannot be read back out. Every
+message gets a fresh 12-byte IV — never a module constant, because nonce reuse under
+one AES-GCM key is a total break rather than a weakness — and the sender's identity is
+passed as additional authenticated data, so one participant cannot replay another's
+ciphertext under their own name. The wire format is `iv || ciphertext` over the
+LiveKit data channel.
+
+**Video and audio are not.** Media is DTLS/SRTP encrypted in transit but decryptable
+at the SFU, which is what makes server-side routing possible. End-to-end encrypted
+media is explicitly out of scope, and the README would be lying by omission if it let
+"end-to-end encrypted chat" imply otherwise.
+
+### The link is a bearer credential
+
+Anyone holding the full link can join the meeting and read its chat. That is the
+design, not a gap — there is no waiting room and no host admission. It also means a
+leaked link is a leaked meeting, and the chat key cannot be rotated without handing
+out a new link.
+
+Room codes are 10 characters from a 32-symbol alphabet with the ambiguous glyphs
+removed, drawn from `crypto.getRandomValues` — **50 bits of entropy**, and the
+alphabet size divides 256 evenly so there is no modulo bias. A token request for an
+unknown, ended, or expired code is refused.
+
+### What the server can see
+
+Meeting codes, who created them, and participation rows: a display name, a
+join/leave timestamp, and a participant identity. It never sees a chat key or a
+message body. The key is read from `window.location.hash` and nowhere else, and
+appears in no request, no log, and no database row — the one permitted detour is
+`sessionStorage` across the OAuth round trip, which never leaves the browser.
+
+### Boundaries
+
+- Postgres is behind row-level security. The service-role key bypasses RLS and lives
+  in exactly one file, which cannot be imported from a client component.
+- LiveKit tokens are minted server-side, scoped to one room, capped at a one-hour
+  TTL, and never carry `roomAdmin`, `roomCreate`, or `roomList`.
+- Inbound LiveKit webhooks are signature-verified — an HS256 JWT whose claim is a
+  digest of the exact body bytes — with no test-only path through the route.
+- Google is the only sign-in method, and the Supabase email/password provider is
+  disabled, because an enabled one is a live account-creation surface reachable
+  straight from the Auth API, outside every route handler here.
+- Guests get a participant identity minted fresh at each join and never reused, so no
+  query can link one guest's appearances across two meetings. Their participation row
+  does persist as long as the meeting does — that is what puts their name in other
+  participants' history — it simply links to nothing else.
+
+CodeQL runs on this repository through GitHub's default setup.
+
 ## Screenshots
 
 **The lobby** — self-preview, device pickers, and mic/camera state, set before
@@ -147,6 +219,44 @@ camera-off placeholder rather than video, and the device pickers name fake devic
 
 TypeScript · Next.js 16 (App Router) · React 19 · LiveKit Cloud · Supabase (Auth +
 Postgres) · Tailwind CSS 4 · shadcn/ui · Zod · Vitest · Playwright · Render.
+
+## Project structure
+
+119 source files, 57 test files, 8 SQL migrations.
+
+```
+src/
+├── proxy.ts                  Supabase session refresh on every request
+├── app/
+│   ├── (shell)/              Home and /history — the pages inside the site shell
+│   ├── room/[code]/          One route, two states: lobby until Join, then the call
+│   ├── api/                  meetings (create), token (mint), livekit (webhook)
+│   ├── auth/                 OAuth callback and sign-out
+│   └── healthz/              Render's health probe
+├── components/
+│   ├── room/                 The call: grid, tiles, control bar, spotlight, invite
+│   ├── lobby/                Self-preview, device pickers, join handoff
+│   ├── chat/                 The encrypted chat panel
+│   ├── history/, home/       Page-specific surfaces
+│   ├── shell/                Header, footer, auth menu
+│   └── ui/                   shadcn/ui primitives
+├── hooks/                    Media preview and devices, chat key, encrypted chat,
+│                             raise hand, call shortcuts, media queries
+├── lib/
+│   ├── crypto/               Chat key and message envelope — the AES-GCM boundary
+│   ├── livekit/              Token minting, TTL cap, webhook verification
+│   ├── supabase/             Server, browser, and admin clients
+│   ├── media/                Device preferences and error classification
+│   └── *.ts                  Room codes, invite links, grid layout, history
+└── types/                    Generated database types
+
+tests/
+├── unit/                     Vitest — crypto, room codes, formatting, pure logic
+├── e2e/                      Playwright — lobby, join, calls, chat, webhooks
+└── support/                  Shared by both suites
+```
+
+`context/architecture.md` carries the full tree, the data model, and the invariants.
 
 ## Getting started
 
@@ -209,6 +319,24 @@ devices, so call flows run without a real camera.
 See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the Render setup, the checks to
 run before every deploy, and what can only be verified on a deployed origin.
 
+## Non-goals
+
+Deliberately not built. Each was considered and ruled out, rather than left undone:
+
+- **Recording**, cloud or local, and playback
+- **End-to-end encrypted media** — see [Security](#security); it would mean giving up
+  server-side routing
+- **Persisted chat transcripts** — structurally impossible under this encryption
+  model, and that is the point
+- **Waiting rooms, host admission, and moderation** (mute-others, remove-participant)
+- **Virtual backgrounds and background blur**
+- **Live transcription, captions, and translation**
+- **Breakout rooms**
+- **Scheduled meetings, calendar integration, and persistent personal rooms**
+- **Native iOS and Android apps**, and dial-in / PSTN telephony
+- **File sharing, whiteboard, and polls**
+- **Teams, organizations, and billing**
+
 ## Status
 
 Complete. All 26 planned features across 8 phases are built, verified, and deployed;
@@ -244,6 +372,7 @@ built, why, and what the rules are.
 | `context/build-journal.md`    | Decisions and gotchas, per feature                      |
 | `context/Design/`             | The Anime.js brand kit this project is designed against |
 | `docs/DEPLOYMENT.md`          | Render deployment and pre-deploy checks                 |
+| `docs/ENGINEERING-NOTES.md`   | Bugs that were worth more than their fix                |
 
 ## Licence
 

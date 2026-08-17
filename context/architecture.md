@@ -92,6 +92,7 @@ VideoCircle/
 │   └── Design/                        → VideoCircle design system (spec, tokens, specimens, mark)
 ├── docs/                              → reader-facing docs the README links to:
 │   ├── DEPLOYMENT.md                  → Render setup and pre-deploy checks
+│   ├── ENGINEERING-NOTES.md           → bugs worth more than their fix
 │   └── screenshots/                   → README images, captured with Playwright
 ├── render.yaml                        → Render service + env definition
 ├── components.json                    → shadcn/ui config (aliases, target stylesheet)
