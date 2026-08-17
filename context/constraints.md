@@ -127,6 +127,7 @@ file does not carry.*
 ## Client state and hooks
 
 - **A value the browser can read synchronously does not belong in an effect.** `useChatKey` was written the way `code-standards.md` drew it — read the hash in an effect, `setState` — and `react-hooks/set-state-in-effect` failed the build over it, correctly: a link with no key would have cost a second render pass before paint. The fragment comes through `useSyncExternalStore` instead, the same shape `use-media-query` uses for the same reason, and only the genuinely async import touches state. The doc's canonical snippet was wrong and has been corrected. (F17)
+- **Unread is counted by index, and the seen mark is stamped in handlers rather than an effect.** An index has no tie-break problem where a message sharing a millisecond with a timestamp could be counted either way — and stamping on both open and close keeps `setState` out of an effect body, which is an error here. It also meant `closePanel` had to exist beside `togglePanel`: the sheet dismisses itself, and that path would otherwise never mark anything seen. (F19)
 
 ## Mobile and viewport
 

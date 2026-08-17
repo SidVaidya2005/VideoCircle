@@ -69,6 +69,17 @@ test('Home holds at every width', async ({ page }) => {
   for (const viewport of VIEWPORTS) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await expectSweepClean(page, `Home @ ${viewport.name}`);
+
+    // The sweep's two measurements are both horizontal, so neither says anything
+    // about the page's primary action being pushed off the *bottom* — the exact
+    // failure a full-viewport hero risks on a short window, and the one that let
+    // Home pass a green audit at 740x360 with its button below the fold.
+    //
+    // `ratio: 1`, not the default any-intersection: a button whose top edge
+    // clears the fold by a pixel is not a button anyone can press.
+    await expect(page.getByRole('button', { name: 'Start a meeting' })).toBeInViewport({
+      ratio: 1,
+    });
   }
 });
 

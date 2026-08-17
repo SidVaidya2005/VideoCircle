@@ -467,6 +467,41 @@ html {
   min-height: calc(100svh - var(--site-header-h));
 }
 
+/* ---- The hero on a short window -----------------------------------------
+   A phone held sideways is ~360px tall, and the hero's own composition does not
+   fit one: at 740x360 the overline, a 10vw wordmark and a three-line paragraph
+   spend the whole window, and START A MEETING lands entirely below the fold —
+   measured at `viewport ratio 0`, not estimated. The page still scrolls, so
+   nothing overflowed and the horizontal sweep stayed green; a primary action
+   pushed off the *bottom* is invisible to both of its measurements. That is the
+   gap `responsive.spec.ts` now asserts against.
+
+   THIS IS THE VERTICAL AXIS, NOT A FOURTH BREAKPOINT. `code-standards.md` →
+   Responsive bars new *width* breakpoints, because a fourth one means the layout
+   is fighting the content over what sits beside what. Nothing here moves beside
+   anything: the column is the same column, tightened so it fits the window it
+   was given. Height was never on that axis, and `sm:`/`md:`/`lg:` cannot express
+   "the window is short" at all.
+
+   30rem, because it clears every portrait phone in `VIEWPORTS` (the shortest is
+   780px tall) and catches every landscape one. The three values below are what it
+   takes to seat the button above a 360px fold with room to spare — the wordmark
+   drops to the ramp's h1 step rather than a bespoke size, so the mark still lands
+   on the type ramp when it shrinks. */
+@media (height <= 30rem) {
+  .hero-viewport {
+    padding-block: 0.75rem;
+  }
+
+  .hero-stack {
+    gap: 0.5rem;
+  }
+
+  .wordmark-hero {
+    font-size: var(--text-3xl);
+  }
+}
+
 .scope-square {
   --scope-drift: 2rem;
 }

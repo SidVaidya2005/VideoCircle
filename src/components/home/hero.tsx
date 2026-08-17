@@ -51,7 +51,11 @@ export function Hero() {
       />
 
       <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-8">
-        <div className="flex max-w-2xl flex-col items-center gap-6 text-center">
+        {/* `.hero-stack` carries nothing at all until the window is under 30rem
+            tall, where it tightens this column's gap. A class rather than a
+            descendant selector into the utilities: the rule needs a handle, and a
+            named one cannot be broken by re-nesting the markup. See globals.css. */}
+        <div className="hero-stack flex max-w-2xl flex-col items-center gap-6 text-center">
           <SectionOverline>No account · No install</SectionOverline>
 
           {/* `.wordmark-hero` carries the size: a clamp between type-ramp steps,
