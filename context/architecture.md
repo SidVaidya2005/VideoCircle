@@ -90,6 +90,9 @@ VideoCircle/
 ├── CLAUDE.md                          → agent entry point
 ├── context/                           → this documentation set
 │   └── Design/                        → VideoCircle design system (spec, tokens, specimens, mark)
+├── docs/                              → reader-facing docs the README links to:
+│   ├── DEPLOYMENT.md                  → Render setup and pre-deploy checks
+│   └── screenshots/                   → README images, captured with Playwright
 ├── render.yaml                        → Render service + env definition
 ├── components.json                    → shadcn/ui config (aliases, target stylesheet)
 ├── (root configs)                     → package.json, tsconfig.json, next.config.ts,

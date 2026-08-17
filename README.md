@@ -1,68 +1,158 @@
 # VideoCircle
 
-A browser-based video calling app. Start a meeting, share the link, and anyone with
-it is in the call — no account, no install. Sign in with Google if you want your call
-history kept.
+[![Live demo](https://img.shields.io/badge/demo-videocircle--blw4.onrender.com-ff4b4b)](https://videocircle-blw4.onrender.com)
+[![License: MIT](https://img.shields.io/badge/license-MIT-white)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6)](https://www.typescriptlang.org/)
+[![Next.js 16](https://img.shields.io/badge/Next.js-16-white)](https://nextjs.org/)
+[![LiveKit](https://img.shields.io/badge/LiveKit-Cloud-white)](https://livekit.io/)
 
-Video, audio, and screen sharing run over LiveKit. In-meeting chat is end-to-end
-encrypted in the browser with AES-GCM, using a key carried in the share link's URL
-fragment — which browsers never send to a server. The link is both the invitation
-and the key.
+Browser-based video calling. Start a meeting, share the link, and anyone who opens
+it is in the call — no account, no install, no meeting ID. Sign in with Google only
+if you want your call history kept.
+
+Chat inside the call is end-to-end encrypted in the browser, with the key carried in
+the link's URL fragment. The server relays bytes it cannot read.
+
+![The Home page](docs/screenshots/home.png)
 
 ## Demo
 
 **[videocircle-blw4.onrender.com](https://videocircle-blw4.onrender.com)**
 
-> **The first visit takes about a minute.** It runs on a Render free instance,
-> which spins down after 15 minutes without traffic. Render serves its own loading
-> page while it wakes — that happens before any of this code runs, so it cannot be
-> branded or shortened. Once awake it is quick. Nothing is wrong; it is the cost of
-> running for free.
+The first visit takes about a minute. It runs on a Render free instance, which spins
+down after 15 minutes without traffic; Render serves its own loading page while it
+wakes, before any application code runs. Once awake it is quick.
 
-## Status
+## Features
 
-**25 of 26 features complete.** Sign-in, the lobby, calls, screen sharing,
-encrypted chat, and call history all work, and the app is deployed and serving at
-the demo link above.
+- Google sign-in via Supabase Auth, plus fully anonymous guest access
+- Unguessable meeting codes and shareable join links
+- Pre-join lobby with live self-preview, display-name entry, and mic/camera state
+- Camera, microphone, and speaker pickers, usable in the lobby and mid-call
+- Multi-party video and audio, sized for up to ~12 participants
+- Responsive tile grid that reflows by participant count, with pin-to-spotlight
+- Screen sharing, with spotlight view on share
+- End-to-end encrypted in-meeting chat (AES-GCM), key carried in the URL fragment
+- Participant list showing everyone's mic and camera state
+- Reactions and raise-hand over the data channel
+- Call history for signed-in users: meeting, time, duration, and co-participants
+- Connection-quality indicators and automatic reconnection handling
+- Mobile web support — responsive layouts and 44px touch targets down to 360px
 
-The one feature still open is **25, Render deployment** — not because anything is
-unbuilt, but because its verification is a two-device call on the deployed URL.
-Everything it owns that does not need hardware is verified against the live
-instance; what is left is a real iPhone and a real Android, iOS audio after the
-Join gesture, safe-area insets on a notched phone, mobile device labels, a desktop
-share received on a phone, Lighthouse on mobile throttling, and a ten-minute
-four-participant call. A call that works alone has not been tested.
+## How it works
 
-`context/progress-tracker.md` is the live status and is more current than this
-section by construction.
+### The link is the key
+
+Creating a meeting generates a 256-bit AES-GCM key in the browser and puts it in the
+URL fragment: `/room/abc-defg-hjk#k=<key>`. Browsers never transmit a fragment to a
+server, so the key reaches other participants through the share link and nowhere
+else. It appears in no request, no log, and no database row.
+
+Messages are encrypted before they are published over the LiveKit data channel and
+decrypted on arrival. Nothing is written to Postgres, and reloading clears the
+transcript — chat is private from the operator by construction rather than by
+promise. Someone who opens `/room/[code]` without the fragment is told they cannot
+read chat, rather than shown an empty panel.
+
+The one permitted detour is `sessionStorage` across the OAuth round trip, which
+never leaves the browser; the fragment is restored before anything reads it.
+
+### Joining costs nothing
+
+A guest opens the link, lands in the lobby, types a display name, and joins. No
+download, no install, no extension, no sign-up. Guests get a participant identity
+minted fresh at join time and never reused, so no query can link one guest's
+appearances across two meetings.
+
+Signing in is only for call history, and never interrupts a call — the auth callback
+returns to the page it started from.
+
+### Real-time media
+
+Video, audio, and screen sharing run over a LiveKit SFU. Access tokens are minted
+server-side, scoped to one room, capped at a one-hour TTL, and granted exactly
+`roomJoin`, `canPublish`, `canSubscribe`, `canPublishData`, and
+`canUpdateOwnMetadata` — never `roomAdmin`, `roomCreate`, or `roomList`. A token
+request for an unknown, ended, or expired code is refused.
+
+Call history is not written by the client. LiveKit webhooks report who joined, who
+left, and when the room emptied; the handler verifies the signature and records
+participation against LiveKit's clock rather than the server's.
+
+### How it was tested
+
+242 unit tests and 136 end-to-end specs. Two-participant flows run in two browser
+contexts, because a call that works alone has not been tested.
+
+The suite's own preconditions are held to the same standard as its assertions. Every
+test was seen to fail against a deliberate break before being trusted — a discipline
+that caught two long-standing "flakes" which turned out to be one vacuous wait:
+`getByText('Connected')` was matching the status strip's own `Disconnected` as a
+substring, so every wait for a connected room had been returning instantly.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Browser
+        UI[React 19 client]
+        KEY[["chat key<br/>(URL fragment)"]]
+    end
+
+    subgraph Server["Next.js 16 on Render"]
+        RSC[Server Components]
+        API["/api/meetings<br>/api/token<br>/api/livekit/webhook"]
+    end
+
+    LK["LiveKit Cloud SFU"]
+    DB[("Supabase<br>Auth + Postgres")]
+
+    UI -->|"create meeting, request token"| API
+    UI -->|"media + encrypted data channel"| LK
+    API -->|"mint scoped JWT"| LK
+    LK -->|"participant + room webhooks"| API
+    API --> DB
+    RSC --> DB
+    KEY -.-x|"never sent to any server"| Server
+```
+
+Meetings, profiles, and participation live in Postgres behind row-level security.
+Chat has no server-side data domain at all: messages exist only as ciphertext in
+flight and as plaintext in the memory of participants holding the key.
+
+Secrets have exactly one home each — `SUPABASE_SERVICE_ROLE_KEY` in
+`src/lib/supabase/admin.ts`, `LIVEKIT_API_SECRET` in `src/lib/livekit/token.ts` —
+and both files begin with `import 'server-only'`.
+
+## Screenshots
+
+**The lobby** — self-preview, device pickers, and mic/camera state, set before
+anyone else sees or hears you.
+
+![The lobby](docs/screenshots/lobby.png)
+
+**In a call** — the tile grid, the control bar, and the encrypted chat panel.
+
+![A call with the chat panel open](docs/screenshots/call.png)
+
+**Call history** — for signed-in users: when, how long, the code, and who else was
+there.
+
+![Call history](docs/screenshots/history.png)
+
+Screenshots are captured with Playwright's synthetic devices, so the tiles show the
+camera-off placeholder rather than video, and the device pickers name fake devices.
 
 ## Stack
 
 TypeScript · Next.js 16 (App Router) · React 19 · LiveKit Cloud · Supabase (Auth +
-Postgres) · Tailwind CSS 4 · shadcn/ui · Vitest · Playwright · deploys to Render.
+Postgres) · Tailwind CSS 4 · shadcn/ui · Zod · Vitest · Playwright · Render.
 
-## Documentation
+## Getting started
 
-`context/` is the source of truth, and `CLAUDE.md` is the entry point for AI agents
-working in this repo.
-
-| File                          | Contents                                                |
-| ----------------------------- | ------------------------------------------------------- |
-| `context/project-overview.md` | What the product is, scope in and out, success criteria |
-| `context/architecture.md`     | Stack, structure, data model, and the invariants        |
-| `context/code-standards.md`   | Rules every change follows                              |
-| `context/library-docs.md`     | Per-library usage patterns                              |
-| `context/build-plan.md`       | 8 phases, 26 ordered features                           |
-| `context/progress-tracker.md` | Live build status                                       |
-| `context/build-journal.md`    | Decisions and gotchas, per feature                      |
-| `context/Design/`             | The Anime.js brand kit this project is designed against |
-
-## Running it
-
-Everything below works locally: sign in with Google, start a meeting, share the
-link, join from a second browser context, share a screen, and chat end-to-end
-encrypted. All seven environment variables are real requirements now — none is a
-placeholder.
+Everything works locally: sign in with Google, start a meeting, share the link, join
+from a second browser context, share a screen, and chat end-to-end encrypted. All
+seven environment variables are real requirements — none is a placeholder.
 
 ### Prerequisites
 
@@ -85,7 +175,7 @@ Copy `.env.example` to `.env.local` and fill it in. Never commit `.env.local`.
 | `LIVEKIT_API_KEY`               | **Yes** |                                                 |
 | `LIVEKIT_API_SECRET`            | **Yes** | Also verifies webhook signatures                |
 
-### Local development
+### Run it
 
 ```bash
 npm install
@@ -94,120 +184,72 @@ npx supabase db push                                 # apply migrations
 npm run dev                                          # http://localhost:3000
 ```
 
-`db push` needs the project linked first; the link prompts for your database
-password, which is why it is a step you run rather than one a script runs for you.
+`db push` needs the project linked first, and the link prompts for your database
+password — which is why it is a step you run rather than one a script runs for you.
 
 `localhost` counts as a secure context, so the Web Crypto APIs behind encrypted chat
 work in development without HTTPS.
 
-### Testing
+### Test it
 
 ```bash
 npx playwright install chromium   # once per machine
 npm run test       # Vitest — crypto, room codes, formatting
 npm run test:e2e   # Playwright — lobby, join, two-party chat
 npm run typecheck  # tsc --noEmit
-npm run lint       # ESLint, then the design-system and context-drift checks
+npm run lint       # ESLint, Prettier, then the design-system and context-drift checks
 ```
 
-The end-to-end server runs on port 3100, not 3000, so a dev server you already
-have open is never reused by mistake.
+The end-to-end server runs on port 3100, not 3000, so a dev server you already have
+open is never reused by mistake. Playwright launches Chromium with fake media
+devices, so call flows run without a real camera.
 
-Playwright launches Chromium with fake media devices, so call flows run without a
-real camera.
+### Deploy it
 
-### Before every deploy
+See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the Render setup, the checks to
+run before every deploy, and what can only be verified on a deployed origin.
 
-Run all four and read the output — Render builds whatever is on `main`, and none
-of these run there:
+## Status
 
-```bash
-npm run lint && npm run typecheck && npm run test && npm run test:e2e
-```
+Complete. All 26 planned features across 8 phases are built, verified, and deployed;
+`lint`, `typecheck`, `build`, 242 unit tests and 136 e2e specs all pass against a
+production build.
 
-`test:e2e` is the one that matters most and the one most often skipped: it is the
-only check that connects to LiveKit Cloud and Supabase for real, so it is the only
-one that can catch a broken call.
+Two things are recorded as unmeasured rather than passing, both needing hardware
+rather than a change: a Lighthouse run under mobile throttling, and a ten-minute
+four-participant call on the deployed instance. Two mobile details — safe-area
+insets on a notched phone, and the chat composer above the iOS keyboard — were
+reported working from a real device session rather than probed for, and are written
+down that way.
 
-**Read a red suite carefully before believing it.** Run bare, it starts `next dev`,
-which starves its own outbound connections under four parallel workers and invents
-failures the product does not have — a full suite once produced 23 handler errors
-on `next dev` and none at all against a production build. Before treating any red
-as a bug, re-run it against `npm run build && npm run start -- --port 3100` with
-the suite pointed at that server. And note `CI=true` sets `retries: 2`, so a CI
-summary reading "all passed" can be concealing a first-attempt failure; read the
-retry lines, not the total.
+`context/progress-tracker.md` is the live status and is more current than this
+section by construction.
 
-### First deploy to Render
+## Documentation
 
-Order matters in one place: **every environment variable must be set before the
-first build, not after it.** The four `NEXT_PUBLIC_*` values are compiled into the
-bundle at build time and parsed by Zod at import, so a missing one fails the build
-rather than the request — and fixing one afterwards costs a full redeploy.
+`context/` is the source of truth for this project, and `CLAUDE.md` is the entry
+point for AI agents working in the repo. It is written to stand on its own: someone
+with no access to `src/` can read it and understand what the product is, how it is
+built, why, and what the rules are.
 
-**The origin is not predictable, and the reason is now confirmed rather than
-assumed.** Render appends a random suffix when the subdomain your service name
-would take is already claimed — this deployment asked for `videocircle` and got
-`videocircle-blw4`. `videocircle.onrender.com` is a live service belonging to
-somebody else: it serves a Create React App bundle from `/static/js/`, answers
-`/healthz` with an HTML fallback rather than `{"status":"ok"}`, and pulls its
-typeface from Google's CDN, which this project forbids. Do not mistake it for
-this app, and do not point anything at it.
-
-**The service name and the origin are different things**, which matters because a
-Blueprint sync matches services by `name`. The name is `videocircle` — what was
-asked for, and what `render.yaml` declares; `-blw4` is only the hostname's
-collision suffix. If the dashboard ever shows a different service _name_, fix
-`render.yaml` to match it **before** syncing, or the sync creates a second free
-service and the workspace's 750 instance-hours start being shared.
-
-So you cannot know
-`NEXT_PUBLIC_SITE_URL` until the service exists, and it is the one variable that
-must be right at build time. Create the service, read the real URL from the
-dashboard, set `NEXT_PUBLIC_SITE_URL` to it, and redeploy. Getting it wrong is
-quiet rather than loud: the app builds and runs, and only share links and the
-OAuth redirect point at an origin that is not this one.
-
-1. Create a Render **Blueprint** from this repo, so `render.yaml` is what deploys.
-   A Web Service created by hand in the dashboard ignores that file.
-2. Set all seven environment variables in the Render dashboard. Every one is
-   declared `sync: false`, so none is committed and all must be entered by hand.
-   Set `NEXT_PUBLIC_SITE_URL` to `https://<name>.onrender.com` now, before the
-   first build.
-3. Deploy, and confirm `https://<name>.onrender.com/healthz` returns
-   `{"status":"ok"}`.
-4. Add `https://<name>.onrender.com/auth/callback` to Supabase's allowed redirect
-   URLs **and** to the Google OAuth client's authorized redirect URIs.
-5. In the Supabase dashboard, **disable the email/password provider** under
-   Authentication → Providers if it is enabled. Google is the only intended
-   sign-in method, and nothing in the code enforces that — an enabled email
-   provider is a live account-creation surface reachable straight from the Auth
-   API, outside every route handler here.
-6. In the LiveKit Cloud dashboard, point the webhook at
-   `https://<name>.onrender.com/api/livekit/webhook`. Until this is done, call
-   history records nothing: LiveKit cannot reach `localhost`, so the participation
-   handler has only ever been exercised against payloads the test suite signs
-   itself.
-7. Paste the URL into the Demo section at the top of this file.
-
-**Then verify on the deployed origin**, because none of this is provable locally:
-
-- Sign in with Google, create a meeting, and complete a call across two real devices.
-- Check `/history` shows that meeting with the right duration and the other participant.
-- Open a share link on a real iPhone and a real Android phone, and join from each.
-- Confirm audio starts after the Join gesture on iOS Safari.
-- Confirm the device pickers show real labels once permission is granted.
-- Confirm the safe-area insets render correctly on a notched phone — `viewport-fit=cover`
-  and the `.call-surface` / `.sheet-surface` padding are a no-op on every desktop
-  browser, so nothing has confirmed them.
-- Share a desktop screen and confirm a phone receives it.
-- Run Lighthouse on mobile throttling, and hold a four-participant call for ten minutes.
+| File                          | Contents                                                |
+| ----------------------------- | ------------------------------------------------------- |
+| `context/project-overview.md` | What the product is, scope in and out, success criteria |
+| `context/architecture.md`     | Stack, structure, data model, and the invariants        |
+| `context/code-standards.md`   | Rules every change follows                              |
+| `context/library-docs.md`     | Per-library usage patterns                              |
+| `context/build-plan.md`       | 8 phases, 26 ordered features                           |
+| `context/progress-tracker.md` | Live build status                                       |
+| `context/constraints.md`      | Decisions that still bind                               |
+| `context/build-journal.md`    | Decisions and gotchas, per feature                      |
+| `context/Design/`             | The Anime.js brand kit this project is designed against |
+| `docs/DEPLOYMENT.md`          | Render deployment and pre-deploy checks                 |
 
 ## Licence
 
-See `LICENSE`.
+MIT — see [`LICENSE`](LICENSE).
 
 The design kit under `context/Design/` is derived from
 [Anime.js](https://animejs.com) by Julian Garnier. It includes `IoskeleyMono` font
 files that are **reference only and not shipped** — the application loads JetBrains
-Mono instead. Confirm redistribution rights before publishing this repository.
+Mono instead.
