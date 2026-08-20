@@ -9,6 +9,7 @@ import {
   type TrackReferenceOrPlaceholder,
 } from '@livekit/components-react';
 import { Track } from 'livekit-client';
+import { MicOff } from 'lucide-react';
 import { memo, useRef } from 'react';
 
 import { useHandRaised, useParticipantReaction } from '@/components/room/reactions-provider';
@@ -165,11 +166,13 @@ function ParticipantTileImpl({
       <p className="absolute inset-x-2 bottom-2 flex items-center gap-1.5 text-xs tracking-wide uppercase">
         {micMuted && showsPersonSignals ? (
           <>
-            {/* Red marks your own muted mic and nothing else. Twelve red badges on a
-                twelve-person grid would destroy the signal exactly when Leave needs it. */}
-            <span
+            {/* Red marks your own muted mic and nothing else — everyone else's mic-off
+                is carried by the icon's shape, not a second colour, so a full grid
+                never reads as a wall of red badges. A bare dot read as illegible on a
+                remote tile: nothing distinguished "muted" from "connection lost". */}
+            <MicOff
               aria-hidden="true"
-              className={cn('size-1.5 flex-none', isLocal ? 'bg-signal' : 'bg-muted')}
+              className={cn('size-3 flex-none', isLocal ? 'text-signal' : 'text-muted')}
             />
             <span className="sr-only">Muted:</span>
           </>

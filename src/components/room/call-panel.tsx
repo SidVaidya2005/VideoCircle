@@ -1,5 +1,7 @@
 'use client';
 
+import { X } from 'lucide-react';
+
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useMediaQuery } from '@/hooks/use-media-query';
 
@@ -44,7 +46,20 @@ export function CallPanel({ title, open, onClose, children }: CallPanelProps) {
         aria-label={title}
         className="border-line/60 bg-card flex min-h-0 w-72 flex-none flex-col gap-3 overflow-hidden rounded-lg border p-3"
       >
-        <p className="text-muted flex-none text-xs tracking-wider uppercase">{title}</p>
+        <div className="flex flex-none items-center justify-between gap-2">
+          <p className="text-muted text-xs tracking-wider uppercase">{title}</p>
+          {/* Matches SheetContent's own close button — same size, colour and hover,
+              so the panel dismisses the same way on every breakpoint, not just via
+              the control-bar toggle that opened it. */}
+          <button
+            type="button"
+            aria-label={`Close ${title.toLowerCase()}`}
+            onClick={onClose}
+            className="text-ink focus-visible:ring-active ease-out-quint -m-2 inline-flex size-11 flex-none items-center justify-center rounded-md transition-colors duration-150 hover:bg-white/10 focus-visible:ring-2 focus-visible:outline-none"
+          >
+            <X aria-hidden="true" className="size-5" />
+          </button>
+        </div>
         {children}
       </aside>
     );
