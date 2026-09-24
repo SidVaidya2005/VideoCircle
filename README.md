@@ -5,7 +5,7 @@
 [![Code health](https://api.repowise.dev/badge/health/sidvaidya2005/videocircle.svg)](https://repowise.dev/repo/sidvaidya2005/videocircle)
 [![repowise](https://api.repowise.dev/badge/wiki/sidvaidya2005/videocircle.svg)](https://repowise.dev/repo/sidvaidya2005/videocircle)
 [![License: MIT](https://img.shields.io/badge/license-MIT-white)](LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178c6)](https://www.typescriptlang.org/)
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-white)](https://nextjs.org/)
 [![LiveKit](https://img.shields.io/badge/LiveKit-Cloud-white)](https://livekit.io/)
 
@@ -137,9 +137,10 @@ Meetings, profiles, and participation live in Postgres behind row-level security
 Chat has no server-side data domain at all: messages exist only as ciphertext in
 flight and as plaintext in the memory of participants holding the key.
 
-Secrets have exactly one home each — `SUPABASE_SERVICE_ROLE_KEY` in
-`src/lib/supabase/admin.ts`, `LIVEKIT_API_SECRET` in `src/lib/livekit/token.ts` —
-and both files begin with `import 'server-only'`.
+Secrets are confined to named files — `SUPABASE_SERVICE_ROLE_KEY` to
+`src/lib/supabase/admin.ts`, `LIVEKIT_API_SECRET` to `src/lib/livekit/token.ts`
+(minting) and `src/lib/livekit/webhook.ts` (signature verification) — and every
+one of them begins with `import 'server-only'`.
 
 ## Security
 
@@ -370,7 +371,7 @@ built, why, and what the rules are.
 | `context/progress-tracker.md` | Live build status                                       |
 | `context/constraints.md`      | Decisions that still bind                               |
 | `context/build-journal.md`    | Decisions and gotchas, per feature                      |
-| `context/Design/`             | The Anime.js brand kit this project is designed against |
+| `context/Design/`             | The design system, adapted from the Anime.js kit        |
 | `docs/DEPLOYMENT.md`          | Render deployment and pre-deploy checks                 |
 | `docs/ENGINEERING-NOTES.md`   | Bugs that were worth more than their fix                |
 
