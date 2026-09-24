@@ -105,22 +105,19 @@ export async function recordParticipantLeft(params: {
   return data.length > 0 ? 'closed' : 'no_open_row';
 }
 
-export interface CloseMeetingOutcome {
-  participantsClosed: number;
-  meetingClosed: boolean;
-}
-
 /**
- * Ends a meeting and reconciles anyone still recorded as present.
+ * Closes every participation row still open when the LiveKit room finishes.
  *
- * The participation rows are closed *before* `ended_at` is set, mirroring the
- * nightly sweep. The two writes are not in one transaction and do not need to be:
- * each is scoped so re-running it is a no-op, so a failure between them fails the
- * whole request, LiveKit redelivers, and the second write completes while the first
- * matches nothing.
+ * **This does not end the meeting.** A room finishing means it emptied, not that
+ * the conversation is over: a host who joins early and steps out before their guest
+ * arrives empties the room, and ending the meeting then would answer that guest's
+ * click with a 410 on a link that was sent minutes ago. The link stays joinable
+ * until `expires_at`, and `meetings.ended_at` is the nightly sweep's to set.
  *
  * Closing the open rows is the reconciliation for a dropped `participant_left` —
- * which is exactly what a killed browser tab produces.
+ * which is exactly what a killed browser tab produces. Scoped with `left_at is
+ * null`, so a redelivery matches nothing, and a later rejoin opens a fresh row that
+ * the next `room_finished` closes in turn.
  *
  * **No `greatest(joined_at, …)` clamp here, deliberately, even though the nightly
  * sweep needs one against the same `left_at >= joined_at` CHECK.** The difference is
@@ -132,34 +129,20 @@ export interface CloseMeetingOutcome {
  * hope. Adding a clamp anyway would suggest the two cases are the same, and the next
  * reader would take the sweep's clamp for style rather than for the bug it fixes.
  */
-export async function closeMeeting(params: {
+export async function closeOpenParticipations(params: {
   meetingId: string;
-  endedAt: string;
-}): Promise<CloseMeetingOutcome> {
-  const { data: closedRows, error: participantsError } = await supabaseAdmin
+  leftAt: string;
+}): Promise<number> {
+  const { data, error } = await supabaseAdmin
     .from('meeting_participants')
-    .update({ left_at: params.endedAt })
+    .update({ left_at: params.leftAt })
     .eq('meeting_id', params.meetingId)
     .is('left_at', null)
     .select('id');
 
-  if (participantsError) {
-    throw participantsError;
+  if (error) {
+    throw error;
   }
 
-  const { data: closedMeeting, error: meetingError } = await supabaseAdmin
-    .from('meetings')
-    .update({ ended_at: params.endedAt })
-    .eq('id', params.meetingId)
-    .is('ended_at', null)
-    .select('id');
-
-  if (meetingError) {
-    throw meetingError;
-  }
-
-  return {
-    participantsClosed: closedRows.length,
-    meetingClosed: closedMeeting.length > 0,
-  };
+  return data.length;
 }

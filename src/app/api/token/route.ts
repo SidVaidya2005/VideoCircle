@@ -20,7 +20,7 @@ const BodySchema = z.object({
  *
  * **A well-formed code is not authorization.** The meeting must exist and still be
  * joinable, checked here rather than trusted from the page that rendered the
- * lobby: this endpoint is directly callable, and the meeting can close while
+ * lobby: this endpoint is directly callable, and the meeting can expire while
  * someone sits in the lobby deciding.
  */
 export async function POST(request: NextRequest) {

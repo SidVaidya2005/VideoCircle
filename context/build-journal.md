@@ -173,3 +173,17 @@ the new hero survives a phone. It does. Something older did not.
 - **The blast radius was measured, not assumed.** After the fix, 360/390/768/1024 report byte-identical button positions to before; only 740x360 moves, where the button now clears the fold by 38px.
 
 **Verified:** `lint` clean, `typecheck` clean, **242 unit tests** and **136 e2e specs** pass (dev server, `retries: 0`). `npm run build` not re-run — the change is one CSS media block and one className.
+
+### `8.00.5` — an emptied room no longer kills the link *(2026-09-24)*
+
+Found in a whole-project review, not a bug report: nothing in the suite joined a
+meeting after its room had emptied, so nothing could see it.
+
+- **The fault was a conflation, not a bad write.** `room_finished` set `meetings.ended_at`, and `/api/token` refuses any meeting with `ended_at` set. But a LiveKit room finishes after its departure timeout, as soon as the last person leaves. So a host who opened the link to check it worked, or waited and stepped out, ended the meeting for a guest who had not clicked yet, and that guest got `410 This meeting has ended`.
+- **The fix narrows the webhook rather than adding a grace period.** A grace period (end the meeting N minutes after the room empties) only moves the cliff somewhere else. The link already has a lifetime, `expires_at`, and it is the one the product promises. `room_finished` now calls `closeOpenParticipations`, the reconciliation half of the old `closeMeeting`, and `ended_at` is written only by the nightly sweep. No schema change, no migration.
+- **History needed no change, and checking that was the main risk.** `resolveDuration` only reads `ended_at` for a row that is still open, and `room_finished` still closes every open row. The one visible difference is intended: `/history` now offers Rejoin for a meeting until its link expires, since `/api/token` would now accept it.
+- **Left alone deliberately:** `meetingJoinability` still checks `ended` before `expired`. `ended_at` is now only ever set to `expires_at` by the sweep, so a swept link reads "has ended" where an unswept expired one reads "has expired". Both are true, and changing the order would mean changing a pinned unit test for wording alone. The sweep function's database comment still calls it a backstop for a dropped `room_finished`. That is still true for participation rows, and correcting it would take a migration and a `db push`, which isn't worth it for a comment.
+- **Docs reconciled:** `architecture.md` (webhook flow, Lifecycle, `ended_at` column note, a new Data-access invariant), `project-overview.md` → Meetings, `constraints.md` → Hosting and Participation and history.
+
+**Verified:** `lint` clean (4 pre-existing warnings, unchanged), `typecheck` clean, **242 unit tests** pass. **E2E not run**: no `.env.local` in this checkout. The new spec `an emptied room leaves the link joinable` is unproven until it runs.
+

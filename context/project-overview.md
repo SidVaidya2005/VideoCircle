@@ -120,7 +120,9 @@ attend," because the identity is single-use: a fresh one is minted on every join
 
 A meeting is a room code, who created it (null when a guest created it), when it
 started, and when it ended. Meetings are created the moment someone presses "New
-meeting" and are closed out by a LiveKit webhook when the room empties.
+meeting" and the link stays joinable for 24 hours, even if everyone leaves and
+comes back — an empty room does not end the meeting. A nightly sweep closes it
+after that.
 
 ### Participation
 

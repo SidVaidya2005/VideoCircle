@@ -307,7 +307,7 @@ and so would not appear until it mattered.
   → findMeetingByCode(code)        → notFound() when the code names no meeting
     Both checks run before the lobby mounts, so a dead link fails before anyone is
     asked for a camera. Joinability (ended / expired) is NOT decided here — it is
-    re-read at join time, because a meeting can close while someone sits in the lobby.
+    re-read at join time, because a meeting can expire while someone sits in the lobby.
 
 /room/[code] · lobby (client)
   → permission state known-granted?
@@ -375,13 +375,14 @@ LiveKit Cloud  ── webhook POST ──▶  /api/livekit/webhook
   → participant_left    → set left_at on the open row matched by (meeting, identity),
                           scoped `left_at is null` so a redelivery matches nothing.
   → room_finished       → close every still-open participation row for that meeting,
-                          then set meetings.ended_at. Both scoped so re-running is a
-                          no-op, which is why they need no transaction. Closing the
-                          open rows is the reconciliation for a dropped
-                          participant_left — what a killed browser tab produces.
+                          scoped `left_at is null` so re-running is a no-op. This is
+                          the reconciliation for a dropped participant_left — what a
+                          killed browser tab produces. It does NOT set ended_at: an
+                          emptied room is not an ended meeting (see Lifecycle), and
+                          the link stays joinable until expires_at.
 
-ALL THREE TIMESTAMPS COME FROM LIVEKIT'S CLOCK, never now(): joined_at from
-participant.joinedAt, left_at and ended_at from the event's own createdAt. A
+BOTH TIMESTAMPS COME FROM LIVEKIT'S CLOCK, never now(): joined_at from
+participant.joinedAt, left_at from the event's own createdAt. A
 delivery that arrives late, or succeeds only on its third retry, still records when
 the thing happened rather than when we heard about it. One clock source is also what
 keeps the `left_at >= joined_at` CHECK unreachable.
@@ -389,7 +390,7 @@ keeps the `left_at >= joined_at` CHECK unreachable.
 An event naming a room code with no meeting answers 200, not an error: LiveKit
 retries non-2xx, and no retry conjures a meeting that never existed.
 
-Nightly pg_cron sweep (backstop for a dropped room_finished), 03:17 UTC:
+Nightly pg_cron sweep (the only writer of meetings.ended_at), 03:17 UTC:
   → meetings where ended_at is null and expires_at < now() - interval '2 hours'
       → close any participation rows still open,
         left_at = greatest(joined_at, expires_at)
@@ -462,7 +463,7 @@ ever built.
 | `created_by` | `uuid` | Nullable, references `profiles(id)` on delete set null — null means a guest created it |
 | `created_at` | `timestamptz` | Default `now()` |
 | `expires_at` | `timestamptz` | Not null, default `now() + interval '24 hours'`. After this, the code no longer mints tokens |
-| `ended_at` | `timestamptz` | Nullable; set by the `room_finished` webhook or by the expiry sweep |
+| `ended_at` | `timestamptz` | Nullable; set only by the expiry sweep, to `expires_at` — never by `room_finished` |
 
 Indexes: unique on `code`; `(expires_at) where ended_at is null` for the sweep.
 
@@ -473,16 +474,23 @@ Indexes: unique on `code`; `(expires_at) where ended_at is null` for the sweep.
 
 - **No new joins after `expires_at`.** `/api/token` returns `410`.
 - **No token outlives the meeting.** TTL is `min(1h, expires_at − now)`, so a token minted at hour 23 of a 24-hour window is valid for one hour, not four.
-- **A call already in progress is allowed to finish.** LiveKit refreshes the session tokens of connected clients on its own, so participants are not ejected at the boundary. Cutting a live conversation mid-sentence to enforce a 24-hour bookkeeping limit would be worse than letting it drain, and `room_finished` sets `ended_at` when the last person leaves.
-- **The nightly sweep waits 2 hours past `expires_at`, then closes everything — including open participation rows.** It is a backstop for a dropped `room_finished`, not a reaper. The grace period is what reconciles two things that would otherwise conflict: a dropped `room_finished` usually means `participant_left` was dropped too, so a sweep that skipped meetings with open rows would never fix the case it exists for; but closing a meeting people are still sitting in would write a `left_at` for participants who have not left. Two hours past a 24-hour expiry is long enough that a still-running call is implausible and anything remaining is stale bookkeeping.
+- **A call already in progress is allowed to finish.** LiveKit refreshes the session tokens of connected clients on its own, so participants are not ejected at the boundary. Cutting a live conversation mid-sentence to enforce a 24-hour bookkeeping limit would be worse than letting it drain.
+- **The nightly sweep waits 2 hours past `expires_at`, then closes everything — including open participation rows.** It is what ends every meeting, and for participation rows it is the backstop for a dropped `room_finished`. The grace period is what reconciles two things that would otherwise conflict: a dropped `room_finished` usually means `participant_left` was dropped too, so a sweep that skipped meetings with open rows would never fix the case it exists for; but closing a meeting people are still sitting in would write a `left_at` for participants who have not left. Two hours past a 24-hour expiry is long enough that a still-running call is implausible and anything remaining is stale bookkeeping.
 
-**Lifecycle.** Meetings are created on "New meeting" and closed one of two ways: the
-`room_finished` webhook sets `ended_at` when the LiveKit room empties, or a nightly
-`pg_cron` sweep closes anything past `expires_at` that the webhook never closed. The
-sweep is what handles a meeting that was created and never joined — common, since
-pressing "New meeting" and then closing the tab produces exactly that. Such a meeting
-appears in nobody's history, because history is driven by participation rows, not
-meeting rows.
+**Lifecycle.** Meetings are created on "New meeting" and stay joinable until
+`expires_at`, however many times the room empties in between. The LiveKit room is
+not the meeting: LiveKit creates it on the first join, closes it once its departure
+timeout passes after the last person leaves, and creates it afresh on the next join
+under the same code.
+`room_finished` closes the participation rows of that one room session and nothing
+else. Ending the meeting there instead — the original design — made the commonest
+invite fail: a host who joins, waits, and steps out before the guest arrives empties
+the room, and the guest's click then answered `410 This meeting has ended`. A
+meeting is closed only by the nightly `pg_cron` sweep, 2 hours past `expires_at`.
+That is also what handles a meeting that was created and never joined — common,
+since pressing "New meeting" and then closing the tab produces exactly that. Such a
+meeting appears in nobody's history, because history is driven by participation
+rows, not meeting rows.
 
 ### `meeting_participants`
 
@@ -893,7 +901,8 @@ export function apiError(code: string, message: string, status: number) {
 - `/api/token` loads the meeting by code and refuses unless `ended_at is null and now() < expires_at`; a syntactically valid code is never sufficient to mint a token.
 - Every write to `meetings` and `meeting_participants` happens inside a route handler using `supabaseAdmin`; no browser code writes to Postgres.
 - `meeting_participants.is_guest` is a generated column and is never included in an insert or update.
-- Every participation timestamp is LiveKit's, never ours: `joined_at` from `participant.joinedAt`, `left_at` and `ended_at` from the event's `createdAt`. Nothing in the webhook path writes `now()` or relies on a column default for a time, because a retried delivery would then record a duration that never happened — and `tests/e2e/livekit-webhook.spec.ts` asserts against event times deliberately in the past, so a handler that used `now()` fails rather than merely being wrong.
+- Every participation timestamp is LiveKit's, never ours: `joined_at` from `participant.joinedAt`, `left_at` from the event's `createdAt`. Nothing in the webhook path writes `now()` or relies on a column default for a time, because a retried delivery would then record a duration that never happened — and `tests/e2e/livekit-webhook.spec.ts` asserts against event times deliberately in the past, so a handler that used `now()` fails rather than merely being wrong.
+- No webhook writes `meetings.ended_at`. An emptied LiveKit room is not an ended meeting — the link stays joinable until `expires_at`, and only the nightly sweep closes a meeting. `tests/e2e/livekit-webhook.spec.ts` pins it by minting a token after `room_finished`.
 - Every webhook-driven write is idempotent, and that is what makes answering `500` safe. `participant_joined` relies on the partial unique index and treats `23505` as already-recorded; `participant_left` and `room_finished` scope their updates so a redelivery matches no rows. Never add a webhook write that a redelivery would duplicate.
 - No RLS policy on a table contains a subquery against that same table; co-participant checks go through the `private.is_meeting_participant` `security definer` function.
 - Every `security definer` function lives in the `private` schema, never `public`, and sets `search_path = ''` with fully-qualified relations. `private` is not exposed by PostgREST, so nothing in it has an HTTP surface.

@@ -5,7 +5,11 @@ import { apiError, apiOk } from '@/lib/api';
 import { eventTimestampIso } from '@/lib/livekit/participation-event';
 import { webhookReceiver } from '@/lib/livekit/webhook';
 import { findMeetingByCode } from '@/lib/meetings';
-import { closeMeeting, recordParticipantJoined, recordParticipantLeft } from '@/lib/participation';
+import {
+  closeOpenParticipations,
+  recordParticipantJoined,
+  recordParticipantLeft,
+} from '@/lib/participation';
 import { isValidRoomCode } from '@/lib/room-code';
 
 /**
@@ -92,7 +96,7 @@ async function handleParticipantLeft(
 }
 
 /**
- * Records who joined a meeting, who left, and when it ended.
+ * Records who joined a meeting and who left.
  *
  * This route is not user-authenticated. It authenticates the *sender* instead, by
  * verifying LiveKit's signature over the raw request body — which is why the body is
@@ -157,10 +161,12 @@ export async function POST(request: NextRequest) {
         break;
 
       case 'room_finished':
-        // No guard of its own: the event names a room, not a participant.
-        await closeMeeting({
+        // No guard of its own: the event names a room, not a participant. Closes
+        // the participation rows only — an empty room is not an ended meeting, and
+        // the link stays joinable until it expires. See `closeOpenParticipations`.
+        await closeOpenParticipations({
           meetingId: meeting.id,
-          endedAt: eventTimestampIso(event.createdAt, now),
+          leftAt: eventTimestampIso(event.createdAt, now),
         });
         break;
     }

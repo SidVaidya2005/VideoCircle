@@ -15,8 +15,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
  *
  * Returns the joinability columns alongside the id. The page uses existence only;
  * `/api/token` re-reads this same row at join time and decides on `ended_at` and
- * `expires_at`, because a meeting can be closed by its last participant between
- * the page rendering and someone pressing Join.
+ * `expires_at`, because a meeting can expire between the page rendering and
+ * someone pressing Join.
  */
 export async function findMeetingByCode(
   code: string,

@@ -243,16 +243,46 @@ test('room_finished closes a row whose leave never arrived', async ({ request })
     expect(rows).toHaveLength(1);
     expect(new Date(rows[0]?.left_at ?? 0).getTime()).toBe(finishedAt.getTime());
 
-    const { data: closed } = await meeting.db
+    // Idempotent: redelivering must not move left_at or add a row.
+    expect((await postWebhook(request, finish)).status()).toBe(200);
+    const afterRedelivery = await participationRows(meeting.db, meeting.meetingId);
+    expect(afterRedelivery).toHaveLength(1);
+    expect(afterRedelivery[0]?.left_at).toBe(rows[0]?.left_at);
+  } finally {
+    await deleteMeeting(meeting.db, meeting.meetingId);
+  }
+});
+
+test('an emptied room leaves the link joinable', async ({ request }) => {
+  // The host who joins early and steps out before their guest arrives. The room
+  // empties and finishes, and the guest's click must still get in — ending the
+  // meeting here turned every such invite into a 410.
+  const meeting = await openMeeting(request);
+
+  try {
+    await postWebhook(
+      request,
+      participantJoinedPayload({
+        roomCode: meeting.code,
+        identity: guestIdentity(),
+        displayName: 'Host',
+        at: at(meeting, 60),
+      }),
+    );
+    const finish = roomFinishedPayload({ roomCode: meeting.code, at: at(meeting, 120) });
+    expect((await postWebhook(request, finish)).status()).toBe(200);
+
+    const { data: row } = await meeting.db
       .from('meetings')
       .select('ended_at')
       .eq('id', meeting.meetingId)
       .single();
-    expect(new Date(closed?.ended_at ?? 0).getTime()).toBe(finishedAt.getTime());
+    expect(row?.ended_at).toBeNull();
 
-    // Idempotent: redelivering must not move ended_at either.
-    expect((await postWebhook(request, finish)).status()).toBe(200);
-    expect(await participationRows(meeting.db, meeting.meetingId)).toHaveLength(1);
+    const token = await request.post('/api/token', {
+      data: { code: meeting.code, displayName: 'Late Guest' },
+    });
+    expect(token.status()).toBe(200);
   } finally {
     await deleteMeeting(meeting.db, meeting.meetingId);
   }
