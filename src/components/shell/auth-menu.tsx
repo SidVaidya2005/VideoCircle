@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -25,6 +25,7 @@ const SIGN_IN_FAILED = 'Sign-in is unavailable right now. Please try again.';
 export function AuthMenu({ account }: AuthMenuProps) {
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
+  const signOutForm = useRef<HTMLFormElement>(null);
 
   async function startSignIn() {
     setPending(true);
@@ -63,53 +64,59 @@ export function AuthMenu({ account }: AuthMenuProps) {
   const initial = account.displayName.trim().charAt(0).toUpperCase() || '?';
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label={`Account menu for ${account.displayName}`}
-          className={cn(
-            'text-ink flex min-h-11 items-center gap-2 rounded-sm pr-2 pl-1',
-            'transition-colors duration-(--duration-base) ease-in-out',
-            'hover:bg-raised hover:duration-[50ms] hover:ease-out',
-            'focus-visible:ring-active focus-visible:ring-offset-canvas focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none',
-          )}
-        >
-          {/* A typographic initial rather than the Google photo: the brand is type
-              and geometry, and it keeps the visitor's browser from calling out to
-              googleusercontent.com on every page. */}
-          <span
-            aria-hidden="true"
-            className="border-line/60 bg-raised flex size-9 shrink-0 items-center justify-center rounded-xs border text-sm"
+    <>
+      {/* Outside the menu, and always mounted. Choosing an item closes the menu and
+          unmounts its content before the click's default action runs, so a form
+          inside it is disconnected by the time the browser would submit it — and a
+          disconnected form's submission is dropped without a request or an error.
+          POST-only because a GET signout is reachable by link prefetch and by any
+          third-party image tag. */}
+      <form ref={signOutForm} action="/auth/signout" method="post" hidden />
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label={`Account menu for ${account.displayName}`}
+            className={cn(
+              'text-ink flex min-h-11 items-center gap-2 rounded-sm pr-2 pl-1',
+              'transition-colors duration-(--duration-base) ease-in-out',
+              'hover:bg-raised hover:duration-[50ms] hover:ease-out',
+              'focus-visible:ring-active focus-visible:ring-offset-canvas focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none',
+            )}
           >
-            {initial}
-          </span>
-          <span className="hidden max-w-32 truncate text-xs tracking-wide uppercase sm:inline">
-            {account.displayName}
-          </span>
-        </button>
-      </DropdownMenuTrigger>
+            {/* A typographic initial rather than the Google photo: the brand is type
+                and geometry, and it keeps the visitor's browser from calling out to
+                googleusercontent.com on every page. */}
+            <span
+              aria-hidden="true"
+              className="border-line/60 bg-raised flex size-9 shrink-0 items-center justify-center rounded-xs border text-sm"
+            >
+              {initial}
+            </span>
+            <span className="hidden max-w-32 truncate text-xs tracking-wide uppercase sm:inline">
+              {account.displayName}
+            </span>
+          </button>
+        </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end">
-        {/* The trigger truncates and hides the name below `sm`; this is where it is
-            always readable in full. */}
-        <DropdownMenuLabel>{account.displayName}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
+        <DropdownMenuContent align="end">
+          {/* The trigger truncates and hides the name below `sm`; this is where it is
+              always readable in full. */}
+          <DropdownMenuLabel>{account.displayName}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
 
-        <DropdownMenuItem asChild>
-          <Link href="/history">Call history</Link>
-        </DropdownMenuItem>
-
-        {/* A form, because /auth/signout is POST-only — a GET signout is reachable
-            by link prefetch and by any third-party image tag. */}
-        <form action="/auth/signout" method="post">
           <DropdownMenuItem asChild>
-            <button type="submit" className="w-full">
-              Sign out
-            </button>
+            <Link href="/history">Call history</Link>
           </DropdownMenuItem>
-        </form>
-      </DropdownMenuContent>
-    </DropdownMenu>
+
+          {/* onSelect runs before the menu closes, and the form it submits lives
+              outside the menu, so nothing is unmounted under the submission. */}
+          <DropdownMenuItem onSelect={() => signOutForm.current?.requestSubmit()}>
+            Sign out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
   );
 }
