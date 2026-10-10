@@ -114,3 +114,35 @@ The free Render instance spins down after 15 minutes without traffic, and the fi
 request afterwards takes roughly a minute. Render serves its own loading page while
 it wakes — that happens before any application code runs, so it cannot be branded or
 shortened. This is an accepted hosting cost, not a regression to chase.
+
+## Supabase activity check
+
+The [Supabase activity workflow](../.github/workflows/supabase-activity.yml) makes
+three small GET requests directly to the database API each day, without waking
+Render. It uses a publishable key as the `anon` role; RLS hides every row, and the
+job fails if any request fails or unexpectedly returns data. It does not create
+meetings, store chat, or use a service-role key.
+
+Configure these **repository variables**, under Settings → Secrets and variables
+→ Actions → Variables:
+
+- `SUPABASE_URL`: the project's API URL from the Supabase dashboard.
+- `SUPABASE_PUBLISHABLE_KEY`: an enabled `sb_publishable_...` key from Settings →
+  API Keys. This key is public by design; no privileged credential belongs here.
+
+The workflow must reach the default branch before its schedule can run. Open
+Actions → Supabase activity → Run workflow to verify the first run. Enable failed
+workflow notifications in your GitHub account's notification settings; request
+errors fail the job rather than being swallowed.
+
+This is best-effort prevention, not an availability guarantee. Supabase says a
+few user database requests per day are typically sufficient to avoid free-project
+pausing; only a paid plan removes inactivity pausing. A project that is already
+paused must be resumed in the Supabase dashboard before this check can succeed.
+Its expiry sweep resumes afterwards; ordinary app requests do not resume a paused
+project. See [Supabase's pause policy](https://supabase.com/docs/guides/platform/free-project-pausing).
+
+GitHub may delay or drop scheduled jobs, and disables schedules in public
+repositories after 60 days without repository activity. If disabled, re-enable
+this workflow from its Actions page and run it manually. See
+[GitHub's schedule limitations](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).

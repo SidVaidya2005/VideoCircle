@@ -1,0 +1,53 @@
+name: Supabase activity
+
+on:
+  schedule:
+    # Daily at 07:17 UTC (12:47 IST), away from the top-of-hour rush.
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+
+# No checkout, repository writes, or privileged database credentials.
+permissions: {}
+
+concurrency:
+  group: supabase-activity
+  cancel-in-progress: false
+
+jobs:
+  database-check:
+    # Forks must not use this schedule against the original project's database.
+    if: github.repository == 'SidVaidya2005/VideoCircle'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+    steps:
+      - name: Make three read-only database requests
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${SUPABASE_URL:?Set the SUPABASE_URL repository variable}"
+          : "${SUPABASE_PUBLISHABLE_KEY:?Set the SUPABASE_PUBLISHABLE_KEY repository variable}"
+          if [[ ! "$SUPABASE_URL" =~ ^https://[a-z0-9]+\.supabase\.co/?$ ]]; then
+            echo '::error::Use the direct Supabase project URL, not the Render app URL.'
+            exit 1
+          fi
+          if [[ "$SUPABASE_PUBLISHABLE_KEY" != sb_publishable_* ]]; then
+            echo '::error::Use a publishable API key, never a secret or service-role key.'
+            exit 1
+          fi
+
+          for table in profiles meetings meeting_participants; do
+            # RLS admits no rows to anon. An empty result still exercises Postgres.
+            response=$(curl --fail --silent --show-error \
+              --connect-timeout 10 --max-time 20 \
+              --retry 2 --retry-delay 2 \
+              --header "apikey: $SUPABASE_PUBLISHABLE_KEY" \
+              "${SUPABASE_URL%/}/rest/v1/${table}?select=id&limit=1")
+            if [[ "$response" != '[]' ]]; then
+              echo "::error::Expected RLS to hide every row in ${table}."
+              exit 1
+            fi
+            echo "${table}: database reachable; no rows exposed."
+          done

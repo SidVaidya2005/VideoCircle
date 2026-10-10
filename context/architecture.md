@@ -88,6 +88,9 @@ and any toast primitive.
 ```
 VideoCircle/
 ├── CLAUDE.md                          → agent entry point
+├── .github/workflows/
+│   └── supabase-activity.yml           → daily read-only database activity, outside
+│                                        Render; setup in docs/DEPLOYMENT.md
 ├── context/                           → this documentation set
 │   └── Design/                        → VideoCircle design system (spec, tokens, specimens, mark)
 ├── docs/                              → reader-facing docs the README links to:
@@ -270,6 +273,7 @@ VideoCircle/
 | `supabase/migrations` | Schema, indexes, and RLS policies as SQL. Schema is never mutated from application code. |
 | `private` (DB schema) | Every `security definer` function. Not exposed by PostgREST, so nothing in it is reachable as RPC. |
 | `tests` | Vitest and Playwright specs. No production code imports anything from here. |
+| `.github/workflows/supabase-activity.yml` | External database activity check. Uses the publishable API key as `anon`; existing RLS hides every row. No application request, database write, or privileged credential. Configuration and scheduling limits live in `docs/DEPLOYMENT.md`. |
 
 ---
 

@@ -187,3 +187,11 @@ meeting after its room had emptied, so nothing could see it.
 
 **Verified:** `lint` clean (4 pre-existing warnings, unchanged), `typecheck` clean, **242 unit tests** pass. **E2E not run**: no `.env.local` in this checkout. The new spec `an emptied room leaves the link joinable` is unproven until it runs.
 
+
+## 2026-10-10 — Supabase activity follow-up (activation pending)
+
+- Added an external daily database check, with a manual trigger, using the public publishable key under existing RLS. All requests bypass Render, read at most one id, and must return an empty array. The workflow needs no checkout or repository token permissions. No schema, policy or application code changed.
+- Restricted the previous no-pinger constraint to Render and recorded the approved direct-to-Supabase exception. Corrected the claim that an app request resumes a paused Supabase project: dashboard resumption is required. Setup and GitHub schedule limitations are in `docs/DEPLOYMENT.md`.
+- Verified the exact workflow step against the live project: all three reads returned HTTP success and no rows. Missing/invalid/privileged keys, a Render URL, and simulated unexpected visible data all failed, without printing response bodies.
+- Verified: `actionlint`, `npm run lint` (four pre-existing inline-style warnings), `npm run typecheck`, and `npm run test` (242 passing). The call e2e suite was not run because this change touches no call/application code; the existing webhook regression check remains a separate follow-up.
+- Both public repository variables were saved and verified in GitHub settings. Pending: explicit commit/push approval and a successful manually dispatched GitHub run. No scheduled run has been claimed yet.
