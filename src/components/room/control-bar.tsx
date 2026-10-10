@@ -11,6 +11,7 @@ import {
   MonitorOff,
   MonitorUp,
   MoreHorizontal,
+  SwitchCamera,
   Users,
   Video,
   VideoOff,
@@ -31,6 +32,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useCallShortcuts } from '@/hooks/use-call-shortcuts';
+import { useCameraSwitch } from '@/hooks/use-camera-switch';
 import { useIsScreenShareSupported } from '@/hooks/use-is-screen-share-supported';
 import { readChatKeyFromHash } from '@/lib/crypto/chat-key';
 import { env } from '@/lib/env';
@@ -71,7 +73,7 @@ interface SecondaryControl {
   pressed?: boolean;
   /** Rendered as a small count on the control. Participants only, for now. */
   badge?: number;
-  /** Screen share only, and only until the room is connected. See below. */
+  /** An operation that cannot currently start, including an in-flight lens switch. */
   disabled?: boolean;
 }
 
@@ -88,6 +90,7 @@ export function ControlBar({
   // Capability, not width: absent on every phone, present inside MORE on a narrow
   // desktop window. Absence keeps one meaning — your device cannot do this.
   const screenShareSupported = useIsScreenShareSupported();
+  const cameraSwitch = useCameraSwitch();
 
   // The bar renders as soon as the room tree mounts, which is one to three
   // seconds before the handshake finishes — and that is exactly when someone who
@@ -134,6 +137,7 @@ export function ControlBar({
   }
 
   function toggleCamera() {
+    if (cameraSwitch.busy) return;
     disarmLeave();
     void localParticipant.setCameraEnabled(!isCameraEnabled);
   }
@@ -155,8 +159,22 @@ export function ControlBar({
 
   useCallShortcuts({ onToggleMicrophone: toggleMicrophone, onToggleCamera: toggleCamera });
 
-  // Screen share leads the secondary group, as in the control-states specimen.
+  // Device actions lead the secondary group, before panels and invitations.
   const secondaryControls: readonly SecondaryControl[] = [
+    ...(cameraSwitch.available
+      ? [
+          {
+            key: 'camera-switch',
+            label: 'Switch camera',
+            icon: SwitchCamera,
+            disabled: cameraSwitch.busy,
+            onClick: () => {
+              disarmLeave();
+              void cameraSwitch.switchCamera();
+            },
+          },
+        ]
+      : []),
     ...(screenShareSupported
       ? [
           {
@@ -221,6 +239,11 @@ export function ControlBar({
 
   return (
     <TooltipProvider>
+      {cameraSwitch.error ? (
+        <p role="status" className="text-muted flex-none text-center text-xs">
+          {cameraSwitch.error}
+        </p>
+      ) : null}
       <div className="border-line/60 bg-card mx-auto flex w-max max-w-full flex-none items-center gap-2 rounded-lg border px-3 py-2.5">
         <ControlButton
           label={isMicrophoneEnabled ? 'Mute microphone' : 'Unmute microphone'}
@@ -237,10 +260,11 @@ export function ControlBar({
           // Neutral, not red: off-camera is not a warning, which is the same call
           // the lobby's DeviceToggle made. The slashed icon carries the state.
           toggled={!isCameraEnabled}
+          disabled={cameraSwitch.busy}
           onClick={toggleCamera}
         />
 
-        {/* Inline from sm: up. Below that the same three live in the menu. */}
+        {/* Inline from sm: up. Below that the same actions live in the menu. */}
         {secondaryControls.map((control) => (
           <ControlButton
             key={control.key}

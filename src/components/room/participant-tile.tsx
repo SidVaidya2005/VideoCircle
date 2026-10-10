@@ -8,13 +8,14 @@ import {
   VideoTrack,
   type TrackReferenceOrPlaceholder,
 } from '@livekit/components-react';
-import { Track } from 'livekit-client';
+import { LocalVideoTrack, Track } from 'livekit-client';
 import { MicOff } from 'lucide-react';
 import { memo, useRef } from 'react';
 
 import { useHandRaised, useParticipantReaction } from '@/components/room/reactions-provider';
 import { TileMenu } from '@/components/room/tile-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useCameraMirror } from '@/hooks/use-camera-mirror';
 import { toInitials } from '@/lib/initials';
 import { connectionQualityLabel } from '@/lib/livekit/connection-quality';
 import { tileLabels } from '@/lib/room-tile';
@@ -40,6 +41,10 @@ function ParticipantTileImpl({
   const { participant } = trackRef;
   const isLocal = participant.isLocal;
   const isScreenShare = trackRef.source === Track.Source.ScreenShare;
+  const cameraTrack = trackRef.publication?.track;
+  const mirrored = useCameraMirror(
+    isLocal && !isScreenShare && cameraTrack instanceof LocalVideoTrack ? cameraTrack : undefined,
+  );
 
   // Muting, speaking, a raised hand and a degraded connection all describe the
   // *person*, and a person sharing their screen already has a camera tile of
@@ -134,11 +139,9 @@ function ParticipantTileImpl({
         <VideoTrack
           trackRef={trackRef}
           // object-contain, not cover: a 4:3 webcam letterboxes into the frame
-          // rather than losing the top of someone's head. Mirrored for the local
-          // participant only — a self-view is a mirror, a remote tile is not.
-          // Never mirrored on a share: only a self-*camera* is a mirror, and a
-          // flipped spreadsheet is unreadable.
-          className={cn('size-full object-contain', isLocal && !isScreenShare && '-scale-x-100')}
+          // rather than losing the top of someone's head. Only the local front
+          // camera is mirrored; rear cameras, remote video and shares are not.
+          className={cn('size-full object-contain', mirrored && '-scale-x-100')}
         />
       ) : (
         <div className="bg-raised absolute inset-0 flex items-center justify-center">

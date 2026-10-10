@@ -3,19 +3,20 @@
 import type { LocalVideoTrack } from 'livekit-client';
 import { useEffect, useRef } from 'react';
 
+import { useCameraMirror } from '@/hooks/use-camera-mirror';
+import { cn } from '@/lib/utils';
+
 interface SelfPreviewProps {
   track: LocalVideoTrack;
 }
 
 /**
- * The local camera, mirrored and letterboxed.
- *
- * Mirrored because a self-preview is a mirror: raising your left hand has to move
- * the hand on the left, or it reads as someone else's video. Only this preview is
- * flipped — remote tiles never are.
+ * The local camera, letterboxed. Only a front-facing self-view is mirrored;
+ * a rear-facing camera shows the scene normally, including readable text.
  */
 export function SelfPreview({ track }: SelfPreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const mirrored = useCameraMirror(track);
 
   useEffect(() => {
     const element = videoRef.current;
@@ -39,7 +40,7 @@ export function SelfPreview({ track }: SelfPreviewProps) {
       playsInline
       // object-contain, not cover: a 4:3 webcam letterboxes into the 16:9 frame
       // rather than having the top of someone's head cropped off.
-      className="size-full -scale-x-100 object-contain"
+      className={cn('size-full object-contain', mirrored && '-scale-x-100')}
     />
   );
 }

@@ -85,6 +85,25 @@ Not yet built: `types/meeting.ts` — domain types still live beside their consu
 and nothing has yet needed a shared one. Deliberately absent: any `loading.tsx`,
 and any toast primitive.
 
+**Post-build camera correction (10 Oct 2026):** `src/hooks/use-camera-switch.ts`
+cycles the enumerated cameras through LiveKit's room device switch, without
+reconnecting or touching audio. The control is inline at `sm:` and up and under
+MORE below it; it appears only with multiple cameras after camera permission.
+While capture changes, another switch and the camera toggle are disabled; a
+failed acquisition restores the previous lens. Each switch/recovery has a bounded
+deadline; if capture stalls or restoration fails, the camera is stopped and
+unpublished, with late capture disposed by the SDK and a rendered retry message.
+Switching while off records the next lens without acquiring a track, using the
+room's pending device rather than the stopped source. Enumeration remains
+available when joining camera-off and never prompts. A successful lens choice uses
+the existing lobby preferences. `src/hooks/use-camera-mirror.ts` is shared by
+the lobby self-preview and local participant tile, subscribes to track restart
+and unmute, and reads actual source-track facing metadata. Front and unspecified
+desktop cameras mirror locally; rear cameras, remote tiles and screen shares do
+not. `tests/e2e/camera-switch.spec.ts` covers these flows, with virtual capture in
+`tests/e2e/support/cameras.ts` and a real LiveKit connection between two contexts;
+phone hardware support still needs a real-device check.
+
 ```
 VideoCircle/
 ├── CLAUDE.md                          → agent entry point
@@ -922,6 +941,7 @@ export function apiError(code: string, message: string, status: number) {
 **Media**
 
 - Local camera and microphone tracks are acquired only through LiveKit APIs (`createLocalTracks`, `Room`, `setCameraEnabled`, `setMicrophoneEnabled`); `navigator.mediaDevices.getUserMedia` is never called directly in application code.
+- Mirroring is a local display choice, never a change to transmitted frames. Use the active source track's facing direction, not a device label: a front self-view may mirror, a rear-camera view must not. The post-build camera correction above describes the unspecified-direction desktop fallback and restart subscription.
 - Lobby preview tracks are stopped before, or handed to, the room connection — a preview track is never left running after join.
 - A device turned off in the lobby is **released, not muted**. `track.stop()`, and the reference dropped. Muting leaves the hardware light on under a UI that says off, and the SDK defers `setDeviceId` on a muted track, so a device picker would silently stop working.
 - Device enumeration passes `requestPermissions: false`. `Room.getLocalDevices` will otherwise raise a permission prompt of its own, and the lobby owns the only prompt in the product.

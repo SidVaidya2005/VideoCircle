@@ -31,20 +31,19 @@ async function enumerate(): Promise<MediaDeviceLists | null> {
 /**
  * The cameras and microphones this browser can see.
  *
- * `labelsReady` gates the first read rather than a bare mount effect, because
- * `enumerateDevices` returns entries with **empty labels** until media permission
- * has been granted. Enumerating too early fills the pickers with blank rows that
- * never repopulate, so the caller passes `true` only once permission is known or
- * a track has actually been acquired.
+ * Pickers gate `enumerationReady` until permission or acquisition, because
+ * `enumerateDevices` returns empty labels before permission is granted. A
+ * count-only control can enumerate immediately: it renders no labels and this
+ * read never requests permission or starts capture.
  *
  * Re-read on `devicechange`, which is what makes plugging in a headset mid-lobby
  * appear without a reload.
  */
-export function useMediaDevices(labelsReady: boolean): MediaDeviceLists {
+export function useMediaDevices(enumerationReady: boolean): MediaDeviceLists {
   const [devices, setDevices] = useState<MediaDeviceLists>(EMPTY);
 
   useEffect(() => {
-    if (!labelsReady) return;
+    if (!enumerationReady) return;
 
     let cancelled = false;
     const mediaDevices = navigator.mediaDevices;
@@ -63,7 +62,7 @@ export function useMediaDevices(labelsReady: boolean): MediaDeviceLists {
       cancelled = true;
       mediaDevices.removeEventListener('devicechange', apply);
     };
-  }, [labelsReady]);
+  }, [enumerationReady]);
 
   return devices;
 }
