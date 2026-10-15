@@ -4,166 +4,239 @@
 > **Read before writing code**; obey on every change.
 > **Relates to:** derives from the stack in `architecture.md`.
 
-Implementation rules and conventions for the entire project. The AI agent must
-follow these in every session without exception. These rules prevent pattern
-drift across sessions.
+These implementation rules apply across the project. The AI agent must follow
+them in every session without exception, so the code stays consistent from one
+session to the next.
 
 ---
 
 ## Engineering Mindset
 
-The AI agent on this project operates as a senior engineer. This means:
+The AI agent is expected to work as a senior engineer would:
 
-- **Think before implementing** — understand what is being built and why before writing a single line
-- **Read context files first** — never assume, always verify against `architecture.md` and `project-overview.md`
-- **Scope is sacred** — only build what the current feature requires; never go beyond scope even if it seems helpful
-- **Every feature must be testable** — if it cannot be verified immediately after implementation, it is incomplete
-- **Clean over clever** — simple readable code a junior can follow beats clever abstractions
-- **One thing at a time** — complete one feature fully before touching the next
-- **Failures are expected** — handle errors deliberately; never let one failure crash everything
-- **Media code fails in ways unit tests don't catch** — permission denials, missing devices, and dropped connections are normal states with real UI, not edge cases to bolt on later
+- Understand what is being built and why before writing any code.
+- Read the context files first. Verify assumptions against `architecture.md` and `project-overview.md`.
+- Build only what the current feature requires. Do not expand the scope, even when an addition seems helpful.
+- Make every feature testable. A feature that cannot be verified immediately after implementation is incomplete.
+- Write simple, readable code that a junior developer can follow. Prefer that to clever abstractions.
+- Complete each feature fully before starting the next.
+- Expect failures and handle errors deliberately. One failure must not crash everything.
+- Treat permission denials, missing devices, and dropped connections as normal states with their own UI. Unit tests do not catch all media failures, so these states must be part of the feature from the start.
 
 ---
 
 ## TypeScript
 
-- `strict: true`, plus `noUncheckedIndexedAccess` and `noImplicitOverride`. Never relax a compiler flag to make an error go away.
-- `any` is banned. Use `unknown` at boundaries and narrow it. When a third-party type is genuinely wrong, write a narrow local type and a one-line comment explaining why.
-- Non-null assertions (`!`) are banned outside two files. `src/lib/env.ts`, where Zod has already guaranteed presence; and `src/lib/supabase/proxy.ts`, which cannot import that module — it runs in the Edge runtime under a bundle-size budget and importing the Zod-parsed env would pull Zod in with it. Both values it asserts are `NEXT_PUBLIC_`, inlined at build time, and already validated at boot by every other module that imports `env.ts`. Everywhere else, narrow with a guard instead.
-- `as` casts are allowed only for `JSON.parse` results that are immediately validated, and for `satisfies`-style widening. Never cast to silence the compiler.
-- Prefer `interface` for object shapes that are extended or implemented, `type` for unions, intersections, and function types.
-- All exported functions declare an explicit return type. Local helpers may infer.
-- Async code uses `async`/`await`; no raw `.then()` chains. Every `await` that can reject is inside a `try` or has its rejection deliberately propagated to a boundary that handles it.
-- Data is immutable by default: build new arrays and objects rather than mutating parameters. Mutation is acceptable inside a single function on a value it created.
-- No default exports anywhere except Next.js files that require them (`page.tsx`, `layout.tsx`, `error.tsx`, `not-found.tsx`). `proxy.ts` exports a named `proxy` function, not a default.
-- No enums — use `as const` objects with a derived union type.
+- Enable `strict: true`, `noUncheckedIndexedAccess`, and `noImplicitOverride`. Never weaken a compiler flag to remove an error.
+- Do not use `any`. Use `unknown` where data enters the code, then narrow it before use. If a third-party type is wrong, define a narrow local type and explain why in a one-line comment.
+- Non-null assertions (`!`) are allowed in only two files: `src/lib/env.ts`, where Zod has already guaranteed that the values exist, and `src/lib/supabase/proxy.ts`.
+
+  The proxy helper cannot import the parsed env module. It runs in the Edge runtime
+  with a bundle-size budget, and that import would include Zod. Both values it
+  asserts are `NEXT_PUBLIC_` values, inlined at build time and already validated
+  at boot by every other module that imports `env.ts`. Everywhere else, use a
+  guard to narrow the value.
+- Use `as` casts only for `JSON.parse` results that are immediately validated or for `satisfies`-style widening. Never use a cast just to silence the compiler.
+- Prefer `interface` for object shapes that will be extended or implemented. Use `type` for unions, intersections, and function types.
+- Declare an explicit return type on every exported function. Local helpers may use inferred return types.
+- Write async code with `async`/`await`, without raw `.then()` chains. Put every `await` that can reject inside a `try`, or deliberately pass its rejection to a boundary that handles it.
+- Treat data as immutable by default. Build new arrays and objects rather than changing parameters. A function may mutate a value it created itself, within that function.
+- Use default exports only in Next.js files that require them (`page.tsx`, `layout.tsx`, `error.tsx`, `not-found.tsx`). In `proxy.ts`, export the named `proxy` function.
+- Use `as const` objects with a derived union type instead of enums.
 
 ---
 
 ## Next.js Conventions
 
-- App Router only. There is no `pages/` directory and none may be added.
-- Server Components are the default. A file gets `'use client'` only when it needs state, effects, browser APIs, or event handlers. Push the directive as far down the tree as possible.
-- All LiveKit and Web Crypto code is client-side; keep those components small and leaf-ward so the surrounding page stays a Server Component.
-- Data fetching for pages happens in Server Components with the Supabase server client. Client Components do not fetch page data on mount.
-- Mutations go through route handlers under `src/app/api/`, called with `fetch` from the client. Server Actions are not used in this project — the same endpoints must be callable from a client that already holds a LiveKit connection, and an explicit HTTP contract keeps that honest.
+- Use only App Router. There is no `pages/` directory, and none may be added.
+- Use Server Components by default. Add `'use client'` only when a file needs state, effects, browser APIs, or event handlers. Keep the directive as far down the component tree as possible.
+- Keep all LiveKit and Web Crypto code on the client side. Keep those components small and near the ends of the component tree, so the surrounding page can remain a Server Component.
+- Fetch page data in Server Components using the Supabase server client. Client Components must not fetch page data when they mount.
+- Send mutations through route handlers under `src/app/api/`, using `fetch` from the client. This project does not use Server Actions. The same endpoints must work for a client that already holds a LiveKit connection; an explicit HTTP contract makes that requirement clear.
 - `params` and `searchParams` are Promises in Next.js 16; always `await` them.
 - `cookies()` and `headers()` are async; always `await` them.
 - Route handlers are `export async function POST(request: NextRequest)` and are never marked `'use client'`.
-- A route that reads cookies or the session is dynamic by nature — do not add `export const dynamic` unless a specific caching bug requires it, and comment why if you do.
-- `/room/[code]` renders its lobby and call states in one client component tree. Do not split them into separate routes; navigating between them would tear down media tracks.
-- Never read `window`, `document`, `navigator`, or `location` outside a `'use client'` file, and never at module top level — read them inside effects or event handlers so server rendering does not crash.
+- A route that reads cookies or the session is already dynamic. Add `export const dynamic` only to address a specific caching bug, and leave a comment explaining why.
+- Render the lobby and call states for `/room/[code]` in one client component tree. Separate routes would destroy media tracks when navigating between them, so do not split them.
+- Read `window`, `document`, `navigator`, and `location` only inside a `'use client'` file, within effects or event handlers. Never read them at module top level, where they would crash server rendering.
 - Use `next/link` for navigation and `useRouter()` from `next/navigation` for programmatic pushes.
 
 ---
 
 ## Design System and Styling
 
-The project follows the **VideoCircle design system** in `context/Design/` — a
-terminal-dark, mono-only brand built on warm near-black, adapted from the
-MIT-licensed Anime.js kit. `context/Design/README.md` is the full specification and
-`context/Design/colors_and_type.css` is the token ground truth. Read both before
-building any UI. `context/Design/preview/*.html` are the specimens to lift from —
-including `control-states.html`, `tile-label.html`, and `video-scrim.html`, which
-carry the call-specific rules. `context/Design/ui_kits/` is upstream reference
-only: read it for layout, never copy it. Its playground's fixed top-params /
-bottom-controls layout is the direct model for the meeting room.
+Use the **VideoCircle design system** in `context/Design/`. It has a dark,
+terminal-style appearance, a single monospaced typeface, and warm near-black
+backgrounds. It is adapted from the MIT-licensed Anime.js kit.
+
+Read `context/Design/README.md`, the full specification, and
+`context/Design/colors_and_type.css`, the source of truth for tokens, before
+building any UI. Use the specimens in `context/Design/preview/*.html` as the
+starting point. The call-specific rules are in `control-states.html`,
+`tile-label.html`, and `video-scrim.html`.
+
+`context/Design/ui_kits/` is upstream reference only. Read it for layout, but
+never copy it. Its playground places parameters at the top and controls at the
+bottom in fixed positions; that layout is the direct model for the meeting room.
 
 ### Non-negotiables, taken from the kit
 
-1. **Warm near-black `#252423`.** Never true black, never cool grey.
-2. **One family, everywhere.** No second typeface, no exceptions for chat or fine print.
-3. **Red `#ff4b4b` is the signal**, used sparingly — never as general decoration.
-4. **No emoji, ever. No generated illustrations.** The brand is type and geometry. Copy real assets from `context/Design/assets/`.
-5. **Motion is expected.** Use the brand's own easing curves; every surface should have at least one moving thing.
-6. **Wide-tracked SCREAMING CAPS** for overlines and control labels. Never italic — the font is structural, not expressive.
+1. Use **warm near-black `#252423`**. Never use true black or cool grey.
+2. Use **one typeface family everywhere**, including chat and fine print. There are no exceptions.
+3. Use **red `#ff4b4b` as the signal**, sparingly. Never use it for general decoration.
+4. **Never use emoji or generated illustrations.** The brand uses type and geometry. Copy real assets from `context/Design/assets/`.
+5. **Motion is expected.** Use the brand's easing curves. Every surface should include at least one moving element.
+6. Use **widely spaced SCREAMING CAPS** for overlines and control labels. Never use italics; the font provides structure rather than expression.
 
 ### Tokens
 
-- All brand variables live in `:root` in `src/app/globals.css`, mirroring **the `:root` block only** of `context/Design/colors_and_type.css` so the kit stays the source. The file's `@font-face` rules and semantic type roles are not copied — JetBrains Mono loads through `next/font/google` instead. A `@theme inline` block maps them to readable Tailwind utility names. Those two blocks are the only place a literal value may appear.
+- Keep all brand variables in `:root` in `src/app/globals.css`. Mirror **only the `:root` block** from `context/Design/colors_and_type.css`, so the kit remains the source. Do not copy its `@font-face` rules or semantic type roles; load JetBrains Mono through `next/font/google` instead.
+
+  Map the variables to readable Tailwind utility names in a `@theme inline` block.
+  Literal values may appear only in those two blocks.
 - Utility names map as: `bg-canvas` (bg-1) → `bg-card` (bg-2) → `bg-raised` (bg-3) → `bg-overlay` (bg-4) → `bg-lifted` (bg-5); `text-ink` (fg-1), `text-ink-2` (fg-2), `text-muted` (fg-3), `text-faint` (fg-4), `border-line` (fg-5); `signal` for red-1.
-- Never write a raw colour (`#hex`, `rgb()`, `oklch()`) outside those two blocks. The kit ships `_adherence.eslint.mjs`, a flat-config fragment enforcing this on `.ts`/`.tsx`; wire it into `eslint.config.mjs` in feature 02. ESLint cannot lint CSS, so `globals.css` itself is guarded by review.
-- Never write arbitrary-value utilities (`w-[327px]`, `text-[13.5px]`) for anything a token covers. Arbitrary values are for genuinely one-off geometry only, with a comment.
+- Never write a raw colour (`#hex`, `rgb()`, `oklch()`) outside those two blocks. The kit's `_adherence.eslint.mjs` flat-config fragment enforces this for `.ts`/`.tsx`; wire it into `eslint.config.mjs` in feature 02. Review must enforce the rule in `globals.css`, because ESLint cannot lint CSS.
+- Do not use arbitrary-value utilities (`w-[327px]`, `text-[13.5px]`) where a token exists. Use arbitrary values only for geometry needed in a single place, with a comment.
 - Compose class names with `cn()` from `src/lib/utils.ts`. Do not build class strings with template literals.
 
 ### Typography
 
-- **JetBrains Mono**, loaded through `next/font/google`, which self-hosts it — no external request at runtime. It is the kit's own documented substitute for IoskeleyMono, which is licensed and therefore not shipped.
-- The `--font-mono` fallback stack stays wired so swapping IoskeleyMono back in later is a change to `globals.css` alone.
-- Line-height is tight: `leading-tight` (1.1) and `leading-snug` (1.25) for headings, `leading-normal` (1.5) reserved for body paragraphs.
-- Overlines and control labels are uppercase at `text-xs` with `tracking-wide` (0.06em). This is the signature gesture — use it for section labels, button text, and status strips.
+- Load **JetBrains Mono** through `next/font/google`. This self-hosts it, with no external request at runtime. The kit documents it as the substitute for IoskeleyMono, which is licensed and therefore not shipped.
+- Keep the `--font-mono` fallback stack connected. Restoring IoskeleyMono later should require changing only `globals.css`.
+- Use tight line-height for headings: `leading-tight` (1.1) or `leading-snug` (1.25). Reserve `leading-normal` (1.5) for body paragraphs.
+- Set overlines and control labels in uppercase, at `text-xs` with `tracking-wide` (0.06em). Use this signature treatment for section labels, button text, and status strips.
 - Code identifiers render verbatim and lowercase (`inOutQuint`, not "In Out Quint"). Room codes follow the same rule.
 
 ### Colour discipline in a call
 
-The kit's rule is one accent hue per screen. A video call has several competing
-status colours, so the allocation is fixed here rather than decided per component:
+The kit allows one accent hue per screen. A video call has several statuses to
+show, so every component must follow the same colour allocation:
 
-- **Red (`signal`)** — destructive and self-warning only: the Leave control, and *your own* mic showing as muted. Nothing else.
-- **White fill (`--white-1`) with dark text** — the active/engaged state for any toggle. This is the kit's own press-state inversion; it is what an enabled control looks like, not red.
-- **Neutral steps** — everything else. Remote participants' mute indicators are `text-muted`, not red; twelve red badges on a twelve-person grid would destroy the signal.
-- **Connection quality** — **no colour at all.** This line used to offer `green-1` / `yellow-1` / `red-1` as a small marker, and that was wrong: `signal` *is* `red-1`, and `architecture.md` reserves it for the Leave control and your own muted mic. A red quality dot would have been a third meaning for the one colour the brand uses sparingly, multiplied by up to twelve tiles. Degraded connections are marked typographically instead — a word in the tile's label row, rendered only for `Poor` and `Lost`. See `constraints.md` → The call. (Corrected at F23, the feature that first needed it.)
-- **Cyan and green accents** — reserved for the logo burst and completion moments, per the kit. Do not repurpose them for UI state.
-- **Any text over live video rides a scrim.** Every other contrast pairing assumes a known `--bg-*`; a tile label sits on arbitrary pixels, and a participant backlit by a window erases `--fg-3` outright. Use `--scrim-tile` for tile labels and `--scrim-flat` for full overlays, with `--fg-1` text on top — never a muted grey. See `preview/video-scrim.html`.
+- Reserve **red (`signal`)** for the Leave control and the warning that *your own* mic is muted. These are its only uses.
+- Show an active or engaged toggle with a **white fill (`--white-1`) and dark text**. This follows the kit's inverted press state. Enabled controls use this treatment rather than red.
+- Use the **neutral colour steps** for everything else. Remote participants' mute indicators use `text-muted`. Twelve red badges in a twelve-person grid would overwhelm the signal.
+- Show **connection quality without colour**. Use a word in the tile's label row, and render it only for `Poor` and `Lost`. See `constraints.md` → The call.
+
+  This rule previously allowed a small `green-1` / `yellow-1` / `red-1` marker.
+  That was incorrect: `signal` is `red-1`, and `architecture.md` reserves it for
+  Leave and the local muted mic. A red quality dot would add a third meaning,
+  repeated across as many as twelve tiles. This was corrected at F23, the first
+  feature that needed it.
+- Reserve **cyan and green accents** for the logo burst and completion moments, as the kit requires. Do not use them for UI state.
+- Put **a scrim behind every piece of text over live video**. Other contrast pairings assume a known `--bg-*`, but a tile label can sit over any pixels. A participant in front of a bright window can make `--fg-3` disappear. Use `--scrim-tile` for tile labels and `--scrim-flat` for full overlays, with `--fg-1` text above them. Never use muted grey text there. See `preview/video-scrim.html`.
 
 ### Surfaces and shape
 
-- Elevation comes from the background ladder, not shadows. Cards are `bg-card` with a `1px` `rgba(255,255,255,.08)` border and `rounded-lg` (1rem). **No drop shadows on cards.**
-- The only shadows in the system are functional: `--shadow-soft` as a scroll mask under sticky headers, `--shadow-ring` on the logo frame, and the red/cyan glows as embellishment. Never use a shadow as a depth cue.
+- Show elevation through the background colour ladder. Cards use `bg-card`, a `1px` `rgba(255,255,255,.08)` border, and `rounded-lg` (1rem). **Never add drop shadows to cards.**
+- Limit shadows to `--shadow-soft` as a scroll mask under sticky headers, `--shadow-ring` on the logo frame, and red/cyan glows for embellishment. Never use a shadow to suggest depth.
 - Radii: `rounded-xs` inputs and chips, `rounded-sm` buttons, `rounded-md` chip-style toggles, `rounded-lg` cards and panels, `rounded-xl` hero panels, `rounded-full` only for pills and dots. Never `rounded-none` — the brand always softens slightly.
-- Borders are whispers. Dashed and dotted borders are reserved for measurement contexts (sliders, ranges, axis rules) — see `ui_kits/playground/ClockControls.jsx` for the treatment, reading it as reference only.
-- **No glassmorphism.** The kit uses flat semi-opaque fills (`rgba(0,0,0,.5)`), never `backdrop-blur`.
-- The signature grid backdrop belongs on Home, the lobby, and empty states. **Never render it behind or over live video tiles** — it adds visual noise over faces and reads as compression artefacting.
+- Keep borders subtle. Reserve dashed and dotted borders for measurement contexts such as sliders, ranges, and axis rules. Read `ui_kits/playground/ClockControls.jsx` only as a reference for this treatment.
+- **Do not use glassmorphism.** Use the kit's flat, semi-opaque fills (`rgba(0,0,0,.5)`), without `backdrop-blur`.
+- Use the signature grid backdrop on Home, the lobby, and empty states. **Never put it behind or over live video tiles.** It adds noise over faces and looks like compression artefacts.
 
 ### Motion
 
 - Easing tokens are the brand's own: `ease-out-quint` for most UI transitions, `ease-in-out-quint` for hero reveals and loops, `ease-out-expo` for entrance staggers.
 - Durations: `150ms` hover, `250ms` most UI, `600ms+` for hero moments only.
-- Hover transitions are deliberately asymmetric — `50ms ease-out` on the way in, `250ms ease-in-out` on the way out. Snaps on, relaxes off.
-- **Inside an active call, use CSS transitions only.** JS-driven animation competes with WebRTC encoding for the main thread, and the cost lands on exactly the low-end phones the call is hardest on. The easing curves are CSS variables, so this stays fully on-brand.
+- Use different hover timings in each direction: `50ms ease-out` on entry and `250ms ease-in-out` on exit. The effect should turn on quickly and settle back slowly.
+- **Use only CSS transitions inside an active call.** JavaScript animation competes with WebRTC encoding on the main thread, especially on low-end phones where calls are already demanding. The easing curves are CSS variables, so CSS transitions still follow the brand.
 - `animejs` may be used on Home, the lobby, and the sign-in surfaces, where nothing is encoding video. Import it only into those component trees.
 - Honour `prefers-reduced-motion: reduce` everywhere: keep opacity changes, drop transforms and staggers.
 
 ### Theme
 
-- **Dark only.** The kit has no light palette, and inventing one would mean guessing at brand intent across 16 hues. There is no theme toggle and no `dark:` variants — the tokens *are* the theme.
+- **Use only the dark theme.** The kit has no light palette; creating one would require guessing the intended brand treatment across 16 hues. The tokens define the theme. Do not add a theme toggle or `dark:` variants.
 - `<html>` carries `bg-canvas text-ink` and `color-scheme: dark` so form controls and scrollbars render dark natively.
 
 ### shadcn/ui
 
-- shadcn primitives ship with their own token names (`--background`, `--foreground`, `--primary`, `--muted`, `--border`, `--ring`). Alias these to the brand tokens once in `globals.css`; never edit a component to reach past them for a raw value.
-- Restyle generated components toward the terminal aesthetic — square-ish radii, whisper borders, no shadows — but keep their Radix behaviour, which is the reason they are here.
-- Record non-trivial edits in `build-journal.md` so a later `shadcn add` does not silently revert them.
+- Map shadcn's token names (`--background`, `--foreground`, `--primary`, `--muted`, `--border`, `--ring`) to the brand tokens once in `globals.css`. Never edit a component to bypass those aliases with a raw value.
+- Restyle generated components to match the terminal appearance: nearly square corners, subtle borders, and no shadows. Preserve their Radix behaviour; that is why the project uses them.
+- Record edits that are more than trivial in `build-journal.md` so a later `shadcn add` does not silently undo them.
 
 ### Responsive
 
-- Mobile is a first-class target, not a cleanup pass: build every layout mobile-first, use `dvh`/`svh` rather than `vh` for full-height regions, and give every interactive element a minimum 44×44px hit area.
-- The kit's fixed control strips map directly onto a call: parameters and status pin to the top, media controls pin to the bottom, video breathes in between. Honour the safe-area insets on both.
-- **Breakpoints are Tailwind's defaults, and only three are used.** `sm:` 640px is the phone/tablet line, `md:` 768px is iPad portrait, `lg:` 1024px is iPad landscape and small laptops. Unprefixed utilities target the phone. Do not introduce custom breakpoints — a fourth is a sign the layout is fighting the content. **That rule is about width.** Height is a separate axis and `sm:`/`md:`/`lg:` cannot express "the window is short" at all, so a `@media (height <= …)` block is not a fourth breakpoint: it changes how tall a column is, never what sits beside what. Home's hero carries the only one — see `globals.css` → the hero on a short window — and it exists because a phone held sideways is ~360px tall.
-- **A hit area never shrinks to make a row fit.** Control rows use `flex-none` on every target. A bar that fits by compressing its buttons to 35px has not been made responsive, it has been broken quietly — the layout must drop or collapse controls instead. See `preview/control-states.html`.
-- **Below `sm:` the in-call bar keeps only mic, camera, MORE, and Leave.** Chat, participants, and raise hand move into the MORE sheet. **Width and capability are separate axes**: width decides what sits on the bar versus in the sheet, capability decides whether a control exists at all. Screen share is gated on capability, not width — absent on every phone, but present in the MORE sheet of a narrow *desktop* window, which does support it. Seven controls at the 44px floor measure 440px, which does not fit any phone. Mic, camera, and Leave are never collapsed — they are what someone reaches for under pressure.
-- **Cap line length on large screens.** Text and form content sits in a `max-w-3xl` (or narrower) centred container; only the video grid and the grid backdrop are allowed to run full-bleed. Without this, Home and Call History stretch to unreadable line lengths on a 1440px laptop and worse on a 2560px monitor.
-- **Verify by measuring, not by eye.** `document.documentElement.scrollWidth > clientWidth` at a given width is the objective test for horizontal overflow, and comparing every interactive `getBoundingClientRect()` against 44 is the test for hit areas. Both are quick to run in the browser and catch what a screenshot hides. **Both are also horizontal, so neither can see a primary action pushed off the bottom** — a surface can pass the whole sweep with its main button below the fold, which Home did in phone landscape until `7.00.7`. The third measurement is `toBeInViewport({ ratio: 1 })` on whatever the surface exists to make someone press; `ratio: 1` rather than the default, because a button clearing the fold by a pixel is not one anyone can press.
+Build every layout for mobile from the start. Use `dvh`/`svh` rather than `vh` for
+full-height regions, and give every interactive element a hit area of at least
+44×44px.
+
+Keep parameters and status fixed at the top, media controls fixed at the bottom,
+and video in between, following the kit's control strips. Respect the safe-area
+insets at both ends.
+
+#### Width breakpoints and short windows
+
+Use only three width breakpoints, all from Tailwind's defaults:
+
+- `sm:` at 640px separates phones from tablets.
+- `md:` at 768px covers iPad portrait.
+- `lg:` at 1024px covers iPad landscape and small laptops.
+
+Unprefixed utilities target phones. Do not add custom width breakpoints. Needing
+a fourth indicates that the layout is fighting its content.
+
+Height is a separate concern. `sm:`/`md:`/`lg:` cannot express a short window, so
+a `@media (height <= …)` block does not count as a fourth breakpoint. It may
+change a column's height, never which elements sit beside each other. Home's
+hero has the only such block; see `globals.css` → the hero on a short window.
+It exists because a phone held sideways is about 360px tall.
+
+#### Hit areas and the narrow call bar
+
+Never shrink a hit area to fit a row. Apply `flex-none` to every control target.
+A bar that fits only by compressing buttons to 35px breaks the hit-area rule.
+Drop or collapse controls instead. See `preview/control-states.html`.
+
+Below `sm:`, keep only mic, camera, MORE, and Leave on the call bar. Move chat,
+participants, and raise hand into the MORE sheet. Seven controls at the 44px
+minimum take 440px, which does not fit any phone. Never collapse mic, camera,
+or Leave; people need to reach them under pressure.
+
+Width decides whether a control sits on the bar or in the sheet. Capability
+decides whether it exists at all. Screen share depends on capability: it is
+absent on every phone, but remains in the MORE sheet of a narrow desktop window
+that supports it.
+
+#### Line length on large screens
+
+Keep text and forms in a centred container no wider than `max-w-3xl`. Only the
+video grid and grid backdrop may extend across the full width. Without this
+limit, Home and Call History have unreadably long lines on a 1440px laptop,
+and longer still on a 2560px monitor.
+
+#### Measure overflow, hit areas, and action visibility
+
+Verify layouts with browser measurements:
+
+- Check `document.documentElement.scrollWidth > clientWidth` at each width for horizontal overflow.
+- Compare every interactive `getBoundingClientRect()` against 44 for hit areas.
+- Use `toBeInViewport({ ratio: 1 })` on the surface's primary action.
+
+The first two checks are quick and catch problems a screenshot can hide, but
+both are horizontal checks. Neither detects a primary action below the bottom
+of the viewport. Home passed the sweep with that problem in phone landscape
+until `7.00.7`. The third check requires `ratio: 1` rather than the default: a
+button with only a pixel above the fold is not usable.
 
 ---
 
 ## Performance
 
-This is a video product: the main thread is shared with WebRTC encoding and
-decoding, and the cost of getting it wrong lands on the weakest device in the
-call, not the developer's laptop.
+WebRTC encoding and decoding share the main thread with the rest of this video
+product. Performance problems affect the weakest device in the call, which may
+be much less capable than the developer's laptop.
 
-- **`adaptiveStream` and `dynacast` are both `true`.** They default to `false`, and `<LiveKitRoom>` does not override them. See `library-docs.md` → Room options; without them a twelve-tile grid pulls twelve full-resolution streams.
-- **The room tree is code-split.** `livekit-client` and `@livekit/components-react` are large and are needed only after someone joins. Load the room shell with `next/dynamic` and `ssr: false` so Home, sign-in, and the lobby never pay for it in their bundle. They are also client-only libraries, so SSR would fail regardless.
-- **Cap re-renders inside the grid.** LiveKit hooks fire on every participant event — speaking changes, quality changes, track mutations. A tile that subscribes to room-wide state re-renders on every one of them, times twelve. Subscribe each tile to *its own* participant, keep `useTracks` filters narrow, and memoise tile components. Never put a whole-room hook in a component that renders per tile.
+- Set both **`adaptiveStream` and `dynacast` to `true`**. They default to `false`, and `<LiveKitRoom>` does not override those defaults. Without them, a twelve-tile grid receives twelve full-resolution streams. See `library-docs.md` → Room options.
+- **Load the room tree separately.** `livekit-client` and `@livekit/components-react` are large libraries needed only after joining. Load the room shell with `next/dynamic` and `ssr: false`, keeping them out of the Home, sign-in, and lobby bundles. They are also client-only libraries, so server-side rendering would fail.
+- **Limit grid re-renders.** LiveKit hooks fire when speaking state, connection quality, or tracks change. If each tile subscribes to the whole room, all twelve tiles render again for every event. Subscribe each tile only to its own participant, keep `useTracks` filters narrow, and memoise tile components. Never use a whole-room hook in a component rendered once per tile.
 - **No JS-driven animation inside `<LiveKitRoom>`** — CSS transitions only, using the kit's easing variables. `animejs` is for Home, the lobby, and sign-in.
-- **Never render the grid backdrop behind live video.** It is a repeating gradient over a constantly repainting surface, and it buys nothing over a face.
+- **Never put the grid backdrop behind live video.** It adds a repeating gradient to a surface that repaints constantly, without improving the view of a face.
 - **Honour `prefers-reduced-motion: reduce`** everywhere: keep opacity changes, drop transforms and staggers.
 
 ### Targets
 
-Measured on the deployed Render instance, not a dev server. These are the numbers
-feature 22 checks — an unmeasurable goal is not a goal.
+Measure these targets on the deployed Render instance, rather than a development
+server. Feature 22 checks them; each goal must be measurable.
 
 | What | Target | How |
 | ---- | ------ | --- |
@@ -173,8 +246,8 @@ feature 22 checks — an unmeasurable goal is not a goal.
 | Four-participant call | stable for 10 minutes, no audio/video desync | two real devices |
 | Full grid on a low-end phone | no dropped frames on the local preview | real Android, not an emulator |
 
-If a target cannot be met, record the reason in `constraints.md` rather than
-quietly lowering it.
+If a target cannot be met, explain why in `constraints.md`. Do not silently lower
+it.
 
 ---
 
@@ -187,9 +260,9 @@ quietly lowering it.
 - Type-only modules: `kebab-case.ts` under `src/types/`, exporting `PascalCase` types.
 - Next.js special files keep their framework names exactly: `page.tsx`, `layout.tsx`, `route.ts`, `error.tsx`, `not-found.tsx`, `loading.tsx`, `proxy.ts`.
 - SQL migrations: `supabase/migrations/<YYYYMMDDHHMMSS>_<snake_case_description>.sql`.
-- Tests mirror their subject: `tests/unit/lib/crypto/chat-message.test.ts`, `tests/e2e/guest-join.spec.ts`.
-- One exported component per file. A file may contain small private sub-components used only by its main export.
-- No barrel `index.ts` files. Import from the module that owns the symbol so dependency direction stays visible.
+- Name tests to match their subject, such as `tests/unit/lib/crypto/chat-message.test.ts` and `tests/e2e/guest-join.spec.ts`.
+- Export one component per file. Small private sub-components are allowed when only that file's main export uses them.
+- Do not add barrel `index.ts` files. Import directly from the module that defines a symbol so readers can see the direction of dependencies.
 
 ---
 
@@ -240,13 +313,13 @@ export function ControlBar({ onLeave, className }: ControlBarProps) {
 }
 ```
 
-- Import order is fixed: external packages, then `@/` internal imports, then relative imports (which should be rare), then type-only imports if separated. A blank line between groups.
+- Order imports as follows: external packages, `@/` internal imports, relative imports (which should be rare), then type-only imports if they have a separate group. Separate groups with a blank line.
 - Props interfaces are named `<Component>Props` and declared immediately above the component.
-- Constants live above the component, never inside the render body.
-- Event handlers are named `handle<Thing>` when passed as props and `<verb><Noun>` when defined locally.
+- Declare constants above the component, never inside its render body.
+- Name event handlers `handle<Thing>` when passing them as props. Use `<verb><Noun>` for handlers defined locally.
 - Handler props are named `on<Thing>`.
 - Every icon-only control has an `aria-label`, and every toggle exposes `aria-pressed`.
-- No inline `style` attributes except for values genuinely computed at runtime (e.g. a grid column count), with a comment.
+- Use inline `style` attributes only for values computed at runtime, such as a grid column count. Add a comment explaining them.
 
 ---
 
@@ -319,14 +392,14 @@ export async function POST(request: NextRequest) {
 }
 ```
 
-- Validate the body with Zod before any other work; return `400` with `invalid_request` on failure.
-- **Authorize against state, not shape.** A well-formed identifier is never sufficient — check that the underlying row exists and is in a joinable state before acting on it.
-- Read every environment value through `env` from `src/lib/env.ts`. `process.env` is never read outside that file, except in `src/proxy.ts` — see Environment Variables for why that one exception exists.
-- Resolve the session with `supabase.auth.getUser()`. A null user is a guest, not an error, except on routes documented as protected.
-- Wrap the work in `try`/`catch`. Log the real error server-side with a `[route]` prefix; return a generic user-facing message.
-- Return `apiOk(data)` or `apiError(code, message, status)` — never a bare `Response`, never an unshaped object.
+- Validate the body with Zod before doing any other work. Return `400` with `invalid_request` when validation fails.
+- Check the underlying row's state before authorizing an action. A correctly formatted identifier is insufficient: the row must exist and be joinable.
+- Read every environment value through `env` from `src/lib/env.ts`. Do not read `process.env` elsewhere except in `src/proxy.ts`. The Environment Variables section explains that exception.
+- Resolve the session using `supabase.auth.getUser()`. Treat a null user as a guest. It is an error only on routes documented as protected.
+- Wrap the work in `try`/`catch`. Log the actual error on the server with a `[route]` prefix, and return a generic message to the user.
+- Return either `apiOk(data)` or `apiError(code, message, status)`. Never return a bare `Response` or an object outside that shape.
 - Status codes: `200` read, `201` created, `400` validation, `401` unauthenticated, `403` authenticated but not allowed, `404` not found, `409` conflict, `410` gone (ended or expired), `500` unexpected.
-- Never echo a validation error object, a stack trace, or a database message back to the client.
+- Never send a validation error object, stack trace, or database message back to the client.
 
 ### Webhook handler
 
@@ -367,11 +440,11 @@ export async function POST(request: NextRequest) {
 }
 ```
 
-- Read the raw body with `request.text()`. Never `request.json()` first — parsing loses the exact bytes the signature covers.
-- Verify the signature before doing anything with the payload.
-- Webhook handlers are idempotent: the same event delivered twice must not create a duplicate row. This is what makes returning `500` safe.
-- Return `500` for a transient failure so the sender retries. Return `200` for an event that is understood-and-ignored, or that can never succeed on retry — retrying those forever accomplishes nothing.
-- Every webhook-driven write needs a backstop that does not depend on the webhook arriving. For participation rows that is `room_finished` closing all open rows, plus the nightly expiry sweep; see `architecture.md` → Data Flow.
+- Read the raw body using `request.text()`. Never call `request.json()` first, because parsing loses the exact bytes covered by the signature.
+- Verify the signature before using the payload for anything.
+- Make webhook handlers idempotent: delivering the same event twice must not create a duplicate row. This allows a safe retry after a `500` response.
+- Return `500` for a temporary failure so the sender retries. Return `200` when an event is understood but ignored, or when retrying cannot ever make it succeed. Repeated retries serve no purpose in those cases.
+- Give every webhook-driven write a fallback that works when the webhook never arrives. For participation rows, `room_finished` closes all open rows, and the nightly expiry sweep provides another fallback. See `architecture.md` → Data Flow.
 
 ### Server Component page
 
@@ -407,9 +480,9 @@ export default async function HistoryPage() {
 }
 ```
 
-- Pages own fetching and authorization; components own rendering. A component never queries Postgres.
-- Always scope a user-owned query with `.eq('user_id', user.id)` even though RLS enforces it — defence in depth, and it makes the intent readable.
-- On query error, log and render the empty state. Never let a failed history query take down the page.
+- Fetch data and check authorization in pages. Render it in components. Components must never query Postgres.
+- Always limit a user-owned query with `.eq('user_id', user.id)`, even though row-level security (RLS) independently limits which database rows can be read. This provides a second check and makes the intent readable.
+- If a query fails, log the error and render the empty state. A failed history query must not take down the page.
 
 ### Client hook wrapping a browser API
 
@@ -476,10 +549,10 @@ export function useChatKey(): ChatKeyState {
 }
 ```
 
-- Browser APIs are read inside effects, or through a `useSyncExternalStore` snapshot with a server snapshot beside it — never at module scope, and never bare during render.
-- **Never call `setState` synchronously in an effect body.** `react-hooks/set-state-in-effect` fails `npm run lint` over it, and it is an error, not a warning. State derived synchronously from a browser value belongs in `useSyncExternalStore`; state that genuinely resolves later belongs in an effect, set from the async callback.
-- Async effects guard against setting state after unmount with a `cancelled` flag declared per effect run.
-- Loading, ready, and failure are modelled as a discriminated union, not as separate booleans — the UI must render something deliberate in each state.
+- Read browser APIs inside effects, or through a `useSyncExternalStore` snapshot paired with a server snapshot. Never read them at module scope or directly during render.
+- **Never call `setState` synchronously in an effect body.** The `react-hooks/set-state-in-effect` rule treats this as an error and fails `npm run lint`. Use `useSyncExternalStore` for state derived synchronously from a browser value. Use an effect for state that resolves later, setting it from the async callback.
+- In each async effect run, declare a separate `cancelled` flag to prevent state updates after unmount.
+- Model loading, ready, and failure as a discriminated union rather than separate booleans. Each state must have a deliberate UI.
 
 ---
 
@@ -487,22 +560,26 @@ export function useChatKey(): ChatKeyState {
 
 - Server logs use `console.error('[<area>] <what failed>', error)` where `<area>` is the route or module, e.g. `[api/token]`, `[history]`, `[livekit/webhook]`.
 - Client logs use `console.warn` for recoverable conditions and `console.error` for genuine faults, prefixed the same way.
-- User-facing messages are plain, actionable, and never contain an error code, stack trace, database message, or provider name.
-- Media permission denial is a first-class UI state, not an error toast: the lobby explains that camera or microphone access was blocked and how to re-enable it, and still allows joining audio-only or view-only.
-- A chat message that fails to decrypt renders as an "unreadable message" placeholder in the transcript. It never throws into the render tree and never silently disappears.
-- A missing `#k=` fragment disables the chat composer and shows an explanation that this link cannot read chat. It is not treated as a crash.
-- **A fragment can be lost in transit, and that is expected.** The `#k=` part never reaches a server, which is what keeps the chat key private — but it also means anything that rewrites a URL can drop it: some link shorteners, some chat clients' link handling, and any "copy link" that re-serialises rather than copying the raw string. The call still works; only chat is affected. Share the link as plain text, and never route it through a shortener.
-- LiveKit disconnects are handled by rendering a reconnecting state; the control bar stays interactive throughout. Never unmount the room tree on a transient disconnect.
-- Every `catch` either handles the error or re-throws it with added context. An empty catch block requires a comment explaining what is being deliberately ignored.
-- Errors are logged to the server console only. There is no error-reporting service in this project.
+- Write plain messages that tell users what they can do. Never include an error code, stack trace, database message, or provider name.
+- Give media permission denial its own UI state rather than an error toast. The lobby must explain that camera or microphone access was blocked, show how to enable it again, and still allow audio-only or view-only joining.
+- Show an "unreadable message" placeholder in the transcript when decryption fails. The message must not throw an error into the render tree or disappear without explanation.
+- If the `#k=` fragment is missing, disable the chat composer and explain that this link cannot read chat. Treat this as a supported state, rather than a crash.
+- **Expect that a fragment may be lost while sharing a link.** The `#k=` part never reaches a server, which keeps the chat key private. Anything that rewrites the URL can therefore lose it: some link shorteners, some chat clients, and any "copy link" feature that re-serialises the URL instead of copying its raw string.
+
+  The call still works if that happens; only chat is affected. Share the link as
+  plain text, and never send it through a shortener.
+- Render a reconnecting state for LiveKit disconnects and keep the control bar interactive throughout. Never unmount the room tree for a temporary disconnect.
+- Every `catch` must handle the error or re-throw it with added context. If a catch block is empty, comment on what is being deliberately ignored.
+- Log errors only to the server console. This project has no error-reporting service.
 
 ---
 
 ## Environment Variables
 
-Never hardcode a key, URL, secret, or origin. Every value below is read through
-`src/lib/env.ts`, which parses `process.env` with Zod at module load so a
-misconfigured deploy fails immediately and loudly rather than at first request.
+Never hardcode a key, URL, secret, or origin. Read every value below through
+`src/lib/env.ts`. It parses `process.env` with Zod when the module loads, so a
+misconfigured deployment fails immediately with a visible error instead of
+waiting for its first request.
 
 | Variable | Used In | Secret? |
 | -------- | ------- | ------- |
@@ -514,25 +591,33 @@ misconfigured deploy fails immediately and loudly rather than at first request.
 | `LIVEKIT_API_KEY` | `src/lib/livekit/token.ts`, `src/lib/livekit/webhook.ts` | **Yes** |
 | `LIVEKIT_API_SECRET` | `src/lib/livekit/token.ts`, `src/lib/livekit/webhook.ts` | **Yes** |
 
-**Split twice: by secrecy, then by service.** The four `NEXT_PUBLIC_*` values are
-parsed in `src/lib/env.ts`, which is safe to import anywhere. Secrets are parsed in
-`server-only` modules — `src/lib/env.server.ts` holds Supabase's service-role key,
-and LiveKit's pair gets its own module in feature 09.
+### Separate public values from secrets
 
-Neither split is stylistic. **By secrecy:** Next replaces non-public `process.env`
-reads with `undefined` in the browser, so a single schema covering both would throw
-the moment any Client Component imported it — including `src/lib/supabase/client.ts`.
-**By service:** these modules parse at import so a misconfigured deploy fails at
-boot rather than at first request, which means one shared secret schema makes every
-consumer fail on every other service's missing credential. That is not hypothetical —
-it blocked `/api/meetings`, which never calls LiveKit, from building at all while the
-LiveKit keys were blank, and in production it would take meeting creation down
-during a LiveKit key rotation.
+Parse the four `NEXT_PUBLIC_*` values in `src/lib/env.ts`, which is safe to import
+anywhere. Parse secrets in `server-only` modules.
 
-- A `NEXT_PUBLIC_` prefix means the value is compiled into the client bundle and is visible to anyone. Never add that prefix to a secret.
-- `src/proxy.ts` is the single exception to reading env through `env`: it runs in the Edge runtime under a bundle-size budget, and importing the Zod-parsed module would pull Zod in with it. It may read the two `NEXT_PUBLIC_` Supabase values from `process.env` directly, and nothing else.
-- Secrets are configured in the Render dashboard and listed in `render.yaml` with `sync: false`. They are never committed, and `.env.local` is git-ignored.
-- `.env.example` lists every variable with a placeholder value and must be updated in the same commit that introduces a new variable.
+This split is required because Next replaces non-public `process.env` reads with
+`undefined` in the browser. A schema containing both public values and secrets
+would throw as soon as any Client Component imported it, including
+`src/lib/supabase/client.ts`.
+
+### Give each service its own secret schema
+
+`src/lib/env.server.ts` holds Supabase's service-role key. LiveKit's pair gets
+its own module in feature 09.
+
+These modules parse on import so configuration errors fail at boot. A single
+schema for all secrets would make every consumer fail when any service's
+credential was missing. This already blocked `/api/meetings` from building while
+the LiveKit keys were blank, even though it never calls LiveKit. In production,
+the same coupling would take meeting creation down during a LiveKit key rotation.
+
+### Configuration rules and the proxy exception
+
+- Values with a `NEXT_PUBLIC_` prefix are compiled into the client bundle and visible to everyone. Never give a secret that prefix.
+- `src/proxy.ts` is the only exception to reading env through `env`. It runs in the Edge runtime with a bundle-size budget; importing the parsed module would include Zod. It may read only the two `NEXT_PUBLIC_` Supabase values directly from `process.env`.
+- Configure secrets in the Render dashboard and list them in `render.yaml` with `sync: false`. Never commit them. `.env.local` is git-ignored.
+- List every variable with a placeholder in `.env.example`. Update it in the same commit that introduces a new variable.
 
 ---
 
@@ -570,29 +655,29 @@ export const AUTHOR_BYLINE = 'Built by Siddarth Vaidya';
 
 - Every external link in `AUTHOR_LINKS` renders with `target="_blank"` and `rel="noopener noreferrer"`. The `mailto:` gets neither.
 
-- Any value used by more than one module lives here. A magic number appearing twice is a bug waiting to happen.
-- `DATA_TOPIC` values are a wire protocol shared between peers — changing one is a breaking change for anyone mid-call on an older bundle.
+- Put every value used by more than one module here. Repeating a magic number creates a risk that the copies will diverge.
+- Treat `DATA_TOPIC` values as the protocol shared by peers. Changing one breaks compatibility with anyone already in a call using an older bundle.
 
 ---
 
 ## Import Conventions
 
 - Use the `@/*` alias for everything under `src/`. It is configured in `tsconfig.json` as `"@/*": ["./src/*"]`.
-- Relative imports are allowed only for siblings inside the same folder (`./message-bubble`). Never `../` — if you need to reach up, use the alias.
-- Type-only imports use `import type { … }` so they are erased at build time.
-- Import the specific module that owns a symbol; there are no barrel files to import from.
+- Use relative imports only for siblings in the same folder (`./message-bubble`). Never use `../`; use the alias to reach outside the folder.
+- Write type-only imports as `import type { … }` so the build erases them.
+- Import a symbol directly from the module that defines it. There are no barrel files.
 - Never import from `src/app/` into `src/lib/` or `src/components/`.
 
 ---
 
 ## Comments
 
-- Comment *why*, never *what*. If the code needs a comment to explain what it does, rename something instead.
-- Non-obvious constraints must be commented: why the webhook reads the raw body, why the token TTL is capped to the meeting's remaining life, why the alphabet has 32 characters, why a `catch` is empty.
-- Every security-relevant decision carries a one-line comment, because the next reader must not "simplify" it away.
-- JSDoc goes on exported functions in `src/lib/` whose contract is not obvious from the signature — especially anything in `src/lib/crypto/`.
-- `TODO:` comments must name what is missing. A bare `TODO` is not acceptable. Anything deferred also gets an entry in `build-journal.md`.
-- No commented-out code. Git remembers.
+- Comments must explain *why*, never *what*. If a comment is needed to explain *what* the code does, improve the naming instead.
+- Comment on constraints that are not obvious. Examples include why a webhook reads the raw body, why a token's TTL is capped to the meeting's remaining life, why the alphabet has 32 characters, and why a `catch` is empty.
+- Add a one-line comment for every security-relevant decision, so the next reader does not accidentally remove it while simplifying the code.
+- Add JSDoc to exported functions in `src/lib/` when their contract is not clear from the signature. This is especially important in `src/lib/crypto/`.
+- State what is missing in every `TODO:` comment. A bare `TODO` is not acceptable. Also record anything deferred in `build-journal.md`.
+- Never leave commented-out code. Remove unused code; Git retains its history.
 
 ---
 
@@ -600,11 +685,11 @@ export const AUTHOR_BYLINE = 'Built by Siddarth Vaidya';
 
 Before installing anything new, check:
 
-1. Does the browser platform already do this? Web Crypto, `Intl`, `URLSearchParams`, `structuredClone`, and CSS covered several needs here that would otherwise be packages.
-2. Does Next.js, LiveKit, or Supabase already ship it? `@livekit/components-react` includes layout, device, and data-channel primitives that are easy to re-implement by accident.
-3. Is it a single small function? Write it in `src/lib/` instead.
-4. What is the install size, maintenance status, and license?
-5. Does it run in the browser bundle? Anything pulled into a Client Component ships to every user on every device, including phones on slow connections.
+1. Check whether the browser already provides it. Web Crypto, `Intl`, `URLSearchParams`, `structuredClone`, and CSS have covered several needs here without extra packages.
+2. Check whether Next.js, LiveKit, or Supabase already includes it. `@livekit/components-react` provides layout, device, and data-channel primitives that can be easy to implement again by accident.
+3. If the need is a single small function, write it in `src/lib/` instead.
+4. Check the install size, maintenance status, and license.
+5. Check whether it enters the browser bundle. Anything imported into a Client Component ships to every user and every device, including phones with slow connections.
 
 Approved dependencies for this project:
 
@@ -619,12 +704,12 @@ Approved dependencies for this project:
 - `zod` — runtime validation at every server boundary and for env parsing
 - `tailwindcss`, `@tailwindcss/postcss` — styling
 - `class-variance-authority`, `clsx`, `tailwind-merge` — shadcn/ui class composition, used by `cn()`
-- `radix-ui` — accessible primitives. Current shadcn generates imports from this single package rather than the per-primitive `@radix-ui/*` scope, so there is one dependency, not one per component
-- `lucide-react` — icon set. The kit has no icon set of its own and names Lucide as the sanctioned substitution: 2px stroke, stroked never filled, and used sparingly since the brand is typographic
+- `radix-ui` — accessible primitives. Current shadcn generates imports from this single package instead of the per-primitive `@radix-ui/*` scope, giving the project one dependency for the primitives rather than one for each component
+- `lucide-react` — icon set. The kit does not provide icons and approves Lucide as the substitute. Use a 2px stroke, never filled icons, and keep their use sparse because the brand relies on typography
 - `animejs` — motion on Home, the lobby, and sign-in surfaces only; never imported into the call tree
 - `server-only` — build-time guard that keeps server modules out of client bundles
 - `vitest`, `@vitest/coverage-v8` — unit tests
 - `@playwright/test` — end-to-end tests
 - `eslint`, `eslint-config-next`, `prettier`, `prettier-plugin-tailwindcss` — linting and formatting
 
-Do not install any other packages without updating this list first.
+Update this list before installing any other package.

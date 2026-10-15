@@ -1,21 +1,21 @@
 # VideoCircle Design System
 
-A terminal-dark, mono-only visual language: warm near-black, one monospace
-family, red as the single signal colour, wide-tracked SCREAMING CAPS, and
-measured geometric motion. This folder is the visual source of truth for the
-product — read it before designing any surface.
+VideoCircle has a dark, terminal-like appearance: warm near-black backgrounds,
+one monospace family, red as the single signal colour, widely spaced SCREAMING
+CAPS, and measured geometric motion. This folder is the product's visual source
+of truth. Read it before designing any surface.
 
-**Nothing under `src/` imports from this folder.** Tokens are mirrored into the
-`:root` and `@theme inline` blocks of `src/app/globals.css`; assets are copied
-into `public/brand/`. This folder is the reference; the app is the copy.
+**Nothing under `src/` imports from this folder.** Copy the tokens into the
+`:root` and `@theme inline` blocks of `src/app/globals.css`, and copy assets
+into `public/brand/`. This folder holds the reference; the app holds the copy.
 
 ## Provenance
 
-Adapted from the visual system behind **[Anime.js](https://animejs.com)** v4, the
-animation library by [Julian Garnier](https://juliangarnier.com), which is
-MIT-licensed. The palette, type scale, easing curves, and interaction states are
-derived from `examples/assets/css/styles.css` in that project and carried over
-largely unchanged — they are a coherent system and we did not want to dilute one.
+This system is adapted from **[Anime.js](https://animejs.com)** v4, the
+MIT-licensed animation library by [Julian Garnier](https://juliangarnier.com).
+The palette, type scale, easing curves and interaction states come from that
+project's `examples/assets/css/styles.css`. They are largely unchanged because
+they work together as a system, and we wanted to preserve that consistency.
 
 **What was removed and why:**
 
@@ -23,13 +23,13 @@ largely unchanged — they are a coherent system and we did not want to dilute o
 | --- | --- |
 | `assets/images/*.gif` — the v4 animated wordmark and usage GIF | Anime.js trademarks. VideoCircle cannot ship another product's logo. Replaced with our own mark. |
 | `_ds_bundle.js`, `_ds_manifest.json` | Tooling for the upstream kit's own preview gallery. Nothing read them. |
-| `--black-1…6`, `--white-3…6` | Not ladders. `--black-2…4` were the same value three times; `--black-1` duplicated `--bg-1` exactly; `--white-3…6` duplicated `--fg-*` at different values. Elevation is `--bg-*`, text is `--fg-*`, active fill is `--white-1/2` — there is no fourth neutral scale. |
-| `--font-system` | A second font alias in a one-family brand is an invitation to break the rule. |
+| `--black-1…6`, `--white-3…6` | These did not form useful scales. `--black-2…4` repeated one value three times, and `--black-1` exactly duplicated `--bg-1`. `--white-3…6` duplicated the role of `--fg-*` with different values. Use `--bg-*` for elevation, `--fg-*` for text and `--white-1/2` for active fills; there is no fourth neutral scale. |
+| `--font-system` | A second font alias makes it too easy to break the one-family rule. |
 
-`fonts/IoskeleyMono-*.woff2` remain on disk as a local rendering reference but are
-**git-ignored and never shipped** — the face is licensed separately from Anime.js
-itself and is not ours to redistribute. The app loads **JetBrains Mono**, which
-upstream itself names as the closest match.
+`fonts/IoskeleyMono-*.woff2` remain on disk for local rendering reference. They
+are **git-ignored and never shipped**: the typeface has a separate licence from
+Anime.js, and we do not have redistribution rights. The app loads **JetBrains
+Mono**, which upstream names as the closest match.
 
 ## Index
 
@@ -54,56 +54,60 @@ upstream itself names as the closest match.
 
 ## The mark
 
-The wordmark is `VideoCircle`, PascalCase, in the brand mono, with a **red square
-separating the two words** — `Video▪Circle`. Set in mono, that separator reads as
-an identifier rather than as punctuation, which suits a product whose whole
-surface is a link.
+The wordmark is `VideoCircle`, in PascalCase and the brand monospace typeface.
+A **red square separates the two words**: `Video▪Circle`. In mono, the separator
+makes the name read as an identifier rather than punctuation. That suits a
+product centred on a link.
 
-**The square is the same glyph as the compact mark**, so `mark.svg` reads as a
-compression of the wordmark rather than as a second, unrelated shape. Red appears
-once, so the mark needs no exemption from "used sparingly".
+**The square is the same glyph as the compact mark.** This makes `mark.svg` a
+compact form of the wordmark rather than an unrelated shape. Red appears once,
+so the mark needs no exception to the rule that red is used sparingly.
 
-**It is also the kit's own construction**, which an earlier version of this
-section got wrong: it claimed upstream dots the `i` in its wordmark, and the kit
-in this folder never does. `ui_kits/site/Nav.jsx`, `Hero.jsx` and `Footer.jsx`
-all render `anime` · red square · `js` — a separator between two words, exactly
-this shape. The dotted-i mark we shipped until `7.00.6` was the departure from
-upstream, not the inheritance, and the reason recorded for it was never true.
+**The kit uses this construction too.** An earlier version of this section
+incorrectly claimed that upstream dots the `i` in its wordmark. The kit in this
+folder never does: `ui_kits/site/Nav.jsx`, `Hero.jsx` and `Footer.jsx` all render
+`anime` · red square · `js`, with this same separator between words.
 
-**The separator is a box in the text flow, never a decoration pinned to a glyph.**
-This is the binding rule, and it was learned the hard way: the earlier mark dotted
-both i's with a red square, which meant positioning that square against JetBrains
-Mono's own stem centre (0.245em, not the 0.3em advance centre) and tittle height.
-Those numbers are wrong for any other face, and `next/font`'s generated fallback
-does not reproduce them — it matches advance and ascent but not glyph shapes — so
-the mark visibly shifted during the swap window on every cold load. A separator in
-the flow has nothing to align to and nothing to re-measure.
+The dotted-i mark we shipped until `7.00.6` departed from upstream. It was not
+inherited from the kit, and the reason recorded for it was never true.
 
-**In the app, render it as live text, not an image.** It is a mono wordmark, so
-real text stays crisp at every size, scales with the type ramp, and is readable
-by screen readers. `preview/logo.html` holds the HTML/CSS recipe. `wordmark.svg`
-exists only for contexts where live text is unavailable: OG images, README
-embeds, external decks.
+**The separator must be a box in the text flow, never a decoration pinned to a
+glyph.** The earlier mark put a red square above both i's. That required alignment
+with JetBrains Mono's stem centre (0.245em, not the 0.3em advance centre) and tittle
+height.
 
-The compact mark — a red square on warm near-black — carries no type at all, so
-it survives at 16px. It is the favicon, the OG tile, and the avatar fallback.
+Those measurements are wrong for every other typeface. The fallback generated by
+`next/font` matches advance and ascent, but not glyph shapes, so it could not
+reproduce them. The mark visibly shifted while the font swapped on every cold
+load. A separator in the text flow needs no glyph alignment or remeasurement.
+
+**Render the in-app wordmark as live text, not an image.** Real text stays crisp
+at every size, scales with the type ramp and remains readable by screen readers.
+Use the HTML/CSS recipe in `preview/logo.html`. Use `wordmark.svg` only where live
+text is unavailable: OG images, README embeds and external decks.
+
+The compact mark is a red square on warm near-black. It has no type, so it remains
+legible at 16px. Use it for the favicon, OG tile and avatar fallback.
 
 ---
 
 ## Content fundamentals
 
 **Voice & tone**
+
 - **Plain and matter-of-fact.** "Start a meeting. Share the link." No hype words — no "seamless", no "effortless", no "revolutionise".
 - **Second-person or imperative** when addressing the person. Never marketing "we".
-- **Terminal-flavoured.** Short UPPERCASE overlines in the mono act as bumpers: `START A MEETING · SHARE THE LINK`.
-- **The product speaks through the call working**, not through paragraphs about it.
+- **Terminal-flavoured.** Use short UPPERCASE overlines in mono to introduce sections: `START A MEETING · SHARE THE LINK`.
+- Let a working call speak for the product. Avoid paragraphs that describe how good it is.
 
 **Casing**
+
 - **Title Case** for proper nouns and page titles: `Call History`, `Sign in with Google`.
 - **SCREAMING CAPS + wide tracking** for overlines, status strips, and control labels.
 - **lowercase, verbatim** for identifiers the user must read or type — room codes render exactly as generated (`kzt-9f4-qmx`), never prettified or re-cased.
 
 **Punctuation & style**
+
 - Emoji: **none**, anywhere, including in chat UI chrome and empty states.
 - Em-dashes for asides.
 - Durations and counts are plain: `4 participants`, `00:12:07`.
@@ -113,11 +117,14 @@ it survives at 16px. It is the favicon, the OG tile, and the avatar fallback.
 ## Visual foundations
 
 ### The big idea
-A **CRT scope laid over warm near-black**, annotated like an engineer's tool. Red
-axis line, mono labels, an oscilloscope grid that bleeds past the frame.
-Everything feels measured, slightly retro, and hand-wired — a tool, not a toy.
+
+The visual model is a **CRT scope over warm near-black**, with annotations like
+an engineer's tool: a red axis line, mono labels and an oscilloscope grid that
+extends past the frame. It should feel measured, slightly retro and hand-wired,
+like a tool rather than a toy.
 
 ### Backgrounds
+
 - **Primary bg:** `#252423` — a warm near-black, not true black, not cool grey. The canonical canvas.
 - **Elevation ladder:** `bg-1` (page) → `bg-2` (card) → `bg-3` (raised) → `bg-4` (overlay) → `bg-5` (higher). Each step ~5 points lighter. **Elevation comes from this ladder, never from shadows.**
 - **Signature overlay:** a double-layered **grid backdrop** — fine 10-unit subgrid + 100-unit major grid, `linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px)` stacks, often bleeding past the container.
@@ -125,13 +132,19 @@ Everything feels measured, slightly retro, and hand-wired — a tool, not a toy.
 - **No photography, no illustrations, no generated imagery.** The brand is geometry, type, and motion.
 
 ### Colours
+
 - **Signal red `#ff4b4b`** — the one accent that carries meaning. See *Colour in a call* below for its exact allocation.
 - **Cyan `#4BFFFD` and green `#00FF5D`** are reserved for completion moments and the mark. Do not repurpose them for UI state.
-- **Extended palette:** 16 hues × 6 stops, a chromatic terminal palette where every hue pops on the near-black. Available, rarely correct — most surfaces are neutrals plus one signal.
+- **Extended palette:** 16 hues × 6 stops. Each hue stands out against near-black. The palette is available but rarely appropriate; most surfaces use neutrals plus one signal.
 - **Usage rule:** at most **one** accent-1 hue per screen.
-- **One named exception to "sparingly": Home's scope canvas**, the row of red squares under the hero's entry controls, which is the kit's own gesture kept whole. It is the largest use of red in the product and it is deliberate. It holds on the same argument the mark does — the row carries no state and is `aria-hidden`, so it cannot compete with the Leave control or a muted-mic warning for meaning — plus one the mark does not need: Home and the call are different routes, so those reds are never on screen together. **Do not read this as licence to spend red elsewhere.** Inside a call the allocation below is absolute, and this exception is written down precisely so the next surface has to earn its own rather than cite this one.
+- **One named exception to "sparingly": Home's scope canvas.** The row of red squares beneath the hero's entry controls preserves the kit's own visual treatment. It is deliberately the largest use of red in the product.
+
+  Like the mark, the row carries no state and is `aria-hidden`, so its red does not compete with the meaning of Leave or a muted-mic warning. It has an additional safeguard: Home and the call are different routes, so these uses of red never appear together.
+
+  **This exception does not permit more red elsewhere.** The call's allocation below is absolute. A new surface needs its own justification rather than borrowing this one.
 
 ### Type
+
 - **Single family: JetBrains Mono**, loaded via `next/font/google` so it self-hosts at build time. Regular + Bold only. Everything is this font — hero, chat, fine print, no exceptions.
 - **Tight line-height** — 1.1–1.25 for headings, 1.5 only for body paragraphs.
 - **Wide tracking on CAPS overlines** (~0.06em). This is *the* signature type gesture.
@@ -139,6 +152,7 @@ Everything feels measured, slightly retro, and hand-wired — a tool, not a toy.
 - **Sizes:** terminal scale with visible jumps — 12 / 14 / 16 / 18 / 20 / 24 / 32 / 40 / 56 / 80.
 
 ### Motion
+
 | Named curve | Shape | When to use |
 | --- | --- | --- |
 | `linear` | — | Technical read-outs, timers |
@@ -148,76 +162,82 @@ Everything feels measured, slightly retro, and hand-wired — a tool, not a toy.
 | `outElastic` / `outBack` | overshoot | Sparingly |
 
 **Durations:** `150ms` hovers, `250ms` most UI, `600–1250ms` hero moments.
-**Stagger** is the trademark gesture — sequence elements, often `from: 'center'`.
+**Stagger** is the signature motion: reveal elements in sequence, often `from: 'center'`.
 
-**Inside an active call, CSS transitions only.** JS-driven animation competes with
-WebRTC encoding for the main thread, and the cost lands on exactly the low-end
-phones the call is hardest on. `animejs` belongs on Home, the lobby, and sign-in.
-Honour `prefers-reduced-motion` everywhere: keep opacity, drop transforms.
+**Inside an active call, use only CSS transitions.** JS-driven animation competes
+with WebRTC encoding for the main thread, adding work to the low-end phones that
+already struggle most with a call. `animejs` belongs on Home, the lobby and sign-in.
+Honour `prefers-reduced-motion` everywhere: keep opacity changes and remove transforms.
 
 ### Hover & press states
+
 - **Buttons:** white fill at rest (`--white-1`), one step darker (`--white-2`) on hover.
 - **Chips and toggles:** `rgba(255,255,255,.05)` at rest → `rgba(255,255,255,.1)` on hover.
 - **Press does not shrink.** The fill inverts instead — white ground, dark glyph. Keyboard focus reuses that same inverted state.
-- **Transitions are asymmetric:** `background-color .05s ease-out` on the way in, `.25s ease-in-out` on the way out. Snaps on, relaxes off.
+- **Transitions are asymmetric:** `background-color .05s ease-out` on entry and `.25s ease-in-out` on exit. The state appears quickly and fades back more slowly.
 
 ### Borders, strokes & shadows
-- **Borders are whispers:** `1px solid rgba(255,255,255,.08)` is the default.
+
+- **Keep borders subtle:** the default is `1px solid rgba(255,255,255,.08)`.
 - **Dashed and dotted 50%-white borders** are reserved for *measurement* contexts — sliders, ranges, axis rules.
 - **Shadows are functional, never depth cues.** `--shadow-soft` masks scrolling content under a sticky header; `--shadow-ring` edges the mark; the red/cyan glows are embellishment.
 
 ### Corner radii
+
 `0.25rem` inputs and chips · `0.4rem` buttons · `0.6rem` chip-style toggles ·
 `1rem` cards and panels · `1.25rem` hero panels · `999px` pills and dots only.
 
 Never a razor-sharp `0` — the brand always softens slightly.
 
 ### Layout
-- **Fixed control strips:** status pins to the top, controls pin to the bottom, content breathes between. This maps directly onto a call.
+
+- **Fixed control strips:** pin status to the top and controls to the bottom, leaving space for content between them. This maps directly to a call.
 - **Full-bleed `dvh`/`svh` viewports** — never `vh`, which breaks under mobile browser chrome.
-- **Declarative grid** (`grid-template-areas`), not flex-for-grid hacks.
+- Use a **declarative grid** (`grid-template-areas`) rather than forcing flex to act as a grid.
 - **Mobile-first, always.** Every layout works at 360px. Every interactive element clears a 44×44px hit area. Honour safe-area insets top and bottom.
 
 ### Transparency & blur
-Flat semi-opaque fills only — `rgba(0,0,0,.5)`. **No `backdrop-blur`, no
-glassmorphism.** It is off-brand, and the GPU cost lands on the weakest devices.
+
+Use flat, semi-opaque fills only: `rgba(0,0,0,.5)`. **No `backdrop-blur` or
+glassmorphism.** Both conflict with the brand and add GPU work on the weakest devices.
 
 ### Iconography
-The brand ships **no icon set**. Lucide is the sanctioned substitution, imported
-from `lucide-react`: 2px stroke, stroked never filled, never coloured except
-`PhoneOff`. Icons are sparse — the brand is typographic. The red square dot is
-the only *native* brand glyph. **Never draw a new SVG illustration to fill space.**
+
+The brand ships **no icon set**. Use Lucide from `lucide-react` as the approved
+substitute: 2px stroke, outlined rather than filled, and no colour except on
+`PhoneOff`. Use icons sparingly; typography carries the brand. The red square dot
+is the only *native* brand glyph. **Never draw a new SVG illustration to fill space.**
 
 ---
 
 ## VideoCircle additions
 
-The upstream kit dressed a marketing site and a code playground. These are the
-decisions it never had to make, and they are binding.
+The upstream kit was designed for a marketing site and a code playground. The
+following decisions cover needs it did not have. They are binding.
 
 ### Colour in a call
 
-One-accent-per-screen does not survive contact with a call, which has many
-simultaneous status colours. The allocation is fixed here rather than decided per
-component:
+A call has many simultaneous status colours, so the one-accent-per-screen rule
+needs an explicit allocation. Use the following rules rather than choosing
+colours separately for each component:
 
-- **Red (`--red-1`)** — destructive and self-warning only: the Leave control, and *your own* microphone muted. Nothing else. **Not a stopped camera** — off-camera is not a warning, it is a preference, and the slashed icon already carries it. This was decided in the lobby at F08 and applied to the call bar at F11; the two surfaces must not disagree about what the same control means.
-- **White fill (`--white-1`) with a dark glyph** — the engaged state of any toggle. This is the kit's own inverted press state. **Engaged is white, not red** — several toggles can be on at once, and if "on" meant red, red would stop meaning danger exactly when Leave needs it most.
-- **Neutrals** — everything else. A *remote* participant's mute dot is `--fg-3`; twelve red badges on a twelve-person grid would destroy the signal.
+- **Red (`--red-1`)** means destructive action or a warning about yourself: the Leave control and *your own* muted microphone, nothing else. **A stopped camera is not red.** Being off-camera is a preference, not a warning, and the slashed icon already communicates it. This was decided for the lobby at F08 and applied to the call bar at F11. Both surfaces must give the same meaning to the same control.
+- **White fill (`--white-1`) with a dark glyph** means an engaged toggle. This is the kit's own inverted press state. **Engaged is white, not red.** Several toggles can be on together; if they were all red, the colour would lose its danger meaning when Leave needs it most.
+- **Neutrals** cover everything else. A *remote* participant's mute dot uses `--fg-3`; twelve red badges on a twelve-person grid would overwhelm the signal.
 - **Connection quality** — `green-1` / `yellow-1` / `red-1`, as a small marker only, never a filled surface.
 
 See `preview/control-states.html`.
 
 ### Text over video
 
-Every other contrast pairing in this system assumes a known `--bg-*`. A tile label
-sits on arbitrary live pixels, and the worst case — someone backlit by a window —
-erases `--fg-3` completely.
+Every other contrast pairing in this system assumes a known `--bg-*`. Tile labels
+sit over unpredictable live video. In the worst case, such as someone backlit by
+a window, `--fg-3` disappears completely.
 
-**Any text over live video rides a scrim.** Use `--scrim-tile` (bottom-up gradient
-at `--scrim-tile-height`) for tile labels and `--scrim-flat` for full overlays.
-Label text is `--fg-1` on the scrim, never a muted grey. See
-`preview/video-scrim.html`.
+**Put a scrim behind all text over live video.** For tile labels, use
+`--scrim-tile`, a bottom-up gradient at `--scrim-tile-height`. For full overlays,
+use `--scrim-flat`. Label text on the scrim is `--fg-1`, never muted grey.
+See `preview/video-scrim.html`.
 
 ### Participant tiles
 
@@ -227,15 +247,15 @@ with an ellipsis; they never wrap or resize the tile. See `preview/tile-label.ht
 
 ### The grid backdrop stays off the call
 
-The signature scope grid belongs on Home, the lobby, and empty states. **Never
-behind or over live video** — it adds noise over faces and reads as compression
+Use the signature scope grid on Home, the lobby and empty states. **Never put it
+behind or over live video.** It adds noise over faces and looks like compression
 artefacting.
 
 ---
 
 ## Caveats
 
-- **`ui_kits/` is reference only.** Those files are upstream browser-globals demos: no imports or exports, `React.useState` off a global, and every value inline as a raw literal. They violate this project's own standards on inline styles, raw hex, and arbitrary px. Read them for layout ideas; never copy them into `src/`.
+- **`ui_kits/` is reference only.** These upstream demos rely on browser globals: they have no imports or exports, call `React.useState` from a global, and put every value inline as a raw literal. They violate this project's rules against inline styles, raw hex and arbitrary px. Read them for layout ideas; never copy them into `src/`.
 - **`preview/*.html` are the liftable specimens.** They link `colors_and_type.css` and use tokens throughout.
 - **Font licence.** IoskeleyMono is not ours to ship. `.gitignore` excludes `context/Design/fonts/` for exactly this reason — do not remove that entry without confirming redistribution rights.
-- **ESLint cannot lint CSS.** `_adherence.eslint.mjs` enforces the no-raw-values rule for `.ts`/`.tsx`. `src/app/globals.css` is guarded by review alone.
+- **ESLint cannot lint CSS.** `_adherence.eslint.mjs` enforces the no-raw-values rule for `.ts`/`.tsx`. Review is the only guard for `src/app/globals.css`.

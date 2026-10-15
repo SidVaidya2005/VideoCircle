@@ -1,143 +1,154 @@
 # Project Overview
 
-> **Role:** Product source of truth — what this product is, who it's for, what's in and out of scope.
-> **Read first**, before any other context file.
-> **Relates to:** scope drives `build-plan.md`; progress tracked in `progress-tracker.md`.
+> **Role:** The source of truth for what the product is, who it is for, and what is in and out of scope.
+> Read this before any other context file.
+> **Relates to:** `build-plan.md` follows this scope; `progress-tracker.md` records progress.
 
 ## About the Project
 
-VideoCircle is a browser-based video calling product. Anyone can start a meeting,
-get a random share link, and hand it to someone who joins by opening it — no
-download, no install, no meeting ID typed by hand, and no account unless they
-want one. People who sign in with Google additionally get a
-history of the calls they took part in. Every meeting opens into a lobby where you
-see your own camera preview and set your mic and camera state before anyone else
-sees or hears you, and those controls stay available for the whole call.
+VideoCircle is a video calling product that runs in a browser. Anyone can start a
+meeting, get a random share link, and send it to someone who joins by opening it.
+There is no download, installation, or meeting ID to type, and an account is
+optional. People who sign in with Google also get a history of their calls.
 
-Alongside video, audio, and screen sharing, each meeting has a chat panel whose
-messages are end-to-end encrypted in the browser. The encryption key lives in the
-fragment of the share link, which browsers never transmit to a server, so the
-meeting link is both the invitation and the key.
+Every meeting starts in a lobby. Participants see their own camera preview and
+choose whether their microphone and camera are on before anyone else sees or
+hears them. Those controls remain available throughout the call.
+
+Meetings support video, audio, screen sharing, and a chat panel. Chat messages are
+end-to-end encrypted in the browser. The encryption key is in the share link's
+fragment, the part after `#`, which browsers never send to a server. The meeting
+link therefore provides both the invitation and the chat key.
 
 ## The Problem It Solves
 
-Joining a video call is usually gated by an account, an app install, or a calendar
-invite — friction that has nothing to do with talking to someone. People work
-around it by falling back to whatever platform everyone already has an account on,
-which means the conversation happens wherever the accounts are, not where it
-should. VideoCircle removes the gate: a link is enough to join, an account is only
-there for people who want the history, and the chat inside the call is private from
-the operator by construction rather than by promise.
+Joining a video call often requires an account, an app installation, or a calendar
+invite. These steps get in the way of talking to someone. People work around them
+by choosing whichever platform everyone already has an account on.
+
+With VideoCircle, a link is enough to join. An account is only needed for people
+who want call history. The chat is designed so the operator cannot read it;
+privacy does not depend on the operator promising not to look.
 
 ## Pages
 
-- **Home (`/`)** — Landing and entry point. Start a new meeting, paste a meeting code to join, or sign in with Google.
-- **Lobby (`/room/[code]`, pre-join state)** — Camera self-preview, display-name entry for guests, mic/camera toggles, and device selection before joining.
-- **Meeting Room (`/room/[code]`, joined state)** — The live call: video grid, control bar, screen share, participant list, reactions, and the encrypted chat panel.
-- **Call History (`/history`)** — Signed-in users only. A reverse-chronological list of meetings they joined, with time, duration, and who else was present.
-- **Auth callback (`/auth/callback`)** — Non-visual. Completes the Google OAuth PKCE exchange and redirects onward.
+| Page | Route or state | What it does |
+| --- | --- | --- |
+| Home | `/` | Start a meeting, paste a meeting code to join, or sign in with Google. |
+| Lobby | `/room/[code]`, before joining | Show a camera self-preview, let guests enter a display name, and provide mic/camera toggles and device selection. |
+| Meeting Room | `/room/[code]`, after joining | Show the live video grid, control bar, screen sharing, participant list, reactions, and encrypted chat panel. |
+| Call History | `/history` | Show signed-in users their meetings, newest first, with time, duration, and co-participants. |
+| Auth callback | `/auth/callback` | Complete the Google sign-in exchange (OAuth PKCE) and redirect onward. This route has no visual page. |
 
 ## Navigation
 
-The Home page is the only entry point that isn't a share link. From Home a user
-either creates a meeting — which mints a code, generates a chat key, and pushes
-them to `/room/[code]#k=…` — or pastes an existing code to reach the same route.
-Anyone arriving from a shared link lands directly on `/room/[code]`, bypassing Home
-entirely.
+Users enter through Home or a shared meeting link. From Home they can create a
+meeting, which generates a code and a chat key and opens `/room/[code]#k=…`. They
+can also paste an existing code to reach the same route. A shared link opens
+`/room/[code]` directly, without visiting Home.
 
-`/room/[code]` is one route with two states: the lobby renders until the user
-presses Join, at which point the same page connects to LiveKit and renders the
-meeting. Leaving a call returns the user to Home. `/history` is reachable from the
-account menu only while signed in; an unauthenticated request to it redirects to
-Home. Signing in never interrupts a call — the auth
-callback returns the user to the page they started from.
+`/room/[code]` has two states. It shows the lobby until the user presses Join.
+The same page then connects to LiveKit, the call service, and shows the meeting. Leaving a call
+returns the user to Home.
+
+Signed-in users can open `/history` from the account menu. Requests from users who
+are not signed in redirect to Home. Signing in never interrupts a call: the auth
+callback returns the user to the page where they started.
 
 ## Core User Flow
 
 ### Starting a meeting
 
-The user presses "New meeting" on Home. The browser generates a random room code
-and a fresh 256-bit AES-GCM chat key, then navigates to
-`/room/abc-defg-hjk#k=<key>`. The server records the meeting row; the key never
-leaves the browser because it sits in the URL fragment.
+1. The user presses "New meeting" on Home.
+2. The browser generates a random room code and a fresh 256-bit AES-GCM chat key.
+3. The browser opens `/room/abc-defg-hjk#k=<key>`.
+4. The server records the meeting row. The key stays in the browser because it is in the URL fragment.
 
 ### Sharing the link
 
-From the lobby or the in-call control bar, the user copies the full link —
-fragment included — and sends it through whatever channel they like. The link is
-the invitation and the chat key together, so anyone holding it can both join and
-read chat.
+The user copies the full link, including its fragment, from the lobby or the
+in-call control bar. They can send it through any channel they choose. Anyone
+holding that link can join the meeting and read its chat.
 
 ### Entering the lobby
 
-Every participant, invited or host, lands in the lobby first. The browser requests
-camera and microphone permission and shows a live self-preview. The user picks
-their camera, microphone, and speaker, toggles mic and camera to whatever state
-they want to enter with, and — if they're a guest — types a display name. Signed-in
-users get their Google name prefilled.
+Every participant starts in the lobby, including the host.
+
+1. The browser asks for camera and microphone permission and shows a live self-preview.
+2. The user picks a camera, microphone, and speaker, and chooses whether their mic and camera will be on when they join.
+3. Guests type a display name. Signed-in users have their Google name filled in.
 
 ### Joining the call
 
-Pressing Join sends the room code and desired identity to the server, which mints a
-short-lived LiveKit access token scoped to that one room. The page connects, applies
-the mic/camera state chosen in the lobby, and the participant appears in everyone's
-grid.
+1. Pressing Join sends the room code and desired identity to the server.
+2. The server creates a short-lived LiveKit access token that grants access to that room only.
+3. The page connects and applies the mic/camera settings chosen in the lobby.
+4. The participant appears in everyone's grid.
 
 ### In the call
 
-Participants see a responsive tile grid that reflows with headcount, switching to a
-spotlight layout when someone shares their screen. The control bar toggles mic,
-camera, screen share, chat, participants, and reactions, and always offers a way to
-leave. Chat messages are encrypted in the browser before being published over the
-LiveKit data channel and decrypted on arrival — the server relays bytes it cannot
-read.
+Participants see a responsive video grid that adjusts to the number of people.
+When someone shares their screen, the layout switches to spotlight view.
+
+The control bar provides mic, camera, screen share, chat, participant, and reaction
+controls, plus a way to leave at any time.
+
+The browser encrypts each chat message before sending it over the LiveKit data
+channel. Receiving browsers decrypt it on arrival. The server relays encrypted
+bytes that it cannot read.
 
 ### Leaving and reviewing
 
-Leaving disconnects the room and returns the user to Home. LiveKit webhooks tell
-the server who joined, who left, and when the room emptied, which is what populates
-the history rows. A signed-in user opens `/history` and sees each meeting they were
-in, its duration, and the display names of everyone else who was there. No chat
-content is stored anywhere.
+Leaving disconnects the room and returns the user to Home. LiveKit webhooks notify
+the server when participants join or leave and when the room empties. Those events
+populate call history.
+
+Signed-in users can open `/history` to see their meetings, durations, and the
+display names of everyone else who attended. Chat content is never stored.
 
 ## Data Architecture
 
 ### Identity
 
-Signed-in users come from Supabase Auth via Google OAuth; a `profiles` row mirrors
-each auth user and holds their display name and avatar. Guests have **no durable
-cross-meeting identity**: they get a fresh participant identity generated at join
-time and a display name they type themselves, and nothing links one guest
-appearance to another.
+Signed-in users authenticate through Supabase Auth using Google OAuth. Each auth
+user has a matching `profiles` row with their display name and avatar.
 
-That is a narrower promise than "nothing is stored." The participation record for a
-guest — display name, the one-off identity, and join/leave timestamps — persists as
-long as the meeting does, because it is what puts their name in other participants'
-call history. What does not exist is any way to ask "which meetings did this person
-attend," because the identity is single-use: a fresh one is minted on every join and never reused, so two appearances by the same person share no identifier. The identity string itself does persist in the participation row — that is what the sentence above describes — it simply links to nothing else.
+Guests have no persistent identity that links them across meetings. Each join
+creates a fresh participant identity that is never reused. Guests supply their
+own display name.
+
+This does not mean that no guest data is stored. A guest's participation record
+keeps their display name, one-off identity, and join/leave timestamps for as long
+as the meeting exists. These records let other participants see the guest's name
+in call history. The identity string persists in that row but links to nothing
+else. Two appearances by the same guest share no identifier, so the records
+cannot answer "which meetings did this person attend?"
 
 ### Meetings
 
-A meeting is a room code, who created it (null when a guest created it), when it
-started, and when it ended. Meetings are created the moment someone presses "New
-meeting" and the link stays joinable for 24 hours, even if everyone leaves and
-comes back — an empty room does not end the meeting. A nightly sweep closes it
-after that.
+A meeting records its room code, creator, start time, and end time. The creator is
+null when a guest created it.
+
+The meeting is created as soon as someone presses "New meeting". Its link stays
+joinable for 24 hours, even if everyone leaves and later returns. An empty room
+does not end the meeting. A nightly sweep closes the meeting after that period.
 
 ### Participation
 
-Each join produces a participation record tying a meeting to either a user or a
-guest, with the display name captured at join time plus join and leave timestamps.
-This is the only source of call history: a user's history is the set of meetings
-they have a participation record for, and the other names on that meeting are read
-from the sibling records.
+Each join creates a participation record for a meeting and either a signed-in user
+or a guest. It captures their display name at join time, along with join and leave
+timestamps.
+
+These records are the only source of call history. A user's history contains the
+meetings for which they have a participation record. Other participants' names
+come from the other records for that meeting.
 
 ### Chat
 
-Chat has no server-side data domain by design. Messages exist only as ciphertext in
-flight over the LiveKit data channel and as plaintext in the memory of participants
-who hold the key. Nothing is written to Postgres, and reloading the page clears the
-transcript.
+Chat deliberately has no server-side data model. Messages exist as ciphertext
+(encrypted data) while travelling over the LiveKit data channel, and as plaintext
+(readable text) in the memory of participants who hold the key. Nothing is written
+to Postgres. Reloading the page clears the transcript.
 
 ## Features In Scope
 
@@ -176,18 +187,23 @@ transcript.
 
 ## Target User
 
-Someone who needs to talk to a specific person or small group right now and wants
-the shortest possible path from "let's hop on a call" to being on the call —
-freelancers and clients, study partners, remote teammates, friends and family. Half
-of them will never make an account; the other half sign in because they want to
-look back at what they were on and with whom. Both halves care that a private
-conversation stays private.
+VideoCircle is for people who need to talk to a specific person or small group
+right now: freelancers and clients, study partners, remote teammates, friends,
+and family. They want as few steps as possible between "let's hop on a call" and
+being in the call.
+
+Half will never make an account. The other half sign in to look back at their calls
+and who attended. Both groups care that private conversations stay private.
 
 ## Success Criteria
 
-- **The join path costs no steps that a stopwatch would measure.** A first-time visitor with no account joins by opening a link: no download, no install, no extension, no meeting ID typed by hand, no sign-up. This — not a wall-clock figure — is the product claim, and it holds on any tier.
-- On a **warm** instance, opening a share link to being connected takes under 10 seconds of *application* time, measured from navigation start to LiveKit reporting connected. This deliberately excludes the browser's camera and microphone permission prompt and the time the person spends typing a display name: both are the person's own pace, not the app's.
-- On a **cold** instance the free Render service adds roughly a minute before any of the above, because it spins down after 15 minutes idle. That is an accepted hosting cost recorded in `constraints.md` → Hosting, not a regression to chase, and it is disclosed wherever a link is handed out.
+### Joining and timing
+
+- A first-time visitor with no account can join by opening a link. There is no download, installation, extension, meeting ID to type, or sign-up. Avoiding those extra steps is the product claim on every hosting tier; it is not a promise about total elapsed time.
+- On a warm instance (one that is already running), the application takes under 10 seconds from navigation start to LiveKit reporting connected. This excludes time spent on the browser's camera and microphone permission prompt and on typing a display name. Those depend on the person, not the app.
+- On a cold instance, the free Render service adds roughly a minute before the application can begin because it shuts down after 15 minutes idle. This accepted hosting cost is recorded in `constraints.md` → Hosting and must be disclosed wherever a link is shared. Do not treat it as an application regression.
+
+### Features and verification
 - Opening a share link in a fresh browser profile reaches the lobby, shows a self-preview, and joins successfully without any sign-in.
 - Mic and camera can be toggled in the lobby, the state carries into the call, and both can be toggled again at any point during the call.
 - Switching camera or microphone mid-call swaps the published track without dropping the connection.
@@ -207,9 +223,8 @@ conversation stays private.
 
 ## Reading this folder
 
-`context/` is self-contained: it explains what this product is, how it is built,
-why it is built that way, and the rules every change follows. You should not need
-to read `src/` to understand any of that.
+`context/` explains the product, how it is built, why it is built that way, and
+the rules every change follows. It must make sense without access to `src/`.
 
 | To find out | Read |
 | ----------- | ---- |
@@ -223,8 +238,7 @@ to read `src/` to understand any of that.
 | How the build got here, feature by feature | `build-journal.md` |
 | The visual language | `Design/README.md` |
 
-The one thing deliberately **not** here is how to clone, obtain LiveKit and
-Supabase credentials, and run the app locally. That lives in the repository
-`README.md`, so there is exactly one copy of it and it cannot drift from what a
-newcomer actually types.
+Instructions for cloning the repository, obtaining LiveKit and Supabase
+credentials, and running the app locally live in the repository `README.md`.
+Keeping them in one place avoids conflicting instructions for newcomers.
 

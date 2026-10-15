@@ -4,6 +4,9 @@
 > **Read after** `project-overview.md`, before writing any code.
 > **Relates to:** the stack here drives `code-standards.md` and `library-docs.md`.
 
+The invariants later in this document are rules that must always hold, regardless
+of which feature is being changed.
+
 ## Stack
 
 | Layer | Tool | Purpose |
@@ -11,98 +14,181 @@
 | Language | TypeScript 6 (`strict`) | All application code, client and server. **Not 7** — see `constraints.md` → Tooling |
 | Framework | Next.js 16 (App Router) | Routing, Server Components, route handlers, single deployable |
 | UI runtime | React 19 | Component model |
-| Real-time media | LiveKit Cloud (SFU) | Video/audio transport, screen share, TURN, simulcast, reconnection |
+| Real-time media | LiveKit Cloud (SFU) | Relays video, audio, and screen shares between participants; handles TURN, simulcast, and reconnection |
 | Media client | `livekit-client` 2.21 + `@livekit/components-react` 2.9 | Room connection, track publication, React hooks and layout primitives |
 | Token minting | `livekit-server-sdk` 2.17 | Server-side `AccessToken` JWTs and webhook signature verification |
 | Auth | Supabase Auth (Google OAuth, PKCE) | Sign-in, session cookies, user identity |
-| Auth glue | `@supabase/ssr` 0.12 | Cookie-based Supabase clients for Server Components, route handlers, the proxy |
+| Auth glue | `@supabase/ssr` 0.12 | Connects Supabase session cookies to Server Components, route handlers, and the proxy |
 | Database | Supabase Postgres | `profiles`, `meetings`, `meeting_participants` |
 | DB client | `@supabase/supabase-js` 2.112 | Queries, and the service-role admin client |
 | Encryption | Web Crypto API (`SubtleCrypto`, AES-GCM 256) | End-to-end encryption of chat messages in the browser |
 | Styling | Tailwind CSS 4.3 | Utility styling; design tokens declared with `@theme` |
-| Design system | VideoCircle design system (`context/Design/`) | Terminal-dark, mono-only visual language; token and specimen source of truth. Adapted from the MIT-licensed Anime.js kit |
+| Design system | VideoCircle design system (`context/Design/`) | Dark, terminal-style appearance with one monospaced typeface. Source of truth for design tokens and specimens; adapted from the MIT-licensed Anime.js kit |
 | Typeface | JetBrains Mono via `next/font/google` | The single family, self-hosted at build time. Substitutes for the kit's licensed IoskeleyMono |
-| UI primitives | shadcn/ui (Radix under the hood) | Dialog, dropdown, tooltip, popover, sheet, input, textarea, button — source lives in the repo, aliased to brand tokens. **No toast**: every transient failure is surfaced on the surface it happened on, and F24 decided against adding a second home for those messages |
+| UI primitives | shadcn/ui (built on Radix) | Dialog, dropdown, tooltip, popover, sheet, input, textarea, button. Source stays in the repo and uses aliases for brand tokens. **No toast**: temporary failures appear where they happened. F24 decided against adding a second place for those messages |
 | Motion | CSS transitions with the kit's easing curves; `animejs` outside the call | Brand motion without competing with WebRTC encoding on the main thread |
-| Validation | Zod 4 | Request-body and env parsing at every server boundary |
+| Validation | Zod 4 | Parses request bodies and environment values wherever data enters server code |
 | Linting | ESLint 9 + `eslint-config-next` | **Not 10** — `eslint-plugin-react` breaks on it; see `constraints.md` → Tooling |
 | Unit tests | Vitest 4 | Crypto, room-code, formatting, and query-shaping logic |
 | E2E tests | Playwright 1.62 | Lobby → join → leave flows with faked media devices |
 | Hosting | Render (Web Service, Node runtime, **free tier**) | Single service running `next start`. Free instances sleep after 15 min idle and take ~1 min to wake — see `constraints.md` → Hosting |
 
-Versions above name the **minor family** intended at planning time, not exact
-pins — `2.112` means "2.112.x". `package.json` is the source of truth once feature
-01 creates it; these are the floor, and a newer patch or minor within the same
-major is expected and fine. A major-version bump is a decision, not an upgrade:
-record it in `constraints.md`.
+### How to read the versions
 
-LiveKit Cloud is a hard requirement rather than a preference: Render does not
-expose UDP, so neither an SFU nor a coturn TURN server can be self-hosted there.
-Render runs the Next.js app; all media traverses LiveKit's infrastructure.
+The versions above are the **minor families** chosen during planning. They are
+not exact pins: `2.112` means "2.112.x". Once feature 01 creates `package.json`,
+that file is the source of truth. The versions here are the minimum; newer patches
+and minor versions within the same major are expected and allowed.
+
+Changing a major version requires a decision. Record it in `constraints.md`.
+
+### Why media runs on LiveKit Cloud
+
+LiveKit Cloud is required. Render does not expose UDP, so it cannot host either an
+SFU or a coturn TURN server. Render runs the Next.js app, while all media travels
+through LiveKit's infrastructure.
 
 ---
 
 ## Folder Structure
 
-**Phase 0 built the foundation; everything else below is the target shape,**
-filled in by the feature that needs it. Built so far:
+Phase 0 built the foundation. The structure below describes the target shape;
+each feature adds the parts it needs.
+
+### What each feature added
+
+Built so far:
 
 - **F01** — root configs, `src/app/`, `src/lib/` (`env`, `env.server`, `api`, `constants`, `utils`), `tests/`
+
 - **F02** — the `globals.css` token mirror, the `(shell)` route group, `src/components/{shell,home,ui}/`, `public/brand/`, the dev-only `/tokens` route
+
 - **F03** — `supabase/` with seven migrations, `src/lib/supabase/`, `src/proxy.ts`, `src/types/database.ts`
+
 - **F04** — `src/app/auth/{callback,signout}/`, `src/lib/auth/`, the header auth menu, and the `dropdown-menu` primitive
+
 - **F05** — `src/lib/room-code.ts`, `src/lib/parse-room-code.ts`, the hero's join-by-code form, and the `input` primitive
-- **F06** — `src/lib/crypto/{base64url,chat-key}.ts`, `src/app/api/meetings/`, and the hero's share panel. `src/middleware.ts` became `src/proxy.ts` at the Phase 1 checkpoint, per Next 16's rename
-- **F07** — `src/app/room/[code]/{page,not-found}.tsx`, `src/components/room/room-experience.tsx`, `src/components/lobby/{self-preview,media-state-notice}.tsx`, `src/hooks/use-media-preview.ts`, `src/lib/media/classify-media-error.ts`, `src/lib/meetings.ts`. First consumer of `livekit-client`
-- **F08** — the rest of `src/components/lobby/`, `src/hooks/{use-media-devices,use-copy-to-clipboard}.ts`, `src/lib/media/preferences.ts`. `use-media-preview.ts` grew from one-shot acquisition into the lobby's device controller, and `section-overline.tsx` moved from `home/` to `ui/` at its third caller
-- **F09** — `src/app/api/token/`, `src/lib/env.livekit.server.ts`, `src/lib/meeting-state.ts`, `src/lib/livekit/{token,token-ttl,room-options,request-token}.ts`, `src/components/room/{room-shell,connected-panel}.tsx`, `src/components/lobby/join-failure-notice.tsx`. First consumers of `livekit-server-sdk` and `@livekit/components-react`
-- **F10** — `src/components/room/{call-stage,video-grid,participant-tile,participant-count}.tsx` and `src/lib/{room-grid,initials}.ts`. `connected-panel.tsx` was deleted, its status strip and Leave absorbed into `call-stage.tsx`. The grid is ours rather than `GridLayout`/`ParticipantTile` — see `library-docs.md` → Rendering the participant grid
-- **F11** — `src/components/room/{control-bar,control-button,leave-control}.tsx`, `src/hooks/use-call-shortcuts.ts`, `src/lib/keyboard.ts`, and the `tooltip` primitive. First consumer of `lucide-react`
-- **F16** — `src/components/room/invite-dialog.tsx`, `src/lib/invite-link.ts`, and the `dialog` primitive. The lobby's copy button adopted the shared builder
-- **F15** — `src/components/room/{reactions-provider,reaction-menu}.tsx`, `src/hooks/use-raise-hand.ts`, `src/lib/reactions.ts`, and the `popover` primitive. The token grant gained `canUpdateOwnMetadata`, which is what lets a client write its own raise-hand attribute
-- **F14** — `src/components/room/{call-panel,participant-list}.tsx`, `src/hooks/use-media-query.ts`, `src/lib/participants.ts`, and the `sheet` primitive. `participant-count.tsx` was deleted — the headcount moved onto the participants control as a badge
-- **F13** — `src/components/room/{focus-layout,tile-menu}.tsx` and `src/lib/room-focus.ts`. `participant-tile.tsx` gained the pin gesture, the menu, a `size` variant and the pinned marker; `video-grid.tsx` now chooses between grid and spotlight and owns the pin
-- **F12** — `src/components/room/call-status.tsx` (the status strip, moved out of `call-stage.tsx` so the sharing banner and the connection line it replaces sit together) and `src/hooks/use-is-screen-share-supported.ts`. `video-grid.tsx` gained the `ScreenShare` source and `room-grid.ts` the `orderCallTiles` sort
-- **F17** — `src/hooks/use-chat-key.ts` and `src/components/chat/chat-panel.tsx`, the first file under `components/chat/`. `CallPanelName` widened to `'participants' | 'chat'` and `control-bar.tsx` lost `PENDING_CONTROLS`, leaving no disabled control on the bar until F24 gated screen share on `Connected`. `room-experience.tsx` became the caller of `restoreChatKeyFragment()`, which had shipped uncalled since F04
-- **F18** — `src/lib/crypto/chat-message.ts` and `src/hooks/use-encrypted-chat.ts`. The panel gained a plain input, a Send button and a message list; `call-stage.tsx` owns the transcript, because `CallPanel` unmounts its children when closed
-- **F19** — `src/lib/chat-time.ts` and the `textarea` primitive. `chat-panel.tsx` grew the real composer, the relative-time tick and the near-bottom scroll pin; `call-stage.tsx` gained the seen mark the unread count derives from, and `closePanel` beside `togglePanel` so the sheet's own dismiss stamps it too
 
-- **F20** — `src/app/api/livekit/webhook/`, `src/lib/livekit/{webhook,participation-event}.ts`, and `src/lib/participation.ts`. First server-side work since F09, and the first consumer of `WebhookReceiver`. A migration clamps the expiry sweep's `left_at`, which F20 is what makes reachable. `tsconfig.json`'s `target` moved ES2017 → ES2020: the SDK reports event times as `bigint`, and BigInt literals are illegal below that
+- **F06** — `src/lib/crypto/{base64url,chat-key}.ts`, `src/app/api/meetings/`, and the hero's share panel.
 
-- **F21** — `src/app/(shell)/history/page.tsx`, `src/lib/history.ts`, and `src/components/history/{history-list,history-empty,history-time}.tsx`. The `.history-row` column widths join `globals.css`. `tests/e2e/support/session.ts` arrived with it: the suite mints real Supabase sessions through the admin API, so signed-in pages are testable without Google's consent screen
+  `src/middleware.ts` became `src/proxy.ts` at the Phase 1 checkpoint, per Next 16's rename
 
-- **F22** — `tests/e2e/support/viewport.ts` and `responsive.spec.ts`, the measured audit; `tests/e2e/sign-in.spec.ts`, which covers the one path that had none. `src/app/layout.tsx` gained the `viewport` export — the thing that makes every `env(safe-area-inset-*)` in the project resolve to anything at all — and `globals.css` gained `.call-surface` and `.sheet-surface` to pay those insets back. `sign-in.ts` moved the Supabase browser client behind a dynamic `import()`, taking 64 kB off Home
+- **F07** — `src/app/room/[code]/{page,not-found}.tsx`, `src/components/room/room-experience.tsx`, `src/components/lobby/{self-preview,media-state-notice}.tsx`, `src/hooks/use-media-preview.ts`, `src/lib/media/classify-media-error.ts`, `src/lib/meetings.ts`.
 
-- **F23** — `src/lib/livekit/{disconnect-reason,connection-quality}.ts` and `src/components/room/disconnect-notice.tsx`. `onDisconnected` stopped pushing Home for every disconnect and now branches on the reason, which meant widening `RoomShell`'s prop to carry it; `call-status.tsx` gained the reconnect banner and put reconnecting above sharing; `participant-tile.tsx` gained the degraded-connection marker
+  This was the first feature to use `livekit-client`
 
-- **F24** — `src/app/{error,global-error}.tsx`, `src/lib/media/media-failure-copy.ts` (moved out of `media-state-notice.tsx` so the three unreachable states are testable), and `tests/support/forbidden-copy.ts`, shared by the unit and e2e halves of the leak check. `control-bar.tsx` gates screen share on `Connected`; `chat-panel.tsx` gained jump-to-latest. **No `loading.tsx` anywhere, deliberately** — see `constraints.md` → Error and loading surfaces
+- **F08** — the rest of `src/components/lobby/`, `src/hooks/{use-media-devices,use-copy-to-clipboard}.ts`, `src/lib/media/preferences.ts`.
 
-- **F25** — `render.yaml`, `src/app/healthz/route.ts`, `engines.node` in `package.json`, and `tests/e2e/healthz.spec.ts`. `src/proxy.ts`'s matcher gained a `/healthz` exclusion, pinned by `tests/unit/proxy-matcher.test.ts` — the e2e assertion written for it **passed with the exclusion removed**, because `updateSession` only sets cookies when there is a session to refresh, so it was replaced by a unit test on the matcher that fails correctly
+  `use-media-preview.ts` changed from acquiring devices once to controlling the lobby's devices. `section-overline.tsx` moved from `home/` to `ui/` when a third caller needed it
 
-- **F26** — `tests/e2e/support/join.ts` (`joinAs`, `connectedStatus` and `CONNECT_TIMEOUT_MS`, lifted out of 12 specs in 7 variants) and `tests/e2e/media-failures.spec.ts`, with `stubMediaFailure` added to `support/media.ts`. The only `src/` change was `reactions-provider.tsx`: `toggleHand` now awaits the attribute write and reverts the control when it fails, because a lost write left the raiser as the only person who thought their hand was up
+- **F09** — `src/app/api/token/`, `src/lib/env.livekit.server.ts`, `src/lib/meeting-state.ts`, `src/lib/livekit/{token,token-ttl,room-options,request-token}.ts`, `src/components/room/{room-shell,connected-panel}.tsx`, `src/components/lobby/join-failure-notice.tsx`.
 
-Not yet built: `types/meeting.ts` — domain types still live beside their consumers,
-and nothing has yet needed a shared one. Deliberately absent: any `loading.tsx`,
-and any toast primitive.
+  These were the first modules to use `livekit-server-sdk` and `@livekit/components-react`
 
-**Post-build camera correction (10 Oct 2026):** `src/hooks/use-camera-switch.ts`
-cycles the enumerated cameras through LiveKit's room device switch, without
-reconnecting or touching audio. The control is inline at `sm:` and up and under
-MORE below it; it appears only with multiple cameras after camera permission.
-While capture changes, another switch and the camera toggle are disabled; a
-failed acquisition restores the previous lens. Each switch/recovery has a bounded
-deadline; if capture stalls or restoration fails, the camera is stopped and
-unpublished, with late capture disposed by the SDK and a rendered retry message.
-Switching while off records the next lens without acquiring a track, using the
-room's pending device rather than the stopped source. Enumeration remains
-available when joining camera-off and never prompts. A successful lens choice uses
-the existing lobby preferences. `src/hooks/use-camera-mirror.ts` is shared by
-the lobby self-preview and local participant tile, subscribes to track restart
-and unmute, and reads actual source-track facing metadata. Front and unspecified
-desktop cameras mirror locally; rear cameras, remote tiles and screen shares do
-not. `tests/e2e/camera-switch.spec.ts` covers these flows, with virtual capture in
-`tests/e2e/support/cameras.ts` and a real LiveKit connection between two contexts;
-phone hardware support still needs a real-device check.
+- **F10** — `src/components/room/{call-stage,video-grid,participant-tile,participant-count}.tsx` and `src/lib/{room-grid,initials}.ts`.
+
+  `connected-panel.tsx` was deleted; its status strip and Leave control moved into `call-stage.tsx`. The project implements its own grid rather than using `GridLayout`/`ParticipantTile` — see `library-docs.md` → Rendering the participant grid
+
+- **F11** — `src/components/room/{control-bar,control-button,leave-control}.tsx`, `src/hooks/use-call-shortcuts.ts`, `src/lib/keyboard.ts`, and the `tooltip` primitive.
+
+  This was the first feature to use `lucide-react`
+
+- **F16** — `src/components/room/invite-dialog.tsx`, `src/lib/invite-link.ts`, and the `dialog` primitive.
+
+  The lobby's copy button began using the shared builder
+
+- **F15** — `src/components/room/{reactions-provider,reaction-menu}.tsx`, `src/hooks/use-raise-hand.ts`, `src/lib/reactions.ts`, and the `popover` primitive.
+
+  The token grant gained `canUpdateOwnMetadata`, allowing a client to write its own raise-hand attribute
+
+- **F14** — `src/components/room/{call-panel,participant-list}.tsx`, `src/hooks/use-media-query.ts`, `src/lib/participants.ts`, and the `sheet` primitive.
+
+  `participant-count.tsx` was deleted, and the participant count moved to a badge on the participants control
+
+- **F13** — `src/components/room/{focus-layout,tile-menu}.tsx` and `src/lib/room-focus.ts`.
+
+  `participant-tile.tsx` gained the pin gesture, the menu, a `size` variant and the pinned marker. `video-grid.tsx` now holds the pin state and chooses between the grid and spotlight layouts
+
+- **F12** — `src/components/room/call-status.tsx` and `src/hooks/use-is-screen-share-supported.ts`.
+
+  The status strip moved out of `call-stage.tsx` so the sharing banner and the connection line it replaces are kept together. `video-grid.tsx` gained the `ScreenShare` source, and `room-grid.ts` gained the `orderCallTiles` sort
+
+- **F17** — `src/hooks/use-chat-key.ts` and `src/components/chat/chat-panel.tsx`, the first file under `components/chat/`.
+
+  `CallPanelName` expanded to `'participants' | 'chat'`. Removing `PENDING_CONTROLS` from `control-bar.tsx` left no disabled controls on the bar until F24 restricted screen share to `Connected`. `room-experience.tsx` began calling `restoreChatKeyFragment()`, which had shipped in F04 without a caller
+
+- **F18** — `src/lib/crypto/chat-message.ts` and `src/hooks/use-encrypted-chat.ts`.
+
+  The panel gained a plain input, a Send button and a message list. `call-stage.tsx` holds the transcript because `CallPanel` unmounts its children when closed
+
+- **F19** — `src/lib/chat-time.ts` and the `textarea` primitive.
+
+  `chat-panel.tsx` gained the full composer, the update tick for relative times, and scrolling that stays pinned when the reader is near the bottom. `call-stage.tsx` gained a mark of what has been seen, from which the unread count is calculated. It also gained `closePanel` alongside `togglePanel`, so dismissing the sheet itself updates that mark too
+
+- **F20** — `src/app/api/livekit/webhook/`, `src/lib/livekit/{webhook,participation-event}.ts`, and `src/lib/participation.ts`.
+
+  This was the first server-side work since F09 and the first use of `WebhookReceiver`. F20 made the expiry sweep's `left_at` update reachable, so a migration clamps that value. `tsconfig.json`'s `target` moved from ES2017 to ES2020 because the SDK reports event times as `bigint`, and lower targets do not allow BigInt literals
+
+- **F21** — `src/app/(shell)/history/page.tsx`, `src/lib/history.ts`, and `src/components/history/{history-list,history-empty,history-time}.tsx`.
+
+  The `.history-row` column widths were added to `globals.css`. `tests/e2e/support/session.ts` was added too. It lets the suite create real Supabase sessions through the admin API and test signed-in pages without Google's consent screen
+
+- **F22** — `tests/e2e/support/viewport.ts` and `responsive.spec.ts` added the measured responsive audit.
+
+  `tests/e2e/sign-in.spec.ts` added coverage for the one path that had none. `src/app/layout.tsx` gained the `viewport` export, which makes the project's `env(safe-area-inset-*)` values resolve. `globals.css` gained `.call-surface` and `.sheet-surface` to add padding for those insets. Moving the Supabase browser client behind a dynamic `import()` in `sign-in.ts` removed 64 kB from Home
+
+- **F23** — `src/lib/livekit/{disconnect-reason,connection-quality}.ts` and `src/components/room/disconnect-notice.tsx`.
+
+  `onDisconnected` now checks the disconnect reason instead of always navigating Home; `RoomShell`'s prop was expanded to carry that reason. `call-status.tsx` gained the reconnect banner and gives reconnecting priority over sharing. `participant-tile.tsx` gained the marker for a degraded connection
+
+- **F24** — `src/app/{error,global-error}.tsx`, `src/lib/media/media-failure-copy.ts`, and `tests/support/forbidden-copy.ts`.
+
+  Moving media failure copy out of `media-state-notice.tsx` made the three unreachable states testable. The forbidden-copy file is shared by the unit and e2e parts of the leak check. `control-bar.tsx` restricts screen share to `Connected`, and `chat-panel.tsx` gained jump-to-latest. **There is deliberately no `loading.tsx` anywhere** — see `constraints.md` → Error and loading surfaces
+
+- **F25** — `render.yaml`, `src/app/healthz/route.ts`, `engines.node` in `package.json`, and `tests/e2e/healthz.spec.ts`.
+
+  `src/proxy.ts`'s matcher gained a `/healthz` exclusion, covered by `tests/unit/proxy-matcher.test.ts`. The original e2e assertion **passed with the exclusion removed**: `updateSession` only sets cookies when there is a session to refresh. It was replaced by a unit test of the matcher that correctly fails without the exclusion
+
+- **F26** — `tests/e2e/support/join.ts` and `tests/e2e/media-failures.spec.ts`, with `stubMediaFailure` added to `support/media.ts`.
+
+  `joinAs`, `connectedStatus` and `CONNECT_TIMEOUT_MS` were extracted from 12 specs that used 7 variants. The only `src/` change was in `reactions-provider.tsx`: `toggleHand` now awaits the attribute write and reverts the control if it fails. Previously, a lost write left the person raising their hand as the only one who saw it raised
+
+### Files that are still absent
+
+`types/meeting.ts` has not been built. Domain types still live beside the code
+that uses them, and no shared domain type has been needed yet.
+
+Any `loading.tsx` and any toast primitive are deliberately absent.
+
+### Post-build camera correction (10 Oct 2026)
+
+`src/hooks/use-camera-switch.ts` cycles through the enumerated cameras using
+LiveKit's room device switch. It does not reconnect the call or change audio.
+The control appears only after camera permission has been granted and multiple
+cameras are available. It sits inline at `sm:` and above, and under MORE below it.
+
+While capture changes, both another switch and the camera toggle are disabled.
+If acquisition fails, the previous lens is restored. Each switch or recovery has
+a deadline. If capture stalls or restoration fails, the camera is stopped and
+unpublished, the SDK disposes of any capture that arrives late, and the UI shows
+a retry message.
+
+Switching while the camera is off records the next lens without acquiring a
+track. It uses the room's pending device rather than the stopped source.
+Enumeration remains available when joining with the camera off and never prompts
+for permission. A successful lens choice uses the existing lobby preferences.
+
+`src/hooks/use-camera-mirror.ts` is shared by the lobby self-preview and the local
+participant tile. It subscribes to track restart and unmute events and reads the
+actual source track's facing metadata. Front cameras and desktop cameras with an
+unspecified direction mirror locally. Rear cameras, remote tiles and screen
+shares do not.
+
+`tests/e2e/camera-switch.spec.ts` covers these flows using virtual capture from
+`tests/e2e/support/cameras.ts` and a real LiveKit connection between two contexts.
+Phone hardware support still needs a check on a real device.
+
+### Target folder tree
 
 ```
 VideoCircle/
@@ -269,30 +355,33 @@ VideoCircle/
 
 ## System Boundaries
 
+Each folder or module has a defined responsibility. These boundaries keep
+presentation, server privileges, and shared logic from becoming mixed together.
+
 | Folder | Owns |
 | ------ | ---- |
-| `src/app/(pages)` | Routing, layout composition, and Server Component data fetching. Owns no business logic and no direct third-party SDK calls beyond the Supabase server client. |
-| `src/app/api` | HTTP boundary: parse, authorize, delegate to `src/lib`, shape the response. Contains no React and no rendering logic. |
-| `src/components` | Presentation and local interaction state. Never reads `process.env` secrets, never constructs a Supabase admin client, never mints tokens, never talks to Postgres directly. |
-| `src/components/ui` | Presentational primitives with no product knowledge — the shadcn-generated set plus the brand's own `section-overline`. Nothing here may know what a meeting is. |
-| `src/components/shell` | The header/footer chrome rendered by the `(shell)` route group, plus the wordmark. Knows nothing about auth — the header takes a sign-in slot as a prop. |
-| `src/hooks` | Reusable client-side stateful logic bridging LiveKit/Web Crypto to React. No JSX. |
-| `src/lib` | Framework-agnostic logic and third-party client construction. Imports nothing from `src/components` or `src/app`. |
-| `src/lib/auth` | Sign-in entry points and the redirect validation the callback depends on. `sign-in.ts` is `'use client'` — it is the only module that touches the chat-key stash. |
+| `src/app/(pages)` | Defines routes, assembles layouts, and fetches data in Server Components. Contains no business logic and makes no direct third-party SDK calls except through the Supabase server client. |
+| `src/app/api` | Handles incoming HTTP requests: parses input, checks authorization, delegates to `src/lib`, and shapes the response. Contains no React or rendering logic. |
+| `src/components` | Renders the UI and holds local interaction state. Never reads `process.env` secrets, constructs a Supabase admin client, mints tokens, or talks directly to Postgres. |
+| `src/components/ui` | Reusable presentation elements with no product knowledge: the shadcn-generated set and the brand's own `section-overline`. Nothing here may know what a meeting is. |
+| `src/components/shell` | Header, footer, and wordmark rendered by the `(shell)` route group. Has no auth knowledge; the header receives a sign-in slot as a prop. |
+| `src/hooks` | Reusable client-side logic that holds state and connects LiveKit/Web Crypto to React. Contains no JSX. |
+| `src/lib` | Logic independent of the framework, plus construction of third-party clients. Never imports from `src/components` or `src/app`. |
+| `src/lib/auth` | Starts sign-in and validates the callback's redirect. `sign-in.ts` is `'use client'` and is the only module that touches the stored chat-key fragment. |
 | `src/lib/crypto` | All Web Crypto usage. No other folder may call `crypto.subtle` directly. |
-| `src/lib/meetings.ts` | Meeting lookup by code, `server-only`. Uses `supabaseAdmin` deliberately: RLS hides a meeting from the very guest opening its link, so the anon client would make every valid code look unknown. Existing here rather than in the page is what keeps the service-role client out of `src/app`. |
-| `src/lib/participation.ts` | The participation writes, `server-only`. Every function is idempotent, which is what lets the webhook route answer `500` and let LiveKit redeliver. Takes a meeting id rather than a room code, so the lookup happens once per event instead of once per write, and decides nothing about whether the meeting *should* have been joined — LiveKit is reporting what already happened. |
-| `src/lib/media` | Turns media-device failures into states the UI can render. Holds no React and no track lifecycle — that belongs to `src/hooks`. |
-| `src/lib/meeting-state.ts` | The joinability decision, pure and free of `server-only` so every branch is testable without a database. The route handler does the IO and hands the row here. |
-| `src/lib/livekit/token-ttl.ts` | The TTL cap, split out for the same reason: `token.ts` cannot be imported without the LiveKit secrets present. |
-| `src/lib/env.*.server` modules | The only place secrets are read out of `process.env`, one module per service so an absent credential fails only its own consumers. `import 'server-only'` on line one. `env.server.ts` is Supabase's; `env.livekit.server.ts` is LiveKit's. |
+| `src/lib/meetings.ts` | Looks up meetings by code and is `server-only`. It deliberately uses `supabaseAdmin`: row-level security (RLS) controls which database rows a caller can read and hides the meeting from a guest opening its link. An anon client would therefore make valid codes look unknown. Keeping the lookup here keeps the service-role client out of `src/app`. |
+| `src/lib/participation.ts` | Writes participation data and is `server-only`. Every function is idempotent: repeating an event does not duplicate its effect. This lets the webhook return `500` so LiveKit can redeliver it. Functions take a meeting id rather than a room code, allowing one lookup per event instead of per write. They do not decide whether a join should have been allowed; LiveKit reports what already happened. |
+| `src/lib/media` | Turns device failures into states the UI can render. Contains no React and does not manage track lifecycles; that belongs in `src/hooks`. |
+| `src/lib/meeting-state.ts` | Decides whether a meeting can be joined. It is pure and has no `server-only` dependency, so every branch can be tested without a database. The route handler performs the input/output work and passes the row here. |
+| `src/lib/livekit/token-ttl.ts` | Caps the token's time to live (TTL). It is separate for the same testing reason: importing `token.ts` requires LiveKit secrets. |
+| `src/lib/env.*.server` modules | The only modules that read secrets from `process.env`. Each service has its own module so a missing credential affects only that service's consumers. Begin with `import 'server-only'` on line one. Supabase uses `env.server.ts`; LiveKit uses `env.livekit.server.ts`. |
 | `src/lib/supabase/admin.ts` | The only consumer of `serverEnv.SUPABASE_SERVICE_ROLE_KEY`. `import 'server-only'` on line one. |
 | `src/lib/livekit/token.ts` | The only place `serverEnv.LIVEKIT_API_SECRET` is used for signing. |
 | `src/types` | Shared type declarations only. No runtime values, no logic. |
-| `supabase/migrations` | Schema, indexes, and RLS policies as SQL. Schema is never mutated from application code. |
-| `private` (DB schema) | Every `security definer` function. Not exposed by PostgREST, so nothing in it is reachable as RPC. |
+| `supabase/migrations` | Defines the schema, indexes, and RLS policies in SQL. Application code must never change the schema. |
+| `private` (DB schema) | Contains every `security definer` function. PostgREST does not expose this schema, so these functions cannot be called through its RPC interface. |
 | `tests` | Vitest and Playwright specs. No production code imports anything from here. |
-| `.github/workflows/supabase-activity.yml` | External database activity check. Uses the publishable API key as `anon`; existing RLS hides every row. No application request, database write, or privileged credential. Configuration and scheduling limits live in `docs/DEPLOYMENT.md`. |
+| `.github/workflows/supabase-activity.yml` | Checks database activity externally using the publishable API key as `anon`; existing RLS hides every row. Makes no application request or database write and uses no privileged credential. See `docs/DEPLOYMENT.md` for configuration and scheduling limits. |
 
 ---
 
@@ -455,13 +544,13 @@ every other read serves guests, who have no session at all.
 
 ## Data Model
 
-All tables live in the `public` schema with RLS enabled. Writes happen exclusively
-through the service-role client inside route handlers, because guests have no
-Supabase session and therefore no JWT to write with.
+All tables live in the `public` schema with row-level security (RLS) enabled.
+Writes go exclusively through the service-role client inside route handlers.
+Guests have no Supabase session and therefore no JWT they could use to write.
 
 ### `profiles`
 
-Mirrors `auth.users`; populated by a trigger on user creation.
+This table mirrors `auth.users`. A trigger populates it when a user is created.
 
 | Column | Type | Notes |
 | ------ | ---- | ----- |
@@ -470,12 +559,13 @@ Mirrors `auth.users`; populated by a trigger on user creation.
 | `avatar_url` | `text` | Nullable, from the Google profile |
 | `created_at` | `timestamptz` | Default `now()` |
 
-RLS: `select` where `id = auth.uid()`. **No `update` policy**, and none is needed:
-the row is written once by the `auth.users` trigger, nothing in scope edits a
-profile, and every application write goes through the service-role client, which
-bypasses RLS anyway. An `update` policy here would be dead code implying a feature
-that does not exist. Add it in the same migration as profile editing, if that is
-ever built.
+RLS permits `select` where `id = auth.uid()`. There is **no `update` policy**,
+and none is needed. The `auth.users` trigger writes the row once, and profile
+editing is out of scope. All application writes also use the service-role client,
+which bypasses RLS.
+
+An `update` policy would be unused code suggesting a feature that does not exist.
+If profile editing is ever built, add the policy in that feature's migration.
 
 ### `meetings`
 
@@ -490,34 +580,51 @@ ever built.
 
 Indexes: unique on `code`; `(expires_at) where ended_at is null` for the sweep.
 
-**Joinability.** A meeting is joinable when `ended_at is null and now() < expires_at`.
-`/api/token` enforces this and refuses otherwise — codes are not self-authorizing.
+#### When a meeting can be joined
 
-**Expiry policy.** Expiry closes the door; it does not clear the room.
+A meeting is joinable when `ended_at is null and now() < expires_at`.
+`/api/token` checks this condition and refuses otherwise. Possessing a room code
+does not, by itself, authorize a join.
+
+#### Expiry policy
+
+Expiry prevents new joins. It does not disconnect people already in the room.
 
 - **No new joins after `expires_at`.** `/api/token` returns `410`.
 - **No token outlives the meeting.** TTL is `min(1h, expires_at − now)`, so a token minted at hour 23 of a 24-hour window is valid for one hour, not four.
-- **A call already in progress is allowed to finish.** LiveKit refreshes the session tokens of connected clients on its own, so participants are not ejected at the boundary. Cutting a live conversation mid-sentence to enforce a 24-hour bookkeeping limit would be worse than letting it drain.
-- **The nightly sweep waits 2 hours past `expires_at`, then closes everything — including open participation rows.** It is what ends every meeting, and for participation rows it is the backstop for a dropped `room_finished`. The grace period is what reconciles two things that would otherwise conflict: a dropped `room_finished` usually means `participant_left` was dropped too, so a sweep that skipped meetings with open rows would never fix the case it exists for; but closing a meeting people are still sitting in would write a `left_at` for participants who have not left. Two hours past a 24-hour expiry is long enough that a still-running call is implausible and anything remaining is stale bookkeeping.
+- **A call already in progress is allowed to finish.** LiveKit automatically refreshes connected clients' session tokens, so expiry does not eject participants. Letting a conversation finish is preferable to cutting it off mid-sentence for a 24-hour bookkeeping limit.
+- **The nightly sweep waits 2 hours past `expires_at`, then closes everything, including open participation rows.** This ends every meeting and provides a fallback when `room_finished` is dropped.
 
-**Lifecycle.** Meetings are created on "New meeting" and stay joinable until
-`expires_at`, however many times the room empties in between. The LiveKit room is
-not the meeting: LiveKit creates it on the first join, closes it once its departure
-timeout passes after the last person leaves, and creates it afresh on the next join
-under the same code.
-`room_finished` closes the participation rows of that one room session and nothing
-else. Ending the meeting there instead — the original design — made the commonest
-invite fail: a host who joins, waits, and steps out before the guest arrives empties
-the room, and the guest's click then answered `410 This meeting has ended`. A
-meeting is closed only by the nightly `pg_cron` sweep, 2 hours past `expires_at`.
-That is also what handles a meeting that was created and never joined — common,
-since pressing "New meeting" and then closing the tab produces exactly that. Such a
-meeting appears in nobody's history, because history is driven by participation
-rows, not meeting rows.
+The grace period resolves a conflict. A dropped `room_finished` usually means
+`participant_left` was dropped too. Skipping meetings with open rows would leave
+exactly those missed events unreconciled. Closing a meeting while people are
+still in it, however, would assign `left_at` to people who have not left.
+Two hours after a 24-hour expiry, a still-running call is implausible; remaining
+open rows are treated as stale bookkeeping.
+
+#### Lifecycle
+
+Pressing "New meeting" creates a meeting. It stays joinable until `expires_at`,
+regardless of how often the room empties in between.
+
+A LiveKit room has a separate lifetime. LiveKit creates it on the first join and
+closes it when the departure timeout passes after the last person leaves. A later
+join under the same code creates a fresh room. `room_finished` closes only the
+participation rows for that room session.
+
+The original design also ended the meeting on `room_finished`, which broke a
+common invitation flow. A host could join, wait, and leave before the guest
+arrived. The empty room would end the meeting, so the guest's link would answer
+`410 This meeting has ended`.
+
+Only the nightly `pg_cron` sweep closes a meeting, 2 hours past `expires_at`.
+It also handles meetings that were created but never joined, such as when someone
+presses "New meeting" and then closes the tab. Those meetings appear in nobody's
+history because history is based on participation rows, not meeting rows.
 
 ### `meeting_participants`
 
-One row per join. A participant who rejoins produces a second row.
+Each join creates one row. If a participant rejoins, that creates a second row.
 
 | Column | Type | Notes |
 | ------ | ---- | ----- |
@@ -536,15 +643,15 @@ where left_at is null` so a leave event resolves to exactly one open row.
 
 ### RLS and the recursion trap
 
-The natural policy — "you may read a participation row if you have a participation
-row in the same meeting" — is a `meeting_participants` policy that queries
-`meeting_participants`. Postgres re-applies RLS to that inner query and recurses
-infinitely. It fails at migration time, not gradually.
+The intended policy lets you read a participation row if you have a participation
+row in the same meeting. Written directly, that makes a `meeting_participants`
+policy query `meeting_participants`. Postgres applies RLS to the inner query too,
+causing infinite recursion. The failure happens at migration time.
 
-The fix is a `security definer` function, which runs with the owner's rights and so
-does not re-enter the policy. Because it bypasses RLS on what it touches, the
-`auth.uid()` check must live **inside the body** — otherwise it answers "is anyone
-a participant" rather than "am I":
+A `security definer` function avoids this recursion by running with its owner's
+rights, without re-entering the policy. Because it bypasses RLS on the tables it
+uses, the `auth.uid()` check must be **inside the body**. Otherwise, the function
+would answer whether anyone is a participant, rather than whether the caller is:
 
 ```sql
 -- The helper lives in `private`, NOT `public`. A security definer function in an
@@ -592,16 +699,18 @@ create policy "read own profile" on public.profiles
   using ((select auth.uid()) = id);
 ```
 
-`auth.uid()` is wrapped in a subselect everywhere. Bare, Postgres re-evaluates it
-once per candidate row; wrapped, it evaluates once for the whole query.
+Always wrap `auth.uid()` in a subselect. Without the wrapper, Postgres evaluates
+it once per candidate row. With the wrapper, it evaluates once for the query.
 
-There are no `insert`, `update`, or `delete` policies on either table. All writes go
-through `supabaseAdmin`, which bypasses RLS — guests have no JWT to write with, so
-there is no client-side write path to authorize.
+Neither table has `insert`, `update`, or `delete` policies. All writes use
+`supabaseAdmin`, which bypasses RLS. Guests have no JWT for writing, so there is
+no client-side write path for these policies to authorize.
 
-**Chat messages are not modelled.** There is no table for them and there must
-never be one — the server cannot decrypt them, and storing ciphertext it can never
-read would be storage without purpose.
+#### Why chat has no table
+
+Chat messages are not part of the data model. There is no table for them and there
+must never be one. The server cannot decrypt them; keeping ciphertext it could
+never read would serve no purpose.
 
 ---
 
@@ -611,14 +720,18 @@ read would be storage without purpose.
 - Methods: Google OAuth (PKCE flow) — the only sign-in method. Guests are unauthenticated and have no Supabase session at all.
 - Protected: `/history` (redirects to `/` when there is no session)
 - Public: `/`, `/room/[code]`, `/auth/callback`, `/auth/signout`, `/api/token`, `/api/meetings`, `/api/livekit/webhook`, `/healthz`
-- `/healthz` is public **and excluded from the proxy matcher**, so it never touches Supabase — a liveness probe that refreshed a session would make the platform's own health check a dependency of the auth service. The exclusion is pinned by `tests/unit/proxy-matcher.test.ts`, not by an e2e assertion: the e2e written for it passed with the exclusion removed, because `updateSession` only sets cookies when there is a session to refresh, so an anonymous request sets none either way.
-- `src/proxy.ts` runs on every non-static request and refreshes the Supabase session cookie so pages never render against a stale token. Next 16 renamed this file convention from `middleware`; it is a pure rename, and the old name printed a deprecation notice on every build.
-- Session reads on the server always use `supabase.auth.getUser()`, never `getSession()` — `getUser()` revalidates against the auth server, `getSession()` trusts the cookie.
-- Sign-in never blocks a call. Every public route works with a null user, and the auth callback returns the user to the path they came from.
-- `/auth/signout` accepts `POST` only. A GET signout is fetched by link prefetch, by speculative loading, and by any third-party `<img>`, all of which would end a session without the user acting. It answers `303` so the browser follows with `GET` rather than re-POSTing to Home.
-- The callback's `next` parameter is resolved against `NEXT_PUBLIC_SITE_URL` and origin-compared, never prefix-matched. Both auth redirects resolve against that env value rather than the request's own origin, which is not reliable behind Render's TLS-terminating proxy.
-- The session is read server-side in `src/app/(shell)/layout.tsx`, which is what makes the shell routes dynamic. The header itself knows nothing about auth — it takes a rendered node as its `actions` prop.
-- `/api/livekit/webhook` is not user-authenticated; it authenticates the *sender* by verifying LiveKit's signature over the raw request body.
+- `/healthz` is public and **excluded from the proxy matcher**, so it never contacts Supabase. Refreshing a session in a liveness probe would make the platform's own health check a dependency of the auth service.
+
+  `tests/unit/proxy-matcher.test.ts` verifies the exclusion. The original e2e
+  assertion passed even without it: `updateSession` only sets cookies when a
+  session needs refreshing, so an anonymous request sets no cookies either way.
+- `src/proxy.ts` refreshes the Supabase session cookie on every non-static request, preventing pages from rendering with a stale token. Next 16 renamed the file convention from `middleware`; this was only a rename. Keeping the old name produced a deprecation notice on every build.
+- Always read server-side sessions with `supabase.auth.getUser()`. The `getUser()` call checks with the auth server again. Never use `getSession()` here: `getSession()` trusts the cookie.
+- Sign-in must never block a call. Every public route works when the user is null, and the auth callback returns people to the path they came from.
+- `/auth/signout` accepts only `POST`. A GET signout could be triggered by link prefetch, speculative loading, or a third-party `<img>`, ending a session without the user choosing to sign out. The handler returns `303` so the browser follows it with `GET` rather than POSTing again to Home.
+- Resolve the callback's `next` parameter against `NEXT_PUBLIC_SITE_URL` and compare origins. Never use prefix matching. Both auth redirects use that environment value rather than the request's origin, which is unreliable behind Render's proxy that terminates TLS.
+- Read the session on the server in `src/app/(shell)/layout.tsx`; this makes the shell routes dynamic. The header has no auth knowledge. It receives a rendered node through its `actions` prop.
+- `/api/livekit/webhook` authenticates the sender rather than a user. It verifies LiveKit's signature over the raw request body.
 
 ---
 
@@ -733,8 +846,8 @@ export async function mintAccessToken(params: {
 }
 ```
 
-The grant names exactly one room. A token is never issued with `roomAdmin`,
-`roomCreate`, or a wildcard room, and never returned to a caller who did not supply
+The grant specifies exactly one room. Never issue a token with `roomAdmin`,
+`roomCreate`, or a wildcard room. Only return a token to a caller who supplied
 a syntactically valid room code.
 
 ### Room code generation
@@ -844,9 +957,9 @@ export async function decryptChatMessage(
 }
 ```
 
-Binding `senderIdentity` as AES-GCM additional authenticated data means a
-participant cannot replay someone else's ciphertext under their own name — the tag
-check fails and `decrypt` throws.
+AES-GCM authenticates `senderIdentity` as additional authenticated data. If a
+participant replays someone else's ciphertext under their own name, the tag check
+fails and `decrypt` throws.
 
 ### Reading the chat key from the URL fragment
 
@@ -896,82 +1009,121 @@ export function apiError(code: string, message: string, status: number) {
 
 ## Invariants
 
-**Secrets and privilege**
+### Secrets and privilege
 
-- Secrets leave `process.env` only inside a `server-only` env module under `src/lib`, **one per service**: `env.server.ts` holds Supabase's service-role key, `env.livekit.server.ts` holds LiveKit's pair. Nothing outside those modules reads `process.env.SUPABASE_SERVICE_ROLE_KEY`, `process.env.LIVEKIT_API_KEY`, or `process.env.LIVEKIT_API_SECRET`.
-- **One schema per service, not one for all secrets.** Each module parses at import so a misconfigured deploy fails at boot rather than at first request — but a single shared schema makes every consumer fail on every other service's absent credential. `/api/meetings` does not call LiveKit and must not fail to build because LiveKit is unconfigured; in production the same coupling would take meeting creation down during a LiveKit key rotation.
+- Read secrets from `process.env` only inside a `server-only` env module under `src/lib`, with **one module per service**. `env.server.ts` holds Supabase's service-role key, and `env.livekit.server.ts` holds LiveKit's pair. No other module reads `process.env.SUPABASE_SERVICE_ROLE_KEY`, `process.env.LIVEKIT_API_KEY`, or `process.env.LIVEKIT_API_SECRET`.
+- **Give each service its own secret schema.** Parse each module when it is imported, so a misconfigured deployment fails at boot rather than on the first request.
+
+  A shared schema for all secrets would make every consumer fail when any
+  service's credential was missing. `/api/meetings` never calls LiveKit and must
+  still build when LiveKit is unconfigured. The same coupling in production
+  would stop meeting creation during a LiveKit key rotation.
 - `serverEnv.SUPABASE_SERVICE_ROLE_KEY` is consumed in exactly one file, `src/lib/supabase/admin.ts`, which also begins with `import 'server-only'`.
 - The LiveKit API secret is consumed only in `src/lib/livekit/token.ts` and `src/lib/livekit/webhook.ts`, both `server-only`.
-- `src/lib/env.ts` holds `NEXT_PUBLIC_*` values only and never a secret, which is what makes it safe to import from a Client Component. Adding a secret to it would ship that secret to every visitor.
-- No file containing the `'use client'` directive, and no file under `src/components/` or `src/hooks/`, reads any environment variable that is not prefixed `NEXT_PUBLIC_`.
-- LiveKit access tokens are minted only inside `src/app/api/token/route.ts`; the browser never constructs, signs, or extends a token.
-- Every LiveKit grant names exactly one room and never sets `roomAdmin`, `roomCreate`, or `roomList`. It carries `canUpdateOwnMetadata` so a client can write its own raise-hand attribute — a claim over itself and nothing else — and that is the only capability beyond joining, publishing and subscribing. `tests/e2e/token-api.spec.ts` pins all of it.
+- Keep only `NEXT_PUBLIC_*` values in `src/lib/env.ts`. It is safe to import from a Client Component only because it contains no secrets. Adding one would send it to every visitor.
+- Files with the `'use client'` directive and files under `src/components/` or `src/hooks/` may read only environment variables prefixed `NEXT_PUBLIC_`.
+- Mint LiveKit access tokens only inside `src/app/api/token/route.ts`. The browser must never construct, sign, or extend a token.
+- Limit every LiveKit grant to exactly one room. Never set `roomAdmin`, `roomCreate`, or `roomList`.
 
-**Encryption**
+  Include `canUpdateOwnMetadata` so a client can write its own raise-hand
+  attribute. This gives it a claim only over itself and is the sole capability
+  beyond joining, publishing, and subscribing. `tests/e2e/token-api.spec.ts`
+  verifies all of these restrictions.
 
-- The chat encryption key is read only via `readChatKeyFromHash(window.location.hash)` and never appears in a fetch body, query string, request header, `console` call, analytics payload, or database write.
-- The sole exception to "hash only" is the sign-in round trip, where the fragment is held in `sessionStorage` — same-origin, same-tab, never transmitted — and restored onto the URL with `history.replaceState` before any read. It is never placed in `next`, in OAuth `state`, or in any other parameter that reaches Google or our own server.
-- Every payload published to the `vc.chat` data-channel topic is the `Uint8Array` returned by `encryptChatMessage()`; plaintext is never passed to `publishData`.
-- Every payload received on `vc.reaction` is validated against the fixed label set before anything is rendered. Arriving over our own topic proves the sender is in the room, not that they sent something well-formed, and a reaction is drawn as text over someone's video.
-- Chat message contents are never persisted — not to Postgres, not to `localStorage`, not to `sessionStorage`.
-- Nothing orders or displays a chat message by the sender's `sentAt`. The envelope carries it and the schema validates it, but the transcript is ordered and timestamped by local arrival — a peer's clock is neither accurate nor trustworthy, and sorting by it lets one client reorder everyone's transcript. `tests/e2e/chat.spec.ts` pins the wire; the ordering rule is pinned by there being no sort at all.
-- A fragment is never case-normalised. The key is base64url and case-sensitive, so any code that lowercases or uppercases a string is responsible for splitting the fragment off first — see `parseRoomCodeInput`, which normalises the room code and leaves the fragment untouched, and `buildInviteLink`, which carries it verbatim. This failure is silent: the call still works and only chat is unreadable. `tests/unit/lib/invite-link.test.ts` and `tests/e2e/invite.spec.ts` pin it, the latter also asserting the key appears in no request URL or body while the invite dialog is open and copying.
+### Encryption
+
+- Read the chat encryption key only through `readChatKeyFromHash(window.location.hash)`. Never include it in a fetch body, query string, request header, `console` call, analytics payload, or database write.
+- The sign-in round trip is the only exception to reading the key from the hash alone. Hold the fragment in `sessionStorage`, which stays in the same origin and tab and is never transmitted. Restore it to the URL with `history.replaceState` before any read. Never put it in `next`, OAuth `state`, or any other parameter sent to Google or our server.
+- Publish only the `Uint8Array` returned by `encryptChatMessage()` on the `vc.chat` data-channel topic. Never pass plaintext to `publishData`.
+- Validate every payload received on `vc.reaction` against the fixed label set before rendering anything. The topic shows that the sender is in the room; it does not prove the data is well-formed. This check matters because reactions appear as text over someone's video.
+- Never persist chat message contents in Postgres, `localStorage`, or `sessionStorage`.
+- Never order or display a chat message using the sender's `sentAt`. The envelope includes this field and the schema validates it, but local arrival determines the transcript's order and timestamps. A peer's clock may be inaccurate or untrustworthy; sorting by it would let one client reorder everyone's transcript. `tests/e2e/chat.spec.ts` verifies the wire format. The ordering rule is enforced by having no sort at all.
+- Never change a fragment's letter case. Its base64url key is case-sensitive. Any code that lowercases or uppercases an input must split off the fragment first.
+
+  `parseRoomCodeInput` normalises the room code while leaving the fragment
+  untouched; `buildInviteLink` carries it verbatim. A mistake here is silent:
+  the call still works, but chat becomes unreadable.
+
+  `tests/unit/lib/invite-link.test.ts` and `tests/e2e/invite.spec.ts` verify this.
+  The latter also checks that the key appears in no request URL or body while
+  the invite dialog is open and copying.
 - `crypto.subtle` is called only from files under `src/lib/crypto/`.
-- Cryptographic and room-code randomness comes from `crypto.getRandomValues` or `crypto.randomUUID`; `Math.random()` is never used to produce a code, key, nonce, or identity.
+- Use `crypto.getRandomValues` or `crypto.randomUUID` for cryptographic and room-code randomness. Never generate a code, key, nonce, or identity with `Math.random()`.
 
-**Data access**
+### Data access
 
-- `/api/token` loads the meeting by code and refuses unless `ended_at is null and now() < expires_at`; a syntactically valid code is never sufficient to mint a token.
-- Every write to `meetings` and `meeting_participants` happens inside a route handler using `supabaseAdmin`; no browser code writes to Postgres.
-- `meeting_participants.is_guest` is a generated column and is never included in an insert or update.
-- Every participation timestamp is LiveKit's, never ours: `joined_at` from `participant.joinedAt`, `left_at` from the event's `createdAt`. Nothing in the webhook path writes `now()` or relies on a column default for a time, because a retried delivery would then record a duration that never happened — and `tests/e2e/livekit-webhook.spec.ts` asserts against event times deliberately in the past, so a handler that used `now()` fails rather than merely being wrong.
-- No webhook writes `meetings.ended_at`. An emptied LiveKit room is not an ended meeting — the link stays joinable until `expires_at`, and only the nightly sweep closes a meeting. `tests/e2e/livekit-webhook.spec.ts` pins it by minting a token after `room_finished`.
-- Every webhook-driven write is idempotent, and that is what makes answering `500` safe. `participant_joined` relies on the partial unique index and treats `23505` as already-recorded; `participant_left` and `room_finished` scope their updates so a redelivery matches no rows. Never add a webhook write that a redelivery would duplicate.
-- No RLS policy on a table contains a subquery against that same table; co-participant checks go through the `private.is_meeting_participant` `security definer` function.
-- Every `security definer` function lives in the `private` schema, never `public`, and sets `search_path = ''` with fully-qualified relations. `private` is not exposed by PostgREST, so nothing in it has an HTTP surface.
-- Every RLS policy wraps `auth.uid()` in a subselect and names its role with `to authenticated`.
-- Every decrypted chat payload is validated with `ChatPlaintextSchema` before use; a bare `JSON.parse` result is never treated as a message.
-- RLS is enabled on every table in the `public` schema, and every table has an explicit `select` policy scoped through `auth.uid()`.
-- Every history query is scoped to the current user's `auth.uid()` in the query itself, not only by RLS.
-- **A timestamp shown to a person is formatted in the browser, never on the server.** `Intl` on the server uses the *server's* zone, which is UTC on Render — a server-rendered time is wrong for everyone outside it. The client must genuinely re-render: `suppressHydrationWarning` does not work here, because suppressing the warning means keeping the server's text, and the bug survives silently. Use a hydration flag through `useSyncExternalStore`, as `history-time.tsx` does. `tests/e2e/history.spec.ts` pins it from a UTC+14 browser.
-- Server-side session reads use `supabase.auth.getUser()`; `supabase.auth.getSession()` is never used to authorize anything.
-- A display name comes from `profiles`, never from `user_metadata`. Supabase's `raw_user_meta_data` is user-editable and surfaces in `auth.jwt()`, so it is unsafe for any authorization decision, and using it for a name would put a second derivation next to the `auth.users` trigger's, free to drift from what call history shows.
-- Database schema changes are made only by adding a file to `supabase/migrations/`, never by application code at runtime.
+- Load the meeting by code in `/api/token` and refuse a token unless `ended_at is null and now() < expires_at`. A syntactically valid code is insufficient.
+- Write to `meetings` and `meeting_participants` only inside a route handler using `supabaseAdmin`. Browser code must never write to Postgres.
+- Never include `meeting_participants.is_guest` in an insert or update. It is a generated column.
+- Use LiveKit's clock for every participation timestamp: `participant.joinedAt` for `joined_at`, and the event's `createdAt` for `left_at`.
 
-**Media**
+  No webhook path may use `now()` or a column default for time. A retried delivery
+  would otherwise record a duration that never happened. To catch that mistake,
+  `tests/e2e/livekit-webhook.spec.ts` checks event times deliberately set in the
+  past; a handler using `now()` fails the test.
+- Never write `meetings.ended_at` from a webhook. An empty LiveKit room does not end the meeting. Its link stays joinable until `expires_at`, and only the nightly sweep closes it. `tests/e2e/livekit-webhook.spec.ts` verifies this by minting a token after `room_finished`.
+- Make every webhook-driven write idempotent, so returning `500` safely permits redelivery. For `participant_joined`, use the partial unique index and treat `23505` as already recorded. Scope `participant_left` and `room_finished` updates so redelivery matches no rows. Never add a webhook write that would duplicate data on redelivery.
+- Never query a table from a subquery in that same table's RLS policy. Use the `private.is_meeting_participant` `security definer` function for co-participant checks.
+- Put every `security definer` function in the `private` schema, never `public`. Set `search_path = ''` and fully qualify relations. PostgREST does not expose `private`, so it has no HTTP surface.
+- Wrap `auth.uid()` in a subselect in every RLS policy, and specify the role with `to authenticated`.
+- Validate every decrypted chat payload with `ChatPlaintextSchema` before use. Never treat a bare `JSON.parse` result as a message.
+- Enable RLS on every table in the `public` schema. Each table must have an explicit `select` policy scoped through `auth.uid()`.
+- Limit every history query to the current user's `auth.uid()` in the query itself, as well as through RLS.
+- **Format every timestamp shown to a person in the browser.** Never format it on the server. Server-side `Intl` uses the server's timezone, which is UTC on Render, so its times are wrong for users outside that zone.
 
-- Local camera and microphone tracks are acquired only through LiveKit APIs (`createLocalTracks`, `Room`, `setCameraEnabled`, `setMicrophoneEnabled`); `navigator.mediaDevices.getUserMedia` is never called directly in application code.
-- Mirroring is a local display choice, never a change to transmitted frames. Use the active source track's facing direction, not a device label: a front self-view may mirror, a rear-camera view must not. The post-build camera correction above describes the unspecified-direction desktop fallback and restart subscription.
-- Lobby preview tracks are stopped before, or handed to, the room connection — a preview track is never left running after join.
-- A device turned off in the lobby is **released, not muted**. `track.stop()`, and the reference dropped. Muting leaves the hardware light on under a UI that says off, and the SDK defers `setDeviceId` on a muted track, so a device picker would silently stop working.
-- Device enumeration passes `requestPermissions: false`. `Room.getLocalDevices` will otherwise raise a permission prompt of its own, and the lobby owns the only prompt in the product.
-- Device acquisition never leaves a surface waiting indefinitely. `getUserMedia` is not guaranteed to settle, so any request that cannot be waiting on a person is bounded by a timeout and resolves to a rendered state. A request that *may* still be waiting on a permission prompt is never timed out — the person is not a fault condition.
-- Tracks that arrive after the code that asked for them has moved on are stopped at the point they arrive. An abandoned request still opens the device, and nothing downstream holds a reference to close it.
-- The screen-share control is not rendered when `navigator.mediaDevices.getDisplayMedia` is undefined, which is the case on iOS and Android browsers.
-- Mic and camera controls are reachable in every call state, including while reconnecting. Screen share is the one control that may be gated, and only against *starting* one: stopping a share stays available in every state, because a reconnect is exactly when someone wants their screen to stop being broadcast.
+  The client must actually render the time again. `suppressHydrationWarning`
+  keeps the server's text while hiding the warning, leaving the bug in place.
+  Use a hydration flag through `useSyncExternalStore`, as `history-time.tsx`
+  does. `tests/e2e/history.spec.ts` verifies this from a UTC+14 browser.
+- Use `supabase.auth.getUser()` for server-side session reads. Never use `supabase.auth.getSession()` to authorize anything.
+- Get display names from `profiles`, never `user_metadata`. Supabase's `raw_user_meta_data` is editable by the user and appears in `auth.jwt()`, so it is unsafe for authorization decisions. Using it for names would also create a second derivation alongside the `auth.users` trigger, which could drift from the names shown in call history.
+- Change the database schema only by adding a file to `supabase/migrations/`. Never change it from application code at runtime.
 
-**Design**
+### Media
 
-- Literal colour, radius, type-size, and easing values appear only in the `:root` and `@theme inline` blocks of `src/app/globals.css`; every other file uses Tailwind utilities.
-- The `:root` block is a mirror of `context/Design/colors_and_type.css` — brand values change by re-copying from the kit, never by hand-editing `globals.css`. `_verify.mjs` compares three copies (kit, `library-docs.md`, `globals.css`) and fails `npm run lint` if any two disagree.
-- `@import 'tailwindcss'` stays above `:root` in `globals.css`. Kit tokens whose names collide with a Tailwind theme namespace (`--radius-*`, `--text-*`, `--leading-*`, `--tracking-*`, `--ease-*`) resolve only because `:root` cascades after the generated theme block. Asserted by `_verify.mjs`.
-- The footer renders from the `(shell)` route group only. `/room/[code]` sits outside it, so no call surface can inherit chrome.
-- The application uses exactly one typeface family. No file sets a `font-family` other than the `--font-mono` stack.
-- No emoji appear in any component, string constant, or piece of user-facing copy.
-- No `dark:` variants and no theme toggle exist — the application is dark-only.
-- No card, dialog, popover, or dropdown carries a drop shadow; elevation is expressed through the `bg-1`…`bg-5` ladder.
-- `signal` (red) is used only for the Leave control and the local participant's own muted state. **Connection quality is not a third use** — a degraded connection is marked typographically in the tile's label row, never with a coloured dot. `code-standards.md` once offered green/yellow/red here and was corrected at F23.
-- The grid backdrop is never rendered behind or over a video tile.
-- Nothing under `src/` imports from `context/Design/`; assets are copied into `public/brand/` and tokens are mirrored into `globals.css`.
-- `animejs` is never imported into any component rendered inside `<LiveKitRoom>`.
-- Every animation and transition is disabled or reduced under `prefers-reduced-motion: reduce`.
+- Acquire local camera and microphone tracks only through LiveKit APIs (`createLocalTracks`, `Room`, `setCameraEnabled`, `setMicrophoneEnabled`). Application code must never call `navigator.mediaDevices.getUserMedia` directly.
+- Mirror only the local display, never the transmitted frames. Use the active source track's facing direction rather than a device label. A front-camera self-view may mirror; a rear-camera view must not. The post-build camera correction above explains the desktop fallback when direction is unspecified and the track restart subscription.
+- Stop lobby preview tracks before connecting, or hand them to the room connection. Never leave a preview track running after joining.
+- **Release a device when it is turned off in the lobby.** Call `track.stop()` and drop the reference. Muting would leave the hardware light on while the UI says off. The SDK also defers `setDeviceId` on a muted track, which would silently stop the device picker from working.
+- Pass `requestPermissions: false` when enumerating devices. Otherwise, `Room.getLocalDevices` raises its own permission prompt. The lobby must own the product's only prompt.
+- Never leave a surface waiting indefinitely for device acquisition. `getUserMedia` is not guaranteed to settle, so bound any request that cannot be waiting on a person with a timeout and resolve it to a rendered state.
 
-**Structure**
+  Never time out a request that may still be waiting on a permission prompt.
+  A person taking time to answer is not a failure.
+- Stop tracks as soon as they arrive if the code that requested them has already moved on. An abandoned request can still open a device, with no downstream reference left to close it.
+- Hide the screen-share control when `navigator.mediaDevices.getDisplayMedia` is undefined, as it is in iOS and Android browsers.
+- Keep mic and camera controls reachable in every call state, including reconnection. Only starting a screen share may be restricted by state. Stopping one must remain available throughout; reconnection is exactly when someone may want to stop broadcasting their screen.
 
-- Nothing under `src/lib/` imports from `src/components/` or `src/app/`.
-- Nothing under `src/components/ui/` references a product concept such as a meeting, participant, or room.
-- Route handlers under `src/app/api/` that accept a request body validate it with a Zod schema before touching any other code. A handler that takes no input says so in a comment rather than parsing an empty schema for the look of it — `/api/meetings` is the one such handler.
-- Route handlers under `src/app/api/` return either `apiOk(data)` or `apiError(code, message, status)` and never a bare `Response` or an unshaped object. The `/auth/*` handlers are the deliberate exception and the only one: they are navigated to by the browser rather than fetched, so they answer with a redirect — a JSON body would render to the user as text.
-- Every page and panel is usable at a 360px viewport width with no horizontal scroll, and at the seven widths `tests/e2e/responsive.spec.ts` sweeps.
-- **No `loading.tsx` on a route that gates.** Next flushes the loading shell before the route body runs, which sends the HTTP status — so `notFound()` can then only swap the UI and `redirect()` degrades to a client-side navigation. `/room/[code]` and `/history` both gate, and both lost a skeleton at F24 for exactly this. A skeleton is only safe where the server work is pure data fetching.
-- **`viewport-fit=cover` and the safe-area padding are one decision, not two.** The `viewport` export is what makes `env(safe-area-inset-*)` resolve to anything, and it also puts content under the display's cutouts — so `.call-surface` and `.sheet-surface` must pay every inset back. Setting one without the other makes a notched phone worse than setting neither.
+### Design
+
+- Keep literal colour, radius, type-size, and easing values only in the `:root` and `@theme inline` blocks of `src/app/globals.css`. Every other file uses Tailwind utilities.
+- Mirror `context/Design/colors_and_type.css` in the `:root` block. Change brand values by copying them again from the kit, never by hand-editing `globals.css`. `_verify.mjs` compares the kit, `library-docs.md`, and `globals.css`, failing `npm run lint` if any two differ.
+- Keep `@import 'tailwindcss'` above `:root` in `globals.css`. Some kit tokens share Tailwind theme namespace names (`--radius-*`, `--text-*`, `--leading-*`, `--tracking-*`, `--ease-*`). They resolve correctly only because `:root` comes after the generated theme block in the cascade. `_verify.mjs` checks this.
+- Render the footer only through the `(shell)` route group. `/room/[code]` sits outside that group, preventing call surfaces from inheriting the shell's header and footer.
+- Use exactly one typeface family throughout the application. No file may set a `font-family` outside the `--font-mono` stack.
+- Never include emoji in a component, string constant, or user-facing copy.
+- Keep the application dark-only, without `dark:` variants or a theme toggle.
+- Never add a drop shadow to a card, dialog, popover, or dropdown. Express elevation through the `bg-1`…`bg-5` ladder.
+- Reserve `signal` (red) for Leave and the local participant's own muted state. Mark degraded connections with text in the tile's label row, never a coloured dot. Connection quality must not give red a third meaning. `code-standards.md` previously allowed green/yellow/red here; F23 corrected it.
+- Never render the grid backdrop behind or over a video tile.
+- Never import from `context/Design/` anywhere under `src/`. Copy assets into `public/brand/` and mirror tokens into `globals.css`.
+- Never import `animejs` into a component rendered inside `<LiveKitRoom>`.
+- Disable or reduce every animation and transition under `prefers-reduced-motion: reduce`.
+
+### Structure
+
+- Never import from `src/components/` or `src/app/` anywhere under `src/lib/`.
+- Keep product concepts such as meetings, participants, and rooms out of `src/components/ui/`.
+- Validate request bodies with a Zod schema before doing any other work in route handlers under `src/app/api/`. If a handler takes no input, say so in a comment instead of parsing an empty schema for appearances. `/api/meetings` is the one such handler.
+- Return either `apiOk(data)` or `apiError(code, message, status)` from route handlers under `src/app/api/`. Never return a bare `Response` or an object outside that shape.
+
+  The `/auth/*` handlers are the sole, deliberate exception. The browser
+  navigates to them rather than fetching them, so they return redirects.
+  A JSON response would appear to the user as text.
+- Make every page and panel usable without horizontal scrolling at a 360px viewport width and at all seven widths covered by `tests/e2e/responsive.spec.ts`.
+- **Never add `loading.tsx` to a route that gates access.** Next flushes the loading shell before the route body runs, sending the HTTP status with it. After that, `notFound()` can only replace the UI and `redirect()` becomes client-side navigation.
+
+  Both `/room/[code]` and `/history` gate access. F24 removed their skeletons
+  for this reason. A skeleton is safe only where the server work is purely
+  fetching data.
+- **Treat `viewport-fit=cover` and safe-area padding as one decision.** The `viewport` export makes `env(safe-area-inset-*)` resolve, but also extends content under display cutouts. `.call-surface` and `.sheet-surface` must add padding for every inset. Applying only one half makes a notched phone worse than applying neither.

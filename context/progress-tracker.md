@@ -1,25 +1,25 @@
 # Progress Tracker
 
-> **Role:** Live build status — what's done, in progress, and next.
-> **Read at the start of every session**; **update after every completed feature.**
-> **Relates to:** mirrors `build-plan.md` exactly; evicts old decisions to `constraints.md`.
+> **Role:** The current build status: what is done, in progress, and next.
+> Read at the start of every session and update after every completed feature.
+> **Relates to:** matches the features in `build-plan.md` exactly; moves older decisions to `constraints.md`.
 
 Any AI agent reading this should immediately know what is done, what is in
 progress, and what is next.
 
 ## How this file is maintained
 
-- **Current Status is overwritten, never appended.** It holds three lines describing only the latest state. Do not keep previous statuses here — the record of what happened lives in `build-journal.md`.
-- **Progress checkboxes are edited in place** — tick the box for the completed feature. Never restate, duplicate, or re-list the checklist.
-- **Key Decisions holds the 10 most recent decisions, newest first.** When adding an 11th, file the oldest bullet under its topic in `constraints.md`, so this section never exceeds 10. Eviction is a move, never a delete — an old decision can still bind.
+- Overwrite Current Status; never append to it. Keep three lines describing only the latest state. Previous statuses belong in `build-journal.md`.
+- Edit the Progress checkboxes in place. Tick the completed feature without repeating or duplicating the checklist.
+- Keep the 10 most recent Key Decisions, newest first. When adding an 11th, move the oldest bullet to its topic in `constraints.md`. Never delete it: an older decision may still apply.
 
 ---
 
 ## Current Status
 
 **Phase:** Phase 7 — Ship, post-build maintenance
-**Last completed:** **Camera switching and rear-camera display correction implemented and locally verified, 10 Oct 2026.** In-call camera switching appears for multiple cameras, including when joining camera-off. Failed acquisition restores the prior lens; stalled capture is stopped with controls released. Local mirroring follows the active lens in the lobby and call. Ten browser regressions passed with virtual capture and a live two-participant LiveKit call; they verify correctly oriented remote rear-camera frames and no microphone restart. Unit tests (242), type checking, lint and production build passed; focused review has no remaining findings. The Supabase activity workflow was committed and pushed as `8.00.6`; its first manually dispatched GitHub run succeeded.
-**Next:** Camera changes are approved for the local `8.00.7` commit; push/deploy when requested. Real iPhone Safari and Android Chrome camera checks remain pending after deployment; the exact checklist is in Follow-ups. The build plan is complete. The webhook regression and deployed performance checks remain separate open work.
+**Last completed:** Camera switching and rear-camera display correction were implemented and locally verified on 10 Oct 2026. The in-call camera switch appears when multiple cameras are available, including when joining with the camera off. If capture fails, the previous lens is restored; if capture stalls, it is stopped and the controls are made available again. The lobby and call mirror the local preview according to the active lens. Ten browser regression tests passed using virtual capture and a live two-participant LiveKit call, verifying correctly oriented remote rear-camera frames and no microphone restart. All 242 unit tests, type checking, lint, and the production build passed. Focused review has no remaining findings. The Supabase activity workflow was committed and pushed as `8.00.6`, and its first manually dispatched GitHub run succeeded.
+**Next:** Camera changes are approved for the local `8.00.7` commit. Push and deploy when requested. After deployment, the camera still needs checking on real iPhone Safari and Android Chrome; see Follow-ups for the exact checklist. The build plan is complete. The webhook regression and deployed performance checks remain open as separate work.
 
 ---
 
@@ -87,53 +87,627 @@ progress, and what is next.
 
 ## Follow-ups
 
-Open work carried forward. Cleared as the feature that needs each arrives.
+Work carried forward, including the record of how earlier follow-ups were resolved.
+Clear open work when the feature that needs it is completed.
 
-- **Verify the camera correction on real iPhone Safari and Android Chrome after deployment.** In a two-participant call, switch front → rear → front through MORE; confirm the front self-view mirrors and rear self-view does not, including when selected in the lobby before joining. Join camera-off and select a lens before enabling capture; also turn the camera off during a call, cycle lenses twice, then turn it on: the device must stay off until enabled and use the chosen lens. Point the rear camera at readable text; the peer must receive it normally. Confirm audio continues, the call stays connected, rapid taps do not queue switches, and the controls remain usable in portrait and landscape. Browser regressions use virtual lenses and do not prove phone capture-driver behavior. (Camera follow-up, 10 Oct 2026)
+### Camera correction on real phones
 
-- **Verify the latest empty-room webhook regression with credentials.** Run `tests/e2e/livekit-webhook.spec.ts`, then temporarily restore the old `room_finished` handler to see the new “an emptied room leaves the link joinable” spec fail. Local gates passed at `8.00.5`, but that checkout had no credentials and the new e2e had not run. (8.00.5)
-- **`POST /api/meetings` can 500 on Supabase's `PGRST303 — JWT issued at future`, and this is watched rather than fixed.** Seen once, in the Phase 7 checkpoint's first full-suite run against a production build; the second run was clean, and the server log for both runs together holds exactly one occurrence. The service-role key is a static JWT whose `iat` is fixed at project creation, so only Supabase's clock can make it read as future-dated — the local clock was verified correct to the second against a network source. **Distinct from the transport starvation below**, which is an absent response rather than a rejected one, and not covered by `createMeeting`'s retry, which fires only on a thrown transport error. **Do not widen that retry to catch it:** `PGRST303` shares its shape with genuine JWT and permission faults, and a retry would hide those. If it recurs, the question to answer is whether the skew tracks the free instance resuming from idle. (checkpoint)
-- **~~`reactions.spec.ts:83` is flaky on the participant-attribute round trip~~ — root-caused at `7.26.6`, and it was never a flake in the product.** The suite's own join gate was vacuous: `page.getByText('Connected')` defaults to a case-insensitive **substring** match and the status strip's first state is `Disconnected`, which contains it. So `joinAs`'s wait for a connected room resolved instantly against a room that had not connected, and the test raised a hand **2.7s before the signal was up** — where livekit-client refuses the request outright (`cannot send signal request before connected`), it times out ~5s later, and `reactions-provider.tsx` dropped the rejection into a `void`. The hand was never recorded, so the latecomer legitimately could not see it. Measured on a production build: **7 failures in 40 at one worker, 24 in 40 at four**, every single-worker failure landing on the product assertion. With `exact: true`: **0 in 40 on that assertion.** The margin theory in the previous version of this entry was wrong — nothing was losing a close race, the write was being made at a moment it could not succeed. (F15, F26)
-- **~~`POST /api/meetings` 500s intermittently under full-suite load~~ — diagnosed and closed as a `next dev` artifact.** The handler's own log from a failing run — the artifact wanted since the Phase 5 checkpoint — was captured: `TypeError: fetch failed` / `ConnectTimeoutError` on `:443` with a 10s timeout (`UND_ERR_CONNECT_TIMEOUT`). The standing hypothesis of a rate-limited `getUser()` was **wrong**: it never reaches auth, and Supabase answered 20 concurrent requests at ~0.19s each while the suite was failing. It is undici unable to *establish* a connection, which is what event-loop starvation looks like — and `next dev` compiles routes on demand under four-worker load. The same full suite against a production build produced **zero** connect timeouts and **zero** handler errors, where `next dev` produced 23. That closes this and the older `ECONNRESET` follow-up below as a dev-server artifact rather than a product fault. **Corrected at `7.26.6`: "zero on production" was true of the full suite and is not true in general.** Forty repeats of one two-participant call at four workers — a far denser load than the suite, which spends most of its time on pages that touch no room — produced **2** `ConnectTimeoutError`s on a production build. So the starvation is a matter of degree, not a dev-only phenomenon: production is dramatically better, not immune. `createMeeting`'s transport retry is what keeps both counts off the suite's result, and it is doing real work rather than covering a fault that no longer exists. (F26)
-- **A muted microphone can come back unmuted after a reconnect — and the test that was meant to catch it has never once exercised the path where it could happen.** F23 measured this, saw mute hold, and declined to write restoration code. F24 caught it failing once, then passing 17 times. Instrumenting `connection.spec.ts` (see `tests/e2e/support/reconnect.ts`) and running it 40 more times settled why: **in all 39 runs that produced evidence, `context.setOffline()` took the resume / ICE-restart path — zero new `RTCPeerConnection`s, zero re-acquisitions, zero unmutes.** A full restart is the only path that runs `republishAllTracks`, and it is the only place mute intent could plausibly be lost. So ~57 accumulated green runs say nothing about the actual risk, and more repeats of this test will not find it. Reading livekit-client 2.21 end to end also found every path it owns preserves mute deliberately: `republishAllTracks` guards `restartTrack()` behind `!track.isMuted`, `handleTrackEnded` fails *toward* mute, publish carries `muted: track.isMuted`, and `LocalParticipant.updateInfo` reconciles the **server to the client's** local value on rejoin, repairing a mute signal lost while offline. **Therefore: do not write the reapply-on-`Reconnected` fix** — it would layer our write onto a correct SDK path mid-`republishAllTracks`, which is F23's feared race with a concrete shape. **And a test that forces a full restart is not merely missing, it is unreachable** — `context.setOffline` fails with a `SignalReconnectError`, which `attemptReconnect` explicitly excludes from promoting the next attempt to a full reconnect, so it resumes forever; measured at 10s, 20s, 30s and 45s offline with zero new peer connections each time. See `constraints.md` → Testing. **This question is therefore settled by reading livekit-client rather than by test, and that is the best available evidence — not a gap for anyone to reopen.** (F23, F24, F26)
-- **~~The lobby leaks a live microphone track into the call~~ — found and fixed while investigating the mic-reconnect question.** The mount acquisition effect in `use-media-preview.ts` guarded on `cancelled`, which is set only by the effect's own cleanup — but pressing Join does not unmount the hook. `stopPreview()` signals abandonment by bumping `generation.current`, and the mount effect was **the one acquisition path that never read it** (only `setCameraEnabled`/`setMicrophoneEnabled` did). A request still in flight at Join therefore resolved with `cancelled === false`, reached `hold()`, and was never stopped: the device stayed open for the whole call, `enabled: true`, under a control reading muted. No audio reached the room — the track is never published — but on a real device the OS mic indicator stays lit, which `constraints.md` → Media and devices says must never happen. Measured on a production build at **2 live audio tracks in 6 of 6 runs before, 1 in 6 of 6 after**. The effect now snapshots both counters before its first await and releases anything superseded. **This is almost certainly the F08/F24 duplicate-track flake**, which should now stop recurring — if it does recur, that assumption was wrong. (F07, F08, F24)
-- **The test process's own Supabase fetches `ECONNRESET` under full-suite load.** Three `livekit-webhook.spec.ts` tests failed in the F25 full-suite run with `TypeError: fetch failed / read ECONNRESET` raised by the *spec's* `supabaseAdmin` reads, not by a route handler — then all nine passed in isolation immediately after. Distinct from the `/api/meetings` 500 above, which is a response our handler produces; this is an outbound TLS connection from the Playwright process being reset. Most likely the free Supabase project throttling concurrent connections when the whole suite runs at once. **Mitigated at `7.26.2`** with a retry on transport errors in the spec's read helper, matching what `createMeeting` already does — and **not claimed as cured.** It resurfaced as a different symptom during `7.26.6`: while the connect gate was still expiring, five `livekit-webhook` and four `history` specs hit the 30s default test timeout, because slow spec-side Supabase reads plus a retry can outlast it. They passed in every run after the gate was fixed, so the load that provokes it is now rarer rather than gone. If it returns, the next move is a longer `test.setTimeout` on the Supabase-heavy specs, not another retry. (F25, F26)
-- **~~`connection.spec.ts` has its own flake: the reconnect banner sometimes never appears~~ — same root cause as the reactions flake, closed at `7.26.6`.** It was recorded as "the test's timeout rather than the product", and the second half of that was right for the wrong reason. The test's own `expect(page.getByText('Connected'))` on the line before `setOffline(true)` was matching the strip's `Disconnected`, so it went offline against a room that had never connected — there was nothing to disconnect *from*, so no banner could appear and the 30s wait was always going to expire. With `connectedStatus()`: **40 of 40 passing at four workers**, the same load the single failure was seen under. (F23, F26)
-- **F24's loading skeletons were built, measured, and removed — the bullet is deliberately unbuilt.** `loading.tsx` flushes the response before the route's own gate runs, so it turned a dead meeting link from 404 into 200 and the signed-out `/history` redirect from a 307 into a client-side navigation that first rendered the page heading to someone not allowed to see it. Both regressions were caught by existing tests and by direct measurement; see `constraints.md` → Error and loading surfaces. Having a skeleton on either route means moving the gate above the streaming boundary, which is a larger change than the skeleton earns — the cold-start gap it was meant to cover is mostly Render's own wake, which `constraints.md` → Hosting says cannot be branded or shortened anyway. (F24)
-- **History's `limit(50)` counts participation rows, not meetings.** With rejoins, a user with heavy history could have a meeting's earlier session fall outside the window, shortening that entry's span. Bounded and rare — it needs 50+ rows — and the fix is a `distinct on (meeting_id)` or a two-step id query. Revisit only if history depth ever matters. (F21)
-- **~~`POST /api/meetings` 500s under parallel test load~~ — diagnosed at the Phase 3 checkpoint and closed.** It is `next dev` resetting connections when four Playwright workers hit it at once, surfacing as `read ECONNRESET` *before* any handler runs: across four fully logged suite runs the handler logged nothing, and twelve concurrent requests by hand never reproduced it. `createMeeting` now retries once on a thrown transport error only — a non-201 still fails immediately, so a genuine 500 stays as loud as it was. CI builds and runs a production server, where this has never appeared. (checkpoint)
-- **~~F22's six device- and deploy-dependent checks~~ — five closed across two owner sessions on 15 Aug 2026, one still open.** Every one needed hardware or a deployed URL, and a mobile pass claiming them from devtools emulation would have been claiming the emulator. **Closed**, from calls spanning a Mac, an Android and an iPhone on the deployed instance: (2) the full guest-join flow on a real iOS device and a real Android device; (3) audio starting after the Join gesture on iOS Safari; (6) a real desktop screen share received on a real phone; (4) device pickers showing real labels on mobile after permission; and (1) safe-area insets on a notched phone. **(1) and (3) are the weak members of that list and are recorded as reported rather than probed** — both were implied by an end-to-end session going well rather than by someone looking for them, and (1) in particular fails as slightly-off padding rather than as a bug, which is exactly why it survived from F09 unnoticed. **Still open: (5) the deployed-instance performance targets** — Lighthouse on mobile throttling, and a ten-minute four-participant call. It gates nothing: F25's Verify names only the signed-in two-device call, and `code-standards.md` → Performance already says a target that cannot be met is recorded with its reason rather than lowered. It needs four participants and a phone, so it is carried against the owner, not against a feature. (F22, F25)
-- **~~Home's first-load JS is ~341 kB gzipped against a 200 kB target~~ — measured and partly closed at F22.** Confirmed at 343 kB, then cut to **279 kB** by deferring the Supabase browser client behind the sign-in click. Still over target, and the reason is recorded in `constraints.md` → Performance and bundles rather than the target being lowered: React and react-dom are ~112 kB of the remainder, `zod` cannot leave because `env.ts` parses with it at import, and the rest needs sign-in moved off the browser client entirely. Reopen only if that rewrite becomes worth doing for its own sake.
-- **~~The denied, no-device, and in-use states have no automated coverage~~ — covered by `media-failures.spec.ts`, via stubs, because nothing else can reach them.** The recorded plan of a second Playwright project **does not work**: seven flag and permission combinations were measured, and `--use-fake-ui-for-media-stream` overrides Playwright's own context permissions while removing it makes this Chromium refuse all capture with `NotSupportedError`. `stubMediaFailure` rejects with a real `DOMException` per state. The tests assert the **mapping**, not the prose, and were seen to fail when `denied` and `no-device` were swapped in `classify-media-error.ts`. See `constraints.md` → Testing. (F07, F08, F26)
-- **A device that hangs on a first visit still leaves the lobby waiting.** The timeout only runs once permission is known granted, because a pending prompt is a person thinking, not a fault. Reloading recovers, since permission is granted by then. Fixable by watching `PermissionStatus.onchange` and starting the timer when the state flips — worth doing only if it is seen in the wild. (F07)
-- **The F08 camera-track flake recurred at F24, and this time the artifact was kept.** `control-bar.spec.ts` → "the camera control releases the device, not just the picture" failed once in a full-suite run with **two** live video tracks where one was expected, then passed on re-run. That is the same duplicate-track shape as the original F08 flake, so the purity fix made then (a `track.stop()` inside a `setState` updater) was not the whole cause. The artifact is preserved outside `test-results/` this time, per the standing instruction two follow-ups have now given: see the scratchpad copy noted in `build-journal.md` → F24. Most likely a genuine race in acquisition under parallel load rather than a test defect. **Measured at `7.26.8`: 40 of 40 green at four workers, so it did not reproduce.** That is consistent with the `6.00.2` lobby-leak fix having been its cause, which is what that commit predicted — but 40 clean runs of a failure last seen once are evidence, not proof, and the honest reading is "did not reproduce" rather than "fixed". Unlike the mic-across-a-reconnect question, the path here *is* genuinely exercised by the test, so the runs at least mean something. Reopen if it is ever seen again. (F08, F24, F26)
-- **~~The microphone paths still have thin coverage~~ — closed at `7.26.8`.** The reason recorded for the gap was false: `getUserMedia({audio:true})` does **not** hang — measured at 173ms — against a claim that had justified leaving every mic path manual since F08. `lobby-controls.spec.ts` had **35 camera mentions and zero for the microphone**, while `use-media-preview.ts` keeps separate state, a separate generation counter and a separate acquire call per device. Four tests now cover the mic: off releases the device rather than muting it (the OS indicator claim), back on re-acquires exactly one track (the shape of the `6.00.2` leak, which was an *audio* track and which nothing had ever counted), the picker naming a real enumerated device, and a swap in place. Each was seen to fail against a deliberate break — mute-instead-of-stop, an emptied device list, a leaking swap, and an ignored stored preference. (F08, F26)
-- **~~The camera picker test was vacuous from F08 until `7.26.8`~~ — fixed in the same commit that found it, and kept here because the *class* of defect is the lesson.** `DevicePicker` renders `No devices found` when it holds nothing, so an assertion that "some option has a label" is satisfied by a picker with **no devices at all** — proven by emptying the list and watching the test stay green. It also could not tell a browser-supplied label from `DevicePicker`'s own numbered `Camera 1` fallback, which is precisely what enumerating before permission produces — the bug the test exists for. Both versions now assert an option carrying a real `deviceId` and a label that is not the fallback, and both were seen to fail. (F08, F26)
-- **~~Configure the LiveKit Cloud webhook URL at F25, and only then is F20 proven against real traffic~~ — configured, and F20 is now proven.** Verified by driving a real browser against the deployed instance: `participant_joined`, `participant_left` and `room_finished` all arrived and wrote correctly. Every assumption F20 was built on is now a fact — **`room.name` really carries the room code** (the row resolved to the right meeting) and **`participant.name` really carries the token's display name**. The `guest:<uuid>` identity correlates join to leave, `user_id` is null and the generated `is_guest` true, and `joined_at` is LiveKit's clock rather than delivery time. Delivery cadence measured: joined within ~10s, `room_finished` ~45s after the room emptied. **Both leave paths were exercised.** A deliberate leave recorded 6s for a 6s session — exact. A killed tab recorded 29s for an ~8s session, because LiveKit's connection timeout takes ~22s to notice; that is the reconciliation case F20 exists for, and it behaved correctly. Note for anyone re-running this: Leave is a two-step armed control, so clicking it once and closing the tab tests the killed-tab path, not a deliberate leave. (F20, F25)
-- **`room_finished` would 500 if LiveKit's clock ran more than a meeting's lifetime behind Postgres's.** `ended_at` comes from the event, and `meetings_ended_after_creation` rejects one older than `created_at`. Unreachable in practice — `room_finished` fires after the empty timeout, minutes past creation — and it degrades safely, since the nightly sweep closes the meeting at `expires_at` anyway. Found at F20 by a test fixture that back-dated events before the meeting existed. Worth a `greatest()` clamp only if it is ever seen. (F20)
-- **A `user:<uuid>` identity whose profile row is missing would 500 and retry.** The FK to `profiles` would reject the insert. Unreachable while the `on_auth_user_created` trigger works — and if it does not, a loud repeated failure is the right outcome, so this is recorded rather than defended against. (F20)
-- **~~Add the Render URL to Supabase's Redirect URLs at F25~~ — done, and settled by the only check that can settle it.** `NEXT_PUBLIC_SITE_URL` was confirmed compiled into the deployed client bundle as the correct origin, but the redirect allow-list and the Google client's authorized URI could not be probed from here: Supabase echoes `redirect_to` into the Google URL and validates it only at callback time, so a rejected origin and an allow-listed one are indistinguishable until somebody completes a round trip. **A Google sign-in on `https://videocircle-blw4.onrender.com` succeeded on 15 Aug 2026**, which clears both dashboards at once — the callback exchanged its code, so `safeNext` and the origin comparison were exercised too. (F04, F25)
-- **~~Check whether the email/password provider is enabled on the Supabase project, and disable it if so~~ — it was enabled, and is now disabled.** Confirmed both ways against `/auth/v1/settings`: `external.email` was `true` with `disable_signup: false`, meaning anyone could create an account straight from the Auth API outside every route handler; it now reads `false`, with Google still `true`. The `auth_leaked_password_protection` advisor finding is moot as a result. (F25)
-- **~~LiveKit credentials are live locally and proven end to end; Render still needs all three set~~ — set and verified on the deployed instance.** `/api/token` there mints a signed JWT whose grant is exactly the invariant — one room, `roomJoin`/`canPublish`/`canSubscribe`/`canPublishData`/`canUpdateOwnMetadata`, none of `roomAdmin`/`roomCreate`/`roomList` — with the TTL capped at 3600s, and returns the `wss://` server URL. A real browser then joined that room. (F09, F25)
-- **A room with one participant behaves differently from a room with two, in two unrelated places.** Screen sharing into an empty room is unreliable (below), and LiveKit does not echo a participant-attribute change back to the participant who set it while they are alone — found at F15, worked around by holding your own raised hand in local state. Two findings with the same shape is worth treating as a pattern the next time something works with an audience and not without one. (F13, F15)
-- **~~Screen sharing into an empty room is unreliable~~ — investigated at F24 and closed as unreproducible.** 32 solo publishes: 8 sequential, 24 under three-way parallel load, and 8 through the old camera-sourced picker stub. All 32 stayed up. `livekit-client` has not moved since F07, so it is not an SDK bump; the original observation was environment- or harness-dependent, or LiveKit Cloud changed underneath. No regression test was added, deliberately — if the behaviour is real but rare, that test becomes the flake F13 was avoiding. Recorded in `constraints.md` → The call as unproven rather than known-bad. (F13, F24)
-- **~~A real desktop share has never been received on a real phone~~ — done on 15 Aug 2026, on the deployed instance.** Reported by the owner from a call spanning a Mac, an Android and an iPhone: a share started on the desktop was seen on a phone. This was the last part of screen sharing that no test could reach — the suite stubs the picker and proves the publish path, the capability gate and the remote tile, but the receiver-is-a-phone half needed hardware, and no phone can reach a local server over a secure context. (F12, F22, F25)
-- **~~Pressing the share control during the connect handshake silently does nothing~~ — fixed at F24.** The control is disabled until the room reports `Connected`, and says why rather than being merely dim. Only *starting* is gated; stopping stays available in every state, including a mid-call reconnect, which is exactly when someone wants their screen to stop being broadcast. `edge-states.spec.ts` holds the room in Connecting by pointing the client at an unreachable server, so the assertion is deterministic rather than racing a one-to-three-second window. (F12, F24)
-- **~~The wordmark's tittle sits ~3.5px off during the `next/font` swap window~~ — gone at `7.00.6`, by removing the thing it was measured against rather than by re-measuring it.** The mark now separates the two words with one red square instead of dotting both i's, so nothing is positioned against JetBrains Mono's stem centre or tittle height and the generated fallback has no glyph shape left to mismatch. Accepted at F02 rather than trading it for a flash of invisible text, and it would still be the right call had the mark stayed — the fix was a brand change that happened to make the bug unreachable, not a repair. Same commit retired the U+0131 DOTLESS I workaround and the aria-label's original justification; see `constraints.md` → the two wordmark bullets. (F02)
-- **~~With chat open and scrolled up, nothing signals a new message~~ — fixed at F24.** A *New messages* control appears when, and only when, something has arrived since the reader scrolled away from the floor; scrolling back through a finished conversation shows nothing, which is asserted separately so the control cannot become a notification about nothing. (F19, F24)
-- **~~The composer under a phone's on-screen keyboard is half-addressed and wholly unverified~~ — reported working on a real iPhone, and deliberately not upgraded to "solved".** F22 set `interactiveWidget: 'resizes-content'`, which shrinks the layout viewport on Android Chrome so the composer stays above the keyboard, and gave the sheet its bottom safe-area inset. **iOS Safari ignores that field**, and the plan expected a `visualViewport` treatment to be needed — so this was the one carried check budgeted as implementation rather than a tick. An owner session on the deployed instance found nothing wrong with it, but that was using the app rather than looking at this, and Playwright has no soft keyboard, so nothing automated can settle it either. **Treat the iOS half as unconfirmed rather than unnecessary:** if a composer is ever seen sitting behind the keyboard, `visualViewport` is the known treatment and not a fresh investigation. (F19, F22, F25)
-- **~~`joinAs` is copy-pasted into eight e2e specs~~ — lifted into `tests/e2e/support/join.ts`.** It was **12** specs in **7** variants, not eight and identical as recorded. The variants reduced to two axes: an optional `hash`, and `until: 'connected' | 'mounted'`. `connected` is the default because it is strictly stronger; the five specs that waited only for the control bar pass `mounted`, so no spec changed behaviour — confirmed by a 126/126 full suite immediately after. (F17, F26)
-- **~~`/tokens` still ships its markup in the production bundle~~ — checked at F22 and closed.** It is its own route with its own chunk, so it contributes nothing to Home's first-load JS, which is the only budget that was ever tight. A few kB on a route that 404s in production is not worth a change.
+Pending after deployment. In a two-participant call on real iPhone Safari and
+Android Chrome:
+
+1. Switch front → rear → front through MORE. Confirm the front self-view is mirrored and the rear self-view is not. Also check a lens selected in the lobby before joining.
+2. Join with the camera off and select a lens before enabling capture.
+3. During a call, turn the camera off, cycle lenses twice, then turn it on. It must stay off until enabled and then use the selected lens.
+4. Point the rear camera at readable text. The other participant must receive it normally.
+5. Confirm audio continues, the call stays connected, rapid taps do not queue switches, and the controls work in portrait and landscape.
+
+The browser regressions use virtual lenses and cannot prove how phone capture
+drivers behave. (Camera follow-up, 10 Oct 2026)
+
+### Empty-room webhook regression
+
+Pending verification with credentials. Run `tests/e2e/livekit-webhook.spec.ts`,
+then temporarily restore the old `room_finished` handler and confirm that the new
+"an emptied room leaves the link joinable" test fails. Local checks passed at
+`8.00.5`, but that checkout had no credentials and the new e2e test had not run.
+(8.00.5)
+
+### Supabase clock error
+
+Monitor this without adding a fix. `POST /api/meetings` returned 500 with
+Supabase's `PGRST303 — JWT issued at future` once during the Phase 7 checkpoint's
+first full-suite run against a production build. The second run was clean; the
+combined server log contains exactly one occurrence.
+
+The service-role key is a static JWT whose `iat` was fixed when the project was
+created. Only Supabase's clock can make it appear future-dated. The local clock
+was checked against a network source and was correct to the second.
+
+This differs from the transport starvation below, where no response arrives.
+`createMeeting` retries only thrown transport errors. Do not extend that retry to
+this error: `PGRST303` has the same form as genuine JWT and permission faults,
+which a retry could hide. If it recurs, check whether the clock skew coincides
+with the free instance resuming from idle. (checkpoint)
+
+### Raise-hand test failure (closed)
+
+The failure at `reactions.spec.ts:83` was traced to the test's join check at
+`7.26.6`, not to an intermittent product bug.
+
+`page.getByText('Connected')` defaults to a case-insensitive substring match. It
+matched the status strip's initial `Disconnected` text, so `joinAs` immediately
+continued before the room connected. The test raised a hand 2.7s before the signal
+connection was ready. LiveKit refused it with `cannot send signal request before connected`;
+the request timed out about 5s later, and `reactions-provider.tsx` discarded the
+rejection through a `void`. The hand was never recorded, so a latecomer correctly
+saw no raised hand.
+
+On a production build, this caused 7 failures in 40 runs at one worker and 24 in 40
+at four workers. Every single-worker failure reached the product assertion. With
+`exact: true`, that assertion failed 0 times in 40 runs. The earlier explanation
+about a narrow timing margin was wrong: the write was attempted before it could
+succeed. (F15, F26)
+
+### Meeting creation timeouts under full-suite load
+
+Intermittent `POST /api/meetings` 500s were initially diagnosed and closed as a
+`next dev` issue. Later measurements narrowed that conclusion. The handler log requested since the Phase 5 checkpoint was
+captured during a failing run. It showed `TypeError: fetch failed` /
+`ConnectTimeoutError` on `:443` after 10s (`UND_ERR_CONNECT_TIMEOUT`).
+
+The earlier theory that `getUser()` was rate-limited was wrong. The request never
+reached auth, and Supabase answered 20 concurrent requests at about 0.19s each
+while the suite failed. Undici could not establish a connection, consistent with
+the event loop being too busy. `next dev` compiles routes on demand under the
+four-worker load.
+
+The same full suite against a production build had zero connection timeouts and
+zero handler errors, compared with 23 under `next dev`. This initially closed
+both this issue and the older `ECONNRESET` follow-up as dev-server effects.
+
+Correction at `7.26.6`: zero errors in that full suite did not mean production was
+immune. Forty repetitions of one two-participant call at four workers produced
+2 `ConnectTimeoutError`s on a production build. That load is much denser than the
+full suite, which mostly visits pages without rooms. Production reduces the
+starvation substantially but does not eliminate it. `createMeeting`'s transport
+retry prevents both sets of errors from failing the suite; it still serves a real
+purpose. (F26)
+
+### Microphone mute state after reconnection
+
+The original concern was that a muted microphone could return unmuted after a
+reconnect. F23 saw mute preserved and did not add restoration code. F24 saw one
+failure followed by 17 passes.
+
+Instrumenting `connection.spec.ts` (see `tests/e2e/support/reconnect.ts`) and running
+it 40 more times explained the results. All 39 runs that produced evidence used
+the resume / ICE-restart path after `context.setOffline()`: zero new
+`RTCPeerConnection`s, zero new capture acquisitions, and zero unmutes. Only a full
+restart runs `republishAllTracks`, where mute intent could plausibly be lost.
+The roughly 57 accumulated passes therefore do not test that risk, and repeating
+this test will not resolve it.
+
+A complete read of livekit-client 2.21 found that every SDK-owned path deliberately
+preserves mute:
+
+- `republishAllTracks` calls `restartTrack()` only behind `!track.isMuted`.
+- `handleTrackEnded` defaults to mute on failure.
+- Publishing carries `muted: track.isMuted`.
+- On rejoin, `LocalParticipant.updateInfo` updates the server to match the client's local value, repairing a mute signal lost while offline.
+
+Do not add a fix that reapplies mute on `Reconnected`. It would write over a
+correct SDK path during `republishAllTracks`, creating the race F23 was concerned
+about.
+
+The browser test cannot force a full restart. `context.setOffline` fails with a
+`SignalReconnectError`, which `attemptReconnect` explicitly excludes from
+escalating the next attempt to a full reconnect. It keeps resuming. Measurements
+after 10s, 20s, 30s, and 45s offline all showed zero new peer connections. See
+`constraints.md` → Testing. This question is settled by reading livekit-client;
+that is the best available evidence, rather than a test gap to reopen.
+(F23, F24, F26)
+
+### Lobby microphone track leak (fixed)
+
+Found and fixed while investigating mute after reconnect. The mount acquisition
+effect in `use-media-preview.ts` checked only `cancelled`, which its own cleanup
+sets. Pressing Join does not unmount the hook. Instead, `stopPreview()` marks the
+preview as abandoned by incrementing `generation.current`.
+
+The mount effect was the only acquisition path that did not check that counter;
+`setCameraEnabled` and `setMicrophoneEnabled` already did. A request still pending
+at Join could finish with `cancelled === false`, reach `hold()`, and never be
+stopped. The device remained open for the entire call with `enabled: true`, even
+though the control showed muted. No audio reached the room because that track
+was never published, but the OS microphone indicator stayed lit. This violates
+`constraints.md` → Media and devices.
+
+On a production build, measurements found 2 live audio tracks in 6 of 6 runs
+before the fix, and 1 in 6 of 6 after it. The effect now snapshots both counters
+before its first await and releases anything superseded. This is almost certainly
+the F08/F24 duplicate-track failure. If it recurs, that explanation was wrong.
+(F07, F08, F24)
+
+### Supabase connection resets in the test process
+
+The test process's own Supabase reads can fail with `ECONNRESET`. Three
+`livekit-webhook.spec.ts` tests failed during the F25 full-suite run with
+`TypeError: fetch failed / read ECONNRESET` in the spec's `supabaseAdmin` reads.
+All nine passed immediately afterwards in isolation. This was an outbound TLS
+connection from Playwright being reset, distinct from a `/api/meetings` 500
+returned by our route handler. The likely cause was the free Supabase project
+throttling concurrent connections during the full suite.
+
+Mitigated at `7.26.2` by retrying transport errors in the spec's read helper, as
+`createMeeting` already does. This is not claimed as cured. At `7.26.6`, while the
+connection check was still expiring, five `livekit-webhook` and four `history`
+specs hit the 30s default test timeout. Slow Supabase reads plus a retry can take
+longer than that. They passed in every run after the connection check was fixed,
+so the triggering load is rarer, rather than gone.
+
+If it returns, increase `test.setTimeout` on the Supabase-heavy specs instead of
+adding another retry. (F25, F26)
+
+### Missing reconnect banner in tests (closed)
+
+The failure in `connection.spec.ts` was closed at `7.26.6` with the same cause as
+the raise-hand failure. The earlier note
+blamed the test timeout rather than the product, but identified the wrong reason.
+
+Immediately before `setOffline(true)`, the test's
+`expect(page.getByText('Connected'))` matched `Disconnected`. The room had never
+connected, so there was nothing to disconnect from and no reconnect banner could
+appear. Waiting 30s could not change that.
+
+Using `connectedStatus()` produced 40 of 40 passing runs at four workers, the same
+load under which the original single failure occurred. (F23, F26)
+
+### Route loading skeletons (deliberately removed)
+
+F24 built, measured, and removed these skeletons. `loading.tsx` sends the response
+before the route's access or validity check runs. A dead meeting link changed
+from 404 to 200. The signed-out `/history` redirect changed from a 307 to a
+client-side navigation that first showed the page heading to someone without
+access. Existing tests and direct measurements found these regressions; see
+`constraints.md` → Error and loading surfaces.
+
+Adding a skeleton safely would require moving the check above the streaming
+boundary. That is a larger change than the skeleton warrants: most of the delay
+it was meant to cover is Render waking up, which cannot be branded or shortened.
+See `constraints.md` → Hosting. This part of the feature is intentionally left
+unbuilt. (F24)
+
+### History row limit
+
+History's `limit(50)` counts participation rows, not distinct meetings. If someone
+rejoins often enough to have 50+ rows, an earlier session of a meeting can fall
+outside that window and shorten its displayed span.
+
+This is bounded and rare. A `distinct on (meeting_id)` or a two-step id query would
+fix it. Revisit only if history depth becomes important. (F21)
+
+### Earlier parallel-load meeting failures (closed)
+
+The earlier `POST /api/meetings` 500s were diagnosed and closed at the Phase 3
+checkpoint. With four Playwright workers,
+`next dev` reset connections with `read ECONNRESET` before any handler ran.
+The handler logged nothing across four fully logged suite runs, and twelve
+concurrent manual requests did not reproduce the error.
+
+`createMeeting` now retries once, only on a thrown transport error. A non-201
+response still fails immediately, so a genuine 500 remains visible. CI builds and
+runs a production server, where this had never appeared in the recorded runs.
+(checkpoint)
+
+### F22 checks requiring devices or deployment
+
+Five of six checks were closed across two owner sessions on 15 Aug 2026. Every
+check needed hardware or a deployed URL; devtools emulation could not verify them.
+Calls on the deployed instance spanning a Mac, an Android, and an iPhone covered:
+
+- (2) the full guest-join flow on real iOS and Android devices;
+- (3) audio starting after the Join gesture on iOS Safari;
+- (6) a real desktop screen share received on a real phone;
+- (4) real device labels in mobile pickers after permission;
+- (1) safe-area insets on a notched phone.
+
+Checks (1) and (3) are recorded as reported, rather than specifically tested. They
+were inferred from the full session going well. In particular, (1) can fail as
+slightly incorrect padding that a person may not notice; that is how it remained
+unnoticed from F09.
+
+Check (5), the deployed performance targets, remains open: Lighthouse with mobile
+throttling and a ten-minute four-participant call. It blocks no feature. F25's
+Verify section requires only a signed-in two-device call, and `code-standards.md`
+→ Performance says to record an unmet target with its reason rather than lower
+it. This needs four participants and a phone, so it remains work for the owner
+rather than for a build-plan feature. (F22, F25)
+
+### Home JavaScript bundle size (partly resolved)
+
+The original estimate was about 341 kB gzipped against a 200 kB target. F22
+measured 343 kB, then reduced it to 279 kB by loading the Supabase browser client
+only after the sign-in click.
+
+The result is still over target. The reason is recorded in `constraints.md`
+→ Performance and bundles; the target was not lowered. React and react-dom account
+for about 112 kB of the remainder. `zod` must stay because `env.ts` parses with it
+at import. Further savings require moving sign-in entirely off the browser client.
+Reopen only if that rewrite becomes worth doing for its own sake.
+
+### Automated media-failure coverage (closed)
+
+`media-failures.spec.ts` now covers denied, no-device, and in-use states using
+stubs, because other approaches cannot reach them. The earlier plan for a second
+Playwright project does not work.
+
+Seven flag and permission combinations were measured.
+`--use-fake-ui-for-media-stream` overrides Playwright's context permissions.
+Removing it makes this Chromium reject all capture with `NotSupportedError`.
+`stubMediaFailure` instead rejects with a real `DOMException` for each state.
+
+The tests verify the error-to-state mapping, rather than exact wording. Swapping
+`denied` and `no-device` in `classify-media-error.ts` was seen to make them fail.
+See `constraints.md` → Testing. (F07, F08, F26)
+
+### A stalled device on the first visit
+
+Still open. The lobby timeout starts only when permission is known to be granted;
+a pending permission prompt may simply mean the person is deciding. A device that
+hangs on the first visit can therefore leave the lobby waiting. Reloading recovers
+because permission has been granted by then.
+
+A possible fix is to watch `PermissionStatus.onchange` and start the timer when
+permission changes. Make that change only if this occurs in real use. (F07)
+
+### Duplicate camera track observed at F24
+
+`control-bar.spec.ts` → "the camera control releases the device, not just the
+picture" failed once in a full-suite run with two live video tracks instead of
+one, then passed on re-run. This matched the F08 duplicate-track failure, so the
+purity fix made then, involving a `track.stop()` inside a `setState` updater, was
+not the whole cause.
+
+This time the failure output was kept outside `test-results/`, as two follow-ups
+had already instructed. See the scratchpad copy noted in `build-journal.md` → F24.
+A capture-acquisition race under parallel load is more likely than a test defect.
+
+At `7.26.8`, 40 of 40 runs passed at four workers. This is consistent with the
+`6.00.2` lobby-leak fix addressing the cause, as that commit predicted. But 40 clean
+runs after a single observed failure support "did not reproduce", not "fixed".
+Unlike the microphone reconnect test, this test does exercise the relevant path.
+Reopen if the failure appears again. (F08, F24, F26)
+
+### Microphone test coverage (closed)
+
+Closed at `7.26.8`. The reason previously given for leaving microphone paths
+manual was false: `getUserMedia({audio:true})` completed in 173ms rather than
+hanging. That claim had justified the gap since F08.
+
+`lobby-controls.spec.ts` mentioned cameras 35 times and microphones zero times,
+even though `use-media-preview.ts` has separate state, generation counters, and
+capture-acquisition calls for each device. Four tests now check that:
+
+1. Turning the mic off releases the device instead of just muting it, matching the OS indicator requirement.
+2. Turning it back on acquires exactly one track. The `6.00.2` leak involved an audio track, which no test had counted.
+3. The picker names a real enumerated device.
+4. Switching devices replaces capture in place.
+
+Each test was seen to fail against a deliberate break: muting instead of stopping,
+an empty device list, a leaking swap, and an ignored stored preference.
+(F08, F26)
+
+### Camera picker test that could pass without devices (fixed)
+
+Fixed at `7.26.8`, after remaining ineffective since F08. `DevicePicker` shows
+`No devices found` for an empty list. A test that only checked that an option had
+a label therefore passed with no devices at all. Emptying the list confirmed this.
+
+The test also could not distinguish a browser-provided label from the picker's
+`Camera 1` fallback. That fallback is exactly what appears when devices are
+enumerated before permission, the bug the test was supposed to catch.
+
+Both versions now require an option with a real `deviceId` and a label that is not
+the fallback. Both were seen to fail. This remains documented because other tests
+can make the same mistake. (F08, F26)
+
+### LiveKit Cloud webhook configuration (verified)
+
+Configured at F25 and verified with a real browser on the deployed instance.
+`participant_joined`, `participant_left`, and `room_finished` all arrived and wrote
+the expected records. This confirmed F20's assumptions:
+
+- `room.name` carries the room code and resolves to the correct meeting.
+- `participant.name` carries the token's display name.
+- `guest:<uuid>` links join and leave events, `user_id` is null, and generated `is_guest` is true.
+- `joined_at` uses LiveKit's clock, not event delivery time.
+
+Join delivery took about 10s; `room_finished` arrived about 45s after the room
+emptied. Both leave paths were tested. A deliberate leave recorded 6s for a 6s
+session. Killing a tab recorded 29s for an approximately 8s session because
+LiveKit took about 22s to detect the lost connection. The reconciliation behavior
+F20 was designed for worked correctly.
+
+Leave is a two-step armed control. Clicking it once and closing the tab tests the
+killed-tab path, not a deliberate leave. (F20, F25)
+
+### A room-finished event with an old timestamp
+
+The recorded concern is that `room_finished` would return 500 if LiveKit's clock
+lagged Postgres's by more than the meeting's lifetime. `ended_at` comes from the
+event, and `meetings_ended_after_creation` rejects timestamps before `created_at`.
+
+This is unreachable in practice: `room_finished` follows the empty timeout,
+minutes after creation. It also fails safely because the nightly sweep closes the
+meeting at `expires_at`. F20 found it through a fixture that dated events before
+the meeting existed. Add a `greatest()` clamp only if it occurs in practice.
+(F20)
+
+### A signed-in identity without a profile
+
+A `user:<uuid>` identity with no matching `profiles` row would cause a 500 and a
+retry because the foreign key rejects the insert. This cannot occur while the
+`on_auth_user_created` trigger works. If that trigger fails, repeated visible
+failures are the correct outcome, so no defensive workaround was added. (F20)
+
+### Render URL in the sign-in configuration (verified)
+
+Completed at F25. `NEXT_PUBLIC_SITE_URL` was confirmed as the correct origin in
+the deployed client bundle. That alone could not verify Supabase's redirect
+allow-list or the Google client's authorized URI.
+
+Supabase copies `redirect_to` into the Google URL and validates it only during the
+callback. Allowed and rejected origins therefore look identical until someone
+completes sign-in.
+
+Google sign-in on `https://videocircle-blw4.onrender.com` succeeded on 15 Aug 2026,
+verifying both dashboards. The callback exchanged its code, which also exercised
+`safeNext` and the origin comparison. (F04, F25)
+
+### Email/password provider (disabled)
+
+The provider was enabled and is now disabled. `/auth/v1/settings` originally
+returned `external.email` as `true` with `disable_signup: false`. Anyone could
+therefore create an account directly through the Auth API, bypassing every route
+handler. It now returns `false`, while Google remains `true`. The
+`auth_leaked_password_protection` advisor finding no longer applies. (F25)
+
+### LiveKit credentials on Render (verified)
+
+All three credentials are set and verified on the deployed instance, in addition
+to the earlier local verification. `/api/token` creates a signed JWT for exactly
+one room with the invariant's grants:
+`roomJoin`/`canPublish`/`canSubscribe`/`canPublishData`/`canUpdateOwnMetadata`.
+It grants none of `roomAdmin`/`roomCreate`/`roomList`, caps the TTL at 3600s, and
+returns the `wss://` server URL. A real browser joined that room. (F09, F25)
+
+### Solo calls can behave differently
+
+Two unrelated observations involved a room with one participant: unreliable solo
+screen sharing, discussed below, and participant-attribute changes that LiveKit
+does not echo to the sender while they are alone. F15 addressed the latter by
+keeping the local raised-hand state locally.
+
+When something works with other participants but not alone, check for this kind
+of difference. (F13, F15)
+
+### Solo screen sharing (not reproduced)
+
+Investigated at F24 and closed as unreproducible. All 32 solo publishes stayed up:
+8 sequential, 24 under three-way parallel load, and 8 through the old
+camera-sourced picker stub.
+
+`livekit-client` had not changed since F07, so an SDK upgrade did not explain it.
+The original observation may have depended on the environment or test harness,
+or on a change in LiveKit Cloud. No regression test was added deliberately: if
+the behavior is real but rare, it would create the intermittent failure F13 was
+trying to avoid. `constraints.md` → The call records it as unproven, rather than
+known-bad. (F13, F24)
+
+### Desktop screen sharing received on a phone (verified)
+
+Completed on the deployed instance on 15 Aug 2026. The owner reported that a
+screen share started on a desktop was visible on a phone during a call spanning
+a Mac, an Android, and an iPhone.
+
+The suite already stubs the picker and verifies publishing, the browser support
+check, and the remote tile. Receiving on a real phone needed hardware; a phone
+cannot reach a local server over a secure context. This was the final screen-share
+check that automated tests could not reach. (F12, F22, F25)
+
+### Starting screen share while connecting (fixed)
+
+Fixed at F24. The share control is disabled until the room reports `Connected`,
+and explains why. Only starting is restricted. Stopping remains available in
+every state, including a reconnect, when someone may want to stop broadcasting.
+
+`edge-states.spec.ts` holds the room in Connecting with an unreachable server.
+This makes the assertion deterministic instead of racing the one-to-three-second
+connection window. (F12, F24)
+
+### Wordmark misalignment during font loading (removed)
+
+The dot over the wordmark's i sat about 3.5px off during the `next/font` swap
+window. At `7.00.6`, the brand changed to a red square between the words instead
+of dots over both i's. Nothing is now positioned against JetBrains Mono's stem
+centre or tittle height, so the fallback font has no matching glyph geometry
+to get wrong.
+
+F02 had accepted the offset instead of introducing a flash of invisible text;
+that would still have been the right choice if the old mark had stayed. This was
+a brand change that removed the condition for the bug, rather than an alignment
+repair. The same commit removed the U+0131 DOTLESS I workaround and the original
+reason for the aria-label. See the two wordmark bullets in `constraints.md`.
+(F02)
+
+### New chat messages while scrolled up (fixed)
+
+Fixed at F24. A *New messages* control appears only when a message arrives after
+the reader has scrolled away from the bottom. Scrolling back through a finished
+conversation shows no control. A separate assertion verifies that case so the
+control cannot announce messages that did not arrive. (F19, F24)
+
+### Chat composer above the phone keyboard
+
+Reported working on a real iPhone, but not confirmed as solved. F22 set
+`interactiveWidget: 'resizes-content'`, which shrinks Android Chrome's layout
+viewport to keep the composer above the keyboard. The sheet also gets its bottom
+safe-area inset.
+
+iOS Safari ignores that setting. The plan expected to implement a `visualViewport`
+solution, so this check was budgeted as implementation work. The owner noticed no
+problem while using the deployed app, but did not specifically check this
+behavior. Playwright has no software keyboard, so automated tests cannot settle it.
+
+Keep the iOS behavior unconfirmed. If the composer is seen behind the keyboard,
+`visualViewport` is the known solution; it does not require a fresh investigation.
+(F19, F22, F25)
+
+### Shared join helper (completed)
+
+`joinAs` moved to `tests/e2e/support/join.ts`. The original note said it was copied
+identically across eight specs. It was actually in 12 specs with 7 variants.
+
+Those variants reduced to an optional `hash` and
+`until: 'connected' | 'mounted'`. `connected` is the default because it is strictly
+stronger. The five specs that waited only for the control bar use `mounted`.
+No spec changed behavior, confirmed by a 126/126 full-suite run immediately after
+the extraction. (F17, F26)
+
+### Tokens page production markup (closed)
+
+Checked and closed at F22. `/tokens` has its own route and chunk, so its markup
+does not contribute to Home's first-load JavaScript, the only tight bundle budget.
+A few kB on a route that returns 404 in production does not justify a change.
 
 ## Key Decisions
 
-- **Camera direction comes from active capture metadata, never a lens label.** Labels are localized and multiple rear lenses can have opaque names. A shared restart-aware reader keeps the lobby and call consistent; rear views show the scene normally while front and unspecified desktop self-views keep their familiar mirror. LiveKit changes capture within the existing room, preserving audio and the connection; changing lenses while off must not enable the camera. (Camera follow-up, 10 Oct 2026)
-- **Supabase activity is separate from keeping Render awake.** The approved external workflow makes read-only Data API queries as `anon`, where existing RLS hides every row, and never calls the web service. The publishable key requires no new policy, schema, privileged credential or app code. A fully paused Supabase project must be resumed in the dashboard; the old claim that a request wakes it confused Supabase with Render. Setup and the scheduler limitations live in `docs/DEPLOYMENT.md` → Supabase activity check. (Supabase activity follow-up, 10 Oct 2026)
-- **An emptied room is not an ended meeting.** The LiveKit room and the meeting have different lifetimes: the room is created on the first join and finishes shortly after the last person leaves, while the meeting is a link someone was handed and may not have opened yet. F20 treated `room_finished` as the meeting ending, so the invite died the moment the room first emptied — the commonest shape of a real invite, since whoever sends the link usually arrives first. `room_finished` now only closes that session's open participation rows, and `ended_at` is the sweep's alone. Nothing in history changes, because history never read `ended_at` while rows were closed. (8.00.5)
-- **The responsive audit measured one axis and called it the whole surface.** Both of the sweep's measurements are horizontal — `scrollWidth > clientWidth`, and every hit area against 44px — so Home passed at all eight widths while `START A MEETING` sat *entirely* below the fold in phone landscape: `viewport ratio 0` at 740x360, not a near miss. **The hero rework did not cause it.** Measuring the previous hero at the same viewport put the button 21px lower still, so this was true of Home for as long as the sweep has been green, which is the point — a check cannot fail on an axis it does not look at. The fix is a `@media (height <= 30rem)` block, and it is **not** the fourth breakpoint `code-standards.md` bars: that rule is about *width*, where a fourth tier means the layout is fighting the content over what sits beside what, and nothing here moves beside anything — the column is the same column, tightened to fit the window it was given. `responsive.spec.ts` now asserts the primary action is in viewport at `ratio: 1` at every width, and was seen to fail before the CSS existed. (7.00.7)
-- **A dependency's clock can 500 a route, and the fix is to leave it loud.** The checkpoint's first full-suite run failed one spec: `POST /api/meetings` answered 500 carrying Supabase's `PGRST303 — JWT issued at future`. The service-role key is a *static* JWT whose `iat` was fixed when the project was created, so nothing local can move it — the only way it reads as future-dated is Supabase's own clock sitting behind it, which a free instance resuming plausibly explains. The local clock was checked against a network source and was correct to the second. **This is a different mechanism from the transport starvation already on file** (`ConnectTimeoutError` / `ECONNRESET`, where no response arrives at all), and `createMeeting`'s retry deliberately does not cover it: the retry fires on a thrown transport error, never on a non-201, so a genuine 500 stays as loud as it was. Widening it to catch `PGRST303` would also swallow every real JWT and permission fault, which is the same trade F26 refused when it declined to raise a timeout it had not measured. Recorded as a Follow-up to watch, not defended against. (checkpoint)
-- **A feature can be ticked honestly on a report rather than a probe, provided the record says which one it was.** F25 closed on an owner session against the deployed instance, and four carried checks came back working — but two of them, safe-area insets and the chat composer over the iOS keyboard, fail as *slightly wrong padding* rather than as anything a person would notice while using the app, and both were reported from using it rather than from looking for them. The plan expected the iOS composer to need a `visualViewport` treatment outright, so "it worked" is a weaker claim there than anywhere else in the set. They are written down as reported-not-probed, and `constraints.md` → Mobile and viewport keeps the iOS half **unconfirmed rather than unnecessary**. Recording all four identically would have bought a tidier tracker at the cost of the one thing this phase spent itself learning — that a check which was never in a position to fail reads exactly like a check that passed. (F22, F25)
-- **A gate that cannot fail is not a gate, and two long-standing "flakes" turned out to be one vacuous wait.** `page.getByText('Connected')` is a case-insensitive *substring* match, so it resolved against the status strip's own `Disconnected`: every wait for a connected room returned instantly, including `joinAs`'s, whose `until: 'connected'` was documented as strictly stronger than `mounted` while actually being weaker. What that produced downstream was read as product margin for months. `reactions.spec.ts` raised a hand 2.7s before the signal was up, where livekit-client refuses the write outright — 7 failures in 40 at one worker, 24 in 40 at four. `connection.spec.ts` went offline against a room that had never connected, so no reconnect banner could appear. Neither was a race, a timeout margin, or a LiveKit problem. After `exact: true` behind one shared locator: **0 in 40** on the raise-hand assertion and **40 of 40** on the banner. **A suite's preconditions deserve the same "seen to fail" proof its assertions get** — an assertion that never runs is invisible, where a wrong one at least goes red. (F26)
-- **The most valuable thing F24 built was removed before it shipped.** Route-level `loading.tsx` is the conventional answer to a slow server render, and on both routes here it was actively harmful: Next flushes the loading shell immediately, which sends the HTTP status, so `notFound()` afterwards can only swap the UI and `redirect()` degrades to a client-side navigation. A dead meeting link went from 404 to 200; signed-out `/history` went from a 307 to a 200 that rendered the page's own heading to someone not allowed to see it, and would have stranded a visitor without JS on a skeleton forever. Two existing tests caught the first, nothing caught the second — the auth e2e passed, because the client-side redirect does eventually happen. **A skeleton is only safe on a route whose server work is pure fetching, never one that gates.** (F24)
-- **An exhaustive-looking `switch` proves nothing without a `never` guard, and a partial read of a type file is how you get one.** F23's disconnect mapping handled thirteen `DisconnectReason` members because thirteen was as far as the `sed` window reached; the enum has seventeen, and `typecheck` passed clean — `noImplicitReturns` is off, so the four missing members simply returned `undefined`, which would have rendered a blank panel to someone whose call had just dropped. The unit test caught it on its first run. The same undercount was sitting in the published docs for `ConnectionQuality`, which list four values and omit `Lost` — the state a recovery feature exists for. Installed types are the authority; a docs page is a summary. (F23)
-- **A responsive rule that holds at both extremes can fail in the middle, and 360px-only testing cannot see it.** Ten specs measured the mobile floor and passed; `/history` was overflowing by 181px at 768 and 209px in phone landscape the whole time, because `truncate` has no effect on an inline box and the cell is a flex item below `sm:` and `block` above it. The layout had switched to its wide form before it had the room that form assumes. The other half of the same lesson: reading found two bugs the sweep never could — a `viewport` export that was missing, so every `env(safe-area-inset-*)` in the project had been resolving to zero since F09, and which a desktop browser reports as correct either way. (F22)
+- Camera direction comes from active capture metadata, never from a lens label.
+  Labels vary by language, and rear lenses may have unclear names. A shared reader
+  that handles capture restarts keeps the lobby and call consistent. Rear self-views
+  show the scene normally; front and unspecified desktop self-views stay mirrored.
+  LiveKit changes capture inside the existing room, preserving audio and the
+  connection. Selecting a lens while the camera is off must not enable it.
+  (Camera follow-up, 10 Oct 2026)
+
+- Supabase activity checks are separate from keeping Render awake. The approved
+  external workflow makes read-only Data API queries as `anon`; existing RLS hides
+  every row. It never calls the web service. The publishable key needs no new
+  policy, schema, privileged credential, or app code.
+
+  A fully paused Supabase project must be resumed in the dashboard. The earlier
+  claim that a request wakes it confused Supabase with Render. Setup and scheduler
+  limitations are in `docs/DEPLOYMENT.md` → Supabase activity check.
+  (Supabase activity follow-up, 10 Oct 2026)
+
+- An empty LiveKit room does not end a meeting. The room starts on the first join
+  and finishes shortly after the last person leaves. The meeting link may belong
+  to someone who has not opened it yet, so it needs a different lifetime.
+
+  F20 treated `room_finished` as the end of the meeting. The invite therefore
+  stopped working as soon as the room first emptied, a common situation because
+  the person sending the link usually arrives first. Now `room_finished` closes
+  only the session's open participation rows. Only the sweep sets `ended_at`.
+  History is unchanged because it did not read `ended_at` while participation rows
+  were closed. (8.00.5)
+
+- Responsive checks must measure vertical visibility as well as width. The sweep
+  checked only `scrollWidth > clientWidth` and hit areas against 44px. Home passed
+  at all eight widths even though `START A MEETING` was entirely below the visible
+  area in phone landscape: `viewport ratio 0` at 740x360.
+
+  The hero rework did not cause it. The previous hero put the button another 21px
+  lower at that viewport, so the existing checks had never covered the failure.
+  The fix uses `@media (height <= 30rem)`. This does not violate the rule against a
+  fourth breakpoint in `code-standards.md`, which applies to width and deciding
+  what sits beside what. The layout remains the same column, tightened for the
+  available height.
+
+  `responsive.spec.ts` now requires the primary action to be fully in view at
+  `ratio: 1` at every width. The assertion was seen to fail before the CSS was
+  added. (7.00.7)
+
+- Keep dependency clock errors visible. The checkpoint's first full-suite run
+  failed one spec because `POST /api/meetings` returned 500 with Supabase's
+  `PGRST303 — JWT issued at future`. The service-role key is a static JWT whose
+  `iat` was set when the project was created. Local code cannot move it into the
+  future; Supabase's clock must be behind it. A free instance resuming is a
+  plausible explanation. The local clock matched a network source to the second.
+
+  This differs from the recorded transport starvation (`ConnectTimeoutError` /
+  `ECONNRESET`), where no response arrives. `createMeeting` retries thrown transport
+  errors only, never a non-201 response, so a genuine 500 remains visible. Extending
+  the retry to `PGRST303` would hide real JWT and permission faults too. F26 made
+  the same tradeoff when it declined to increase an unmeasured timeout. This is
+  recorded as a Follow-up to monitor, without a defensive workaround. (checkpoint)
+
+- A feature can be marked complete from an owner report, provided the record
+  clearly distinguishes that from a targeted check. F25 closed after an owner
+  session on the deployed instance reported four carried checks working.
+
+  Two of those, safe-area insets and the chat composer above the iOS keyboard,
+  can fail as slightly wrong padding that ordinary use may not reveal. They were
+  reported from using the app, rather than specifically looking for those issues.
+  The plan had expected the iOS composer to need a `visualViewport` solution, so
+  "it worked" is weaker evidence for that check.
+
+  They remain recorded as reported rather than directly checked.
+  `constraints.md` → Mobile and viewport keeps the iOS behavior unconfirmed.
+  Recording all four as equally verified would hide whether the check had a real
+  chance to detect a failure. (F22, F25)
+
+- A test's preconditions need the same proof as its assertions. Two long-standing
+  intermittent failures came from a connection check that could pass before the
+  room connected. `page.getByText('Connected')` makes a case-insensitive substring
+  match and therefore matched `Disconnected`. Every connection wait continued
+  immediately, including `joinAs`, whose `until: 'connected'` was documented as
+  stronger than `mounted` but was actually weaker.
+
+  The symptoms looked like narrow timing margins in the product.
+  `reactions.spec.ts` raised a hand 2.7s before signalling was ready, when
+  livekit-client refuses the write. It failed 7 times in 40 at one worker and
+  24 in 40 at four. `connection.spec.ts` took a room offline before it had connected,
+  so no reconnect banner could appear. Neither was a race, timeout margin, or
+  LiveKit defect.
+
+  Using `exact: true` through one shared locator produced 0 failures in 40 on the
+  raise-hand assertion and 40 of 40 passes on the banner. Preconditions need to
+  be seen to fail too. An assertion that is never reached gives no visible warning;
+  an incorrect assertion at least produces a failure. (F26)
+
+- Do not use route-level `loading.tsx` skeletons on routes that check access or validity.
+  F24 built and removed them after measuring regressions on both routes. Next sends
+  the loading shell immediately, including the HTTP status. A later `notFound()`
+  can then only replace the UI, and `redirect()` becomes client-side navigation.
+
+  A dead meeting link changed from 404 to 200. Signed-out `/history` changed from
+  a 307 to a 200 that showed the page heading to someone without access, and would
+  leave a visitor without JS on a skeleton forever. Two existing tests caught the
+  first regression. None caught the second: the auth e2e passed because the
+  client-side redirect eventually happens.
+
+  A skeleton is safe only when the route's server work is purely fetching data,
+  not deciding whether the visitor may see the page. (F24)
+
+- A `switch` needs a `never` guard to prove every case is handled. F23's disconnect
+  mapping covered thirteen `DisconnectReason` members because the `sed` read
+  stopped there. The enum has seventeen members. `typecheck` still passed because
+  `noImplicitReturns` is off; four unhandled members would return `undefined` and
+  show a blank panel after a dropped call. The unit test caught this on its first
+  run.
+
+  Published `ConnectionQuality` docs had a similar omission: they listed four
+  values and left out `Lost`, a state central to connection recovery. Installed
+  types are authoritative; a docs page is only a summary. Read the complete type
+  rather than relying on a partial window. (F23)
+
+- Responsive layouts can fail between the tested extremes. Ten specs passed at
+  the 360px minimum while `/history` overflowed by 181px at 768 and 209px in phone
+  landscape. `truncate` does nothing on an inline box. The cell was a flex item
+  below `sm:` and `block` above it, so the wider layout appeared before there was
+  space for it.
+
+  Reading also found two bugs the sweep could not detect, including a missing
+  `viewport` export. Without it, every `env(safe-area-inset-*)` had resolved to zero
+  since F09. A desktop browser reports that as correct with or without the export.
+  (F22)

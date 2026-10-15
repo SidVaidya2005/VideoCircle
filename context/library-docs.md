@@ -4,11 +4,10 @@
 > **Read the relevant section** before using a library.
 > **Relates to:** covers the integrations in `architecture.md`; defers to MCP servers and skills first.
 
-Project-specific usage patterns for every third party library in this project.
-This file only covers how we use each library in **this** specific project —
-rules, patterns, and constraints specific to VideoCircle.
+This file explains how VideoCircle uses each third party library. It covers the
+project's rules, patterns, and constraints, rather than general library usage.
 
-Read the relevant section before implementing any feature that touches these
+Read the relevant section before building a feature that uses one of these
 libraries.
 
 ---
@@ -17,9 +16,9 @@ libraries.
 
 Before implementing any feature that uses a third party library:
 
-1. **Check the project instruction file** (`CLAUDE.md`) at the project root — it lists installed skills and how to use them. Skills contain up-to-date API docs and patterns specific to this codebase.
-2. **Check whether an MCP server is available** for that library in your environment. **Context7** covers every library in the stack. A **Supabase MCP server** may also be present (schema, migrations, advisors, logs) — it is deferred, so fetch its tools by name with `ToolSearch` before assuming it is there, and fall back to the `supabase` CLI if it is not. Never treat an MCP server as guaranteed; verify, then use it in preference to general knowledge.
-3. **Read this file** for project-specific patterns that override general library knowledge.
+1. **Check the project instruction file** (`CLAUDE.md`) at the project root. It lists the installed skills and explains how to use them. Those skills contain current API documentation and patterns for this codebase.
+2. **Check whether an MCP server is available** for the library. **Context7** covers every library in the stack. A **Supabase MCP server** may also be available for schema, migrations, advisors, and logs. Its tools are deferred: fetch them by name with `ToolSearch` before relying on them. If they are unavailable, use the `supabase` CLI. Verify that an MCP server exists before using it, and prefer it to general knowledge.
+3. **Read this file** for project-specific patterns that take precedence over general library knowledge.
 
 The order of authority is:
 
@@ -27,8 +26,8 @@ The order of authority is:
 MCP server (real-time docs) → Skills via CLAUDE.md → This file (project rules) → General training knowledge
 ```
 
-Never rely on general training knowledge alone for library APIs — they change
-frequently and training data may be outdated.
+Library APIs change frequently, and training data can be outdated. Never rely on
+general training knowledge alone for an API.
 
 ---
 
@@ -36,12 +35,13 @@ frequently and training data may be outdated.
 
 **Check first:** Context7 `/llmstxt/livekit_io_llms-full_txt`, then <https://docs.livekit.io>.
 
-Server-only. This package must never appear in a client bundle — every module that
-imports it starts with `import 'server-only'`.
+This package runs only on the server and must never enter a client bundle. Every
+module that imports it must start with `import 'server-only'`.
 
-The secrets come from `src/lib/env.livekit.server.ts`, never from `src/lib/env.ts`:
-that module holds `NEXT_PUBLIC_*` values only and is safe to import from a Client
-Component, so putting a signing key in it would ship the key to every visitor.
+Read secrets from `src/lib/env.livekit.server.ts`. Never put them in
+`src/lib/env.ts`: that module contains only `NEXT_PUBLIC_*` values and can be
+imported by a Client Component. A signing key added there would be sent to every
+visitor.
 
 ### Setup
 
@@ -99,16 +99,16 @@ switch (event.event) {
 
 **Rules:**
 
-- `toJwt()` is asynchronous in v2. Always `await` it; a forgotten `await` yields `[object Promise]` as the token and fails at connect time with an opaque error.
-- `identity` is the join/leave correlation key. Ours is `user:<uuid>` for signed-in users and `guest:<uuid>` for guests — never a display name, which is neither unique nor stable.
-- Grants always name exactly one room. Never set `roomAdmin`, `roomCreate`, or `roomList` — this project has no moderation features and a wildcard grant would let any token holder enter any meeting.
+- `toJwt()` is asynchronous in v2. Always `await` it. Without `await`, the token becomes `[object Promise]`, and connection fails with an unclear error.
+- `identity` connects join and leave events to the same participant. Use `user:<uuid>` for signed-in users and `guest:<uuid>` for guests. Never use a display name: it is neither unique nor stable.
+- A grant must name exactly one room. Never set `roomAdmin`, `roomCreate`, or `roomList`. VideoCircle has no moderation features, and a wildcard grant would let a token holder enter any meeting.
 - **TTL is `min(1h, expires_at − now)`** — capped so a token can never outlive the meeting it opens. See `architecture.md` → Expiry policy.
-- **A short TTL does not break long calls, contrary to the obvious worry.** Per LiveKit's token docs, the server *proactively refreshes tokens for connected clients* so they can reconnect after an interruption; a refreshed token lasts "10 minutes or the remaining lifetime of the original token, whichever is longer". The minted TTL therefore governs how long the token may be used to **join**, not how long a session may run. A blip 90 minutes into a call reconnects on the server-refreshed token.
-- A client that fully disconnects and re-joins does call `/api/token` again, which re-checks meeting state — that is the intended behaviour, not a bug to route around.
+- **A short TTL still allows long calls.** LiveKit's token docs say the server *proactively refreshes tokens for connected clients* so they can reconnect after an interruption. A refreshed token lasts "10 minutes or the remaining lifetime of the original token, whichever is longer". The TTL on the token we mint therefore limits when someone can **join**, rather than how long the session can run. A brief interruption 90 minutes into a call reconnects using the server-refreshed token.
+- A client that fully disconnects and re-joins calls `/api/token` again. That route re-checks the meeting's state. Keep this behaviour; it is intentional.
 - Webhook verification requires the exact raw bytes. Calling `request.json()` before `receive()` breaks the signature check.
-- LiveKit retries webhooks on non-2xx responses, and that retry is what we want. Return `500` when the handler fails transiently so the event is redelivered; return `200` only for events we understand and deliberately ignore, or that could never succeed on a retry. Call history is a stated success criterion — swallowing a failed write to dodge a retry trades correctness for nothing.
-- Webhook handlers must be idempotent; the same event can arrive more than once. Idempotency is precisely what makes returning `500` safe.
-- Never rely on a webhook alone for a correctness-critical write. `room_finished` closes any participation rows a dropped `participant_left` left open, and the nightly expiry sweep backstops a dropped `room_finished`.
+- LiveKit retries webhooks when it receives a non-2xx response. Return `500` for a transient handler failure so LiveKit delivers the event again. Return `200` only when we understand an event and deliberately ignore it, or when retrying could never succeed. Call history is a stated success criterion, so do not hide a failed write just to avoid a retry.
+- Webhook handlers must be idempotent: receiving the same event more than once must be safe. This is what makes returning `500` safe.
+- A correctness-critical write must have a fallback beyond a single webhook. If `participant_left` is lost, `room_finished` closes the participation rows it left open. If `room_finished` is lost too, the nightly expiry sweep closes them.
 - `participant_joined` fires only once the participant is `active` (media connected), so it is a reliable signal that someone actually made it into the call.
 
 ---
@@ -164,11 +164,13 @@ export function RoomShell({
 
 ### Rendering the participant grid
 
-**`GridLayout` and `ParticipantTile` are not used in this project.** They render
-`lk-*` markup that lays out nothing without `@livekit/components-styles`, which is
-not an approved dependency, and `ParticipantTile` ships a name chip, mute icon,
-quality dot and focus button that each contradict `Design/README.md` → Participant
-tiles. The grid is ours, built on the unstyled primitives below.
+**This project does not use `GridLayout` or `ParticipantTile`.** Their `lk-*`
+markup needs `@livekit/components-styles` to lay out correctly, and that package is
+not an approved dependency. `ParticipantTile` also includes a name chip, mute icon,
+quality dot, and focus button that each conflict with `Design/README.md` →
+Participant tiles.
+
+Build the project's grid with the unstyled primitives below.
 
 ```tsx
 'use client';
@@ -189,15 +191,15 @@ export function VideoGrid() {
 }
 ```
 
-`withPlaceholder: true` on the camera source keeps a tile for participants whose
-camera is off — without it, muting your camera makes you vanish from everyone's
-grid instead of showing your name.
+Set `withPlaceholder: true` on the camera source to keep a tile visible when a
+participant's camera is off. Without it, turning off the camera removes the
+participant from everyone's grid instead of showing their name.
 
 Inside a tile:
 
-- **`isTrackReference(ref)`** separates a published camera from a placeholder. Show video when the ref is real and its publication is not muted — **never gate on `isSubscribed`**, which deadlocks `adaptiveStream`: it decides what to subscribe to from the visibility of attached `<video>` elements, so a tile that renders no element until subscribed is never subscribed.
-- **`useIsMuted(ref)`** reads an *absent* publication as unmuted. A participant publishing no microphone at all cannot be heard, so treat absent as muted yourself — the hook will not do it for you. It accepts a placeholder ref built inline; its effect keys on a derived id string, so a fresh object per render does not resubscribe.
-- **`useIsSpeaking(participant)`** drives the white ring. Both hooks take the participant explicitly rather than reading context, which is what lets a tile subscribe to its own participant instead of the room.
+- **`isTrackReference(ref)`** distinguishes a published camera from a placeholder. Show video when the reference is real and its publication is not muted. **Never gate rendering on `isSubscribed`.** Doing so deadlocks `adaptiveStream`, which chooses subscriptions from the visibility of attached `<video>` elements. If the tile waits for a subscription before rendering that element, the subscription never happens.
+- **`useIsMuted(ref)`** treats an *absent* publication as unmuted. Handle that case yourself: a participant with no published microphone cannot be heard and must be shown as muted. The hook accepts a placeholder reference built inline. Its effect uses a derived id string, so creating a new object on each render does not resubscribe.
+- **`useIsSpeaking(participant)`** controls the white ring. Both hooks take a participant explicitly rather than reading context. This lets each tile subscribe to its own participant instead of the whole room.
 
 ### Toggling microphone, camera, and screen share
 
@@ -258,7 +260,7 @@ for (const track of tracks) track.stop();
 
 **Rules:**
 
-- `<RoomAudioRenderer />` must be inside `<LiveKitRoom>`. Forgetting it produces a call where video works and nobody can hear anything — a bug that is easy to misdiagnose as a media problem.
+- Put `<RoomAudioRenderer />` inside `<LiveKitRoom>`. Without it, video works but nobody can hear anything, which can easily be mistaken for a media problem.
 - `useTracks` requires `withPlaceholder: true` on `Track.Source.Camera` so camera-off participants still occupy a tile.
 ### Room options — the two settings that decide whether a grid is usable
 
@@ -274,37 +276,38 @@ export const ROOM_OPTIONS: RoomOptions = {
 };
 ```
 
-- **Both default to `false`** in `livekit-client`, and `<LiveKitRoom>` does not override them — it passes `options` straight to `new Room(options)`. Omit them and you get the slow path silently.
-- **`adaptiveStream: true`** subscribes to a resolution matched to the size of the `<video>` element the track is attached to, and pauses tracks that are not visible. Without it, twelve 200px tiles each receive and decode a full-resolution stream. This is the single largest performance lever in the product, and it is the one that decides whether a low-end phone survives a full grid.
-- **`dynacast: true`** pauses publishing of simulcast layers no subscriber is consuming, cutting upload bandwidth and encoder CPU on the *sending* side.
-- Together they are what makes `MAX_VISIBLE_TILES = 12` viable. Pagination bounds the tile count; adaptive stream bounds the cost of each tile.
+- **Both settings default to `false`** in `livekit-client`. `<LiveKitRoom>` passes `options` directly to `new Room(options)` without overriding them. Leaving them out silently selects the slower behaviour.
+- **`adaptiveStream: true`** chooses a resolution that matches the attached `<video>` element's size and pauses tracks that are not visible. Without it, twelve 200px tiles each receive and decode a full-resolution stream. This is the product's largest performance saving and determines whether a low-end phone can handle a full grid.
+- **`dynacast: true`** stops publishing simulcast layers that no subscriber is using. It reduces upload bandwidth and encoder CPU use on the *sending* side.
+- These settings make `MAX_VISIBLE_TILES = 12` practical. Pagination limits how many tiles are shown; adaptive stream limits the cost of each one.
 
-- Screen share uses `Track.Source.ScreenShare` and is separate from the camera track — a participant sharing their screen publishes both.
-- Guard screen share behind a `typeof navigator.mediaDevices?.getDisplayMedia === 'function'` check. **No mobile browser implements it** — per MDN's browser-compat-data, `version_added: false` for Safari iOS, Chrome Android, Firefox Android, Samsung Internet, Opera Android, and Android WebView. Desktop Chrome, Edge, Firefox, and Safari all support it.
-- **The presence check is necessary but not sufficient.** Chrome Android 72–88 and Firefox Android 66–79 *exposed* the method but it always rejected with `NotAllowedError`. Those versions pass a `typeof` check and then fail at call time, so the call itself is always wrapped in `try`/`catch`.
-- **A share requested before the room is connected is published into nothing and immediately unpublished.** The control bar renders as soon as the room tree mounts, which is well before `ConnectionState.Connected`, so this window is real — it cost an afternoon of debugging a test that clicked share too early. Nothing surfaces: the control simply does not change.
-- **A screen share published into a room with no other participants is unreliable.** LiveKit accepts the publish and then unpublishes it within about a second, roughly half the time; add one subscriber and it is stable. `dynacast: false` makes no difference, so the obvious suspect is ruled out and the mechanism is still open. Nothing in our code holds sharing state, so the UI correctly follows the unpublish rather than lying about it.
-- **A screen share published into a room with nobody else in it is unreliable.** LiveKit accepts the publish and unpublishes it again within about a second, roughly half the time; with one other participant present it is stable across many runs. `dynacast: false` makes no difference, so the obvious suspect is ruled out and the mechanism is still open. Nothing in our code holds sharing state, so the UI follows the unpublish rather than lying about it.
-- **`livekit-client` clones the track it gets from the picker and stops the original.** Anything holding the stream that `getDisplayMedia` returned is holding a track that will read `ended` while the share is perfectly healthy — the SDK listens for `ended` on its clone, not on what you handed it.
-- **`NotAllowedError` is ambiguous and must not be treated as a fault.** It is what those old Android builds threw, *and* what every browser throws when the user dismisses the picker — by far the common case. Cancelling a share is a normal action: return the bar to its resting state silently. Never show an error toast, and never log it as an error.
-- Reactions and raise-hand use `{ reliable: false }`; chat uses `{ reliable: true }`. Losing an emoji is fine, losing a message is not.
+- Screen share uses `Track.Source.ScreenShare`, separate from the camera track. A participant who shares their screen publishes both tracks.
+- Check `typeof navigator.mediaDevices?.getDisplayMedia === 'function'` before offering screen share. **No mobile browser implements it.** MDN's browser-compat-data records `version_added: false` for Safari iOS, Chrome Android, Firefox Android, Samsung Internet, Opera Android, and Android WebView. Desktop Chrome, Edge, Firefox, and Safari all support it.
+- **Checking for the method does not guarantee it works.** Chrome Android 72–88 and Firefox Android 66–79 exposed it but always rejected with `NotAllowedError`. They pass the `typeof` check, so always wrap the call itself in `try`/`catch`.
+- **A share requested before the room connects is immediately unpublished.** The control bar appears as soon as the room tree mounts, before `ConnectionState.Connected`. Publishing during that window sends the share into a room that is not ready. This took an afternoon to diagnose in a test that clicked share too early. No error appears; the control simply stays unchanged.
+- **Screen sharing with no other participants is unreliable.** LiveKit accepts the publish, then unpublishes it within about a second roughly half the time. Adding one subscriber makes it stable. Setting `dynacast: false` has no effect, so that likely cause has been ruled out, but the mechanism remains unknown. Our code holds no separate sharing state, so the UI follows the unpublish accurately.
+- **Screen sharing with nobody else in the room is unreliable.** LiveKit accepts the publish, then unpublishes it within about a second roughly half the time. With one other participant, it stays stable across many runs. Setting `dynacast: false` has no effect, so that likely cause has been ruled out, but the mechanism remains unknown. Our code holds no separate sharing state, so the UI follows the unpublish accurately.
+- **`livekit-client` clones the picker track and stops the original.** A reference to the stream returned by `getDisplayMedia` therefore holds a track whose state reads `ended` even while sharing works. The SDK listens for `ended` on its clone.
+- **Treat `NotAllowedError` as a normal cancellation, not a fault.** Old Android versions threw it for unsupported sharing, but every browser also throws it when someone dismisses the picker. Dismissal is by far the usual cause. Quietly return the bar to rest; never show an error toast or log it as an error.
+- Use `{ reliable: false }` for reactions and raise-hand, and `{ reliable: true }` for chat. Losing an emoji is acceptable; losing a message is not.
 - Always stop lobby preview tracks before connecting. A leaked preview track keeps the camera light on and, on some devices, blocks the room from acquiring it.
 - Never call `navigator.mediaDevices.getUserMedia` directly — use `createLocalTracks` so LiveKit owns track lifecycle and device switching.
 - iOS Safari will not start audio playback without a user gesture. The lobby's Join button is that gesture, which is one more reason joining must never happen automatically on page load.
-- Device labels from `enumerateDevices()` are empty strings until media permission is granted. Enumerate *after* acquiring the preview tracks, or the picker shows blank entries.
+- `enumerateDevices()` returns empty device labels until media permission is granted. Enumerate devices after acquiring preview tracks so the picker has readable entries.
 - Handle `RoomEvent.Disconnected`, `Reconnecting`, and `Reconnected` explicitly and render a state for each. Do not unmount the room tree on `Reconnecting`.
 
 ---
 
 ## @supabase/ssr (v0.12) + @supabase/supabase-js (v2.110)
 
-**Check first:** the `supabase:supabase` skill and Context7 `/supabase/ssr`. If a
-Supabase MCP server is available in your environment (`list_tables`, `get_advisors`,
-`get_logs`, `generate_typescript_types`), it is the fastest way to inspect and verify
-a live project — but it is deferred and may not be present, so confirm before relying
-on it. The `supabase` CLI does everything the MCP server does.
+**Check first:** the `supabase:supabase` skill and Context7 `/supabase/ssr`. A
+Supabase MCP server, when available, is the fastest way to inspect and verify a live
+project using `list_tables`, `get_advisors`, `get_logs`, and
+`generate_typescript_types`. Its tools are deferred and may be absent, so confirm
+they are available before relying on them. The `supabase` CLI can do everything
+the MCP server does.
 
-Three clients, three distinct jobs. Using the wrong one is the most likely
+The three clients have separate jobs. Choosing the wrong one is the most likely
 security mistake in this codebase.
 
 | Client | File | Key | Used by |
@@ -315,8 +318,8 @@ security mistake in this codebase.
 
 ### Setup
 
-The canonical bodies for all three live in `architecture.md` → Key Patterns. Copy
-them from there rather than writing new ones.
+Use the canonical implementations in `architecture.md` → Key Patterns for all
+three clients. Copy them from there rather than writing alternatives.
 
 ### Proxy session refresh
 
@@ -450,20 +453,20 @@ export async function GET(request: NextRequest) {
 
 **Rules:**
 
-- Use `supabase.auth.getUser()` for anything that authorizes. `getSession()` reads the cookie without revalidating it and must never gate access to data.
-- The `setAll` callback in the proxy must apply the `headers` argument as well as the cookies. Skipping it lets a CDN cache an authenticated response and serve one user's session token to another.
-- In Server Components, `cookieStore.set()` throws; the `try`/`catch` in `src/lib/supabase/server.ts` swallowing that is deliberate and must not be "fixed".
+- Use `supabase.auth.getUser()` for authorization. `getSession()` reads the cookie without revalidating it and must never control access to data.
+- The proxy's `setAll` callback must apply both the cookies and the `headers` argument. Otherwise a CDN could cache an authenticated response and serve one user's session token to another.
+- In Server Components, `cookieStore.set()` throws. The `try`/`catch` in `src/lib/supabase/server.ts` deliberately catches that error; do not "fix" it.
 - `supabaseAdmin` bypasses RLS entirely. Import it only in route handlers, never in a page, component, or hook, and always scope its queries explicitly.
-- Guests have no Supabase session. Any code path reachable by a guest must work with `user === null` — that is the normal case, not an error.
-- **The `next` parameter is attacker-controlled — resolve and compare origins, never prefix-match.** `next.startsWith('/')` is not a same-origin check: `//evil.com` and `/\evil.com` both start with `/`, and both resolve to a different origin (WHATWG URL treats `\` as `/` in special schemes). Use `safeNext` above, which parses against our own origin and compares `url.origin`. It also drops any fragment, which `next` must never carry — see Google sign-in for why.
-- **The chat key crosses the OAuth round trip in `sessionStorage`, never in a URL.** Stash before `signInWithOAuth`, restore with `history.replaceState` on return, delete on read. `sessionStorage` is same-origin and same-tab, so the key is never transmitted, and the fragment is back on the URL before anything reads it.
-- Schema changes are files in `supabase/migrations/*.sql`, applied with `npx supabase db push`. That file is the artifact of record — it is reviewable, versioned, and replayable on a fresh database. Never `ALTER TABLE` from application code.
-- MCP and the CLI are aids to *authoring and verifying* those files, not a substitute for them. Avoid `apply_migration` while a schema is still in flux: it writes straight to the remote project, so an iteration loop leaves a trail of half-right migrations you then have to reconcile by hand. Settle the schema locally or on a branch, then commit one clean migration.
+- Guests have no Supabase session. Every path a guest can reach must support `user === null` as a normal case.
+- **Resolve the attacker-controlled `next` parameter and compare origins.** A prefix check such as `next.startsWith('/')` is unsafe: `//evil.com` and `/\evil.com` both start with `/` but resolve to another origin. WHATWG URL treats `\` as `/` in special schemes. Use `safeNext` above to parse the value against our origin and compare `url.origin`. It also removes the fragment, which `next` must never carry; Google sign-in explains why.
+- **Carry the chat key through OAuth in `sessionStorage`, never in a URL.** Stash it before `signInWithOAuth`, restore it with `history.replaceState` on return, and delete the stored value when it is read. `sessionStorage` stays in the same origin and tab, so the key is never transmitted. Restore the URL fragment before anything reads the key.
+- Keep schema changes in `supabase/migrations/*.sql` and apply them with `npx supabase db push`. The file is the official record: reviewers can inspect it, Git versions it, and a fresh database can replay it. Never run `ALTER TABLE` from application code.
+- Use MCP and the CLI to author and verify migration files, not to replace them. Avoid `apply_migration` while the schema is still changing: it writes directly to the remote project, leaving partially correct migrations to reconcile by hand. Settle the schema locally or on a branch, then commit one clean migration.
 - After any migration, check RLS and security findings — via `get_advisors` if the MCP server is available, otherwise by reviewing policies directly — and fix them before moving on. This project's RLS is easy to get subtly wrong; see the recursion note in `architecture.md`.
-- **Advisors are not a substitute for impersonating a user.** They caught a redundant policy here, but only a real query proves isolation. In a transaction: `select set_config('request.jwt.claims', '{"sub":"<uuid>","role":"authenticated"}', true); set local role authenticated;` then read, then `rollback`. That is the only check that exercises the policies the way PostgREST will.
+- **Verify policies by impersonating a user as well as running advisors.** Advisors caught a redundant policy here, but a real query is needed to prove isolation. In a transaction, run `select set_config('request.jwt.claims', '{"sub":"<uuid>","role":"authenticated"}', true); set local role authenticated;`, then read, then `rollback`. Only this check exercises the policies the way PostgREST will.
 - **A `security definer` helper used by a policy needs `grant execute ... to authenticated`.** Revoking it fails every read with `42501`; see `constraints.md` → Data and RLS.
 - Regenerate `src/types/database.ts` after every migration so the typed client stays honest.
-- Supabase's newer publishable/secret key names are drop-in replacements for anon/service-role. If you migrate to them, change `src/lib/env.ts` (publishable) and `src/lib/env.server.ts` (secret) alongside `.env.example`, and update the table in `code-standards.md`.
+- Supabase's newer publishable/secret key names can replace anon/service-role directly. A migration to those names must update `src/lib/env.ts` for the publishable key, `src/lib/env.server.ts` for the secret, `.env.example`, and the table in `code-standards.md` together.
 
 ---
 
@@ -497,12 +500,12 @@ export async function POST(request: NextRequest) {
 
 **Rules:**
 
-- `params`, `searchParams`, `cookies()`, and `headers()` are all async. Forgetting an `await` produces a Promise where you expected a value and fails at runtime, not at build.
-- Server Components are the default. Add `'use client'` only where state, effects, browser APIs, or handlers are genuinely needed, and put it on the smallest component that needs it.
+- `params`, `searchParams`, `cookies()`, and `headers()` are all async. A missing `await` gives you a Promise instead of the expected value and fails at runtime rather than during the build.
+- Server Components are the default. Add `'use client'` only for state, effects, browser APIs, or handlers, and apply it to the smallest component that needs them.
 - Route handlers only export HTTP-method functions. No React, no rendering.
 - Use `redirect()` from `next/navigation` in Server Components — it throws internally, so never wrap it in a `try` block that would swallow the control flow.
 - `next/image` for any bitmap asset. Avatars from Google require their host to be listed in `next.config.ts` under `images.remotePatterns`.
-- The whole app is dynamic (session cookies everywhere). Do not add `revalidate` or `unstable_cache` to anything user-scoped.
+- The whole app is dynamic because session cookies are used throughout. Never add `revalidate` or `unstable_cache` to user-scoped data or behaviour.
 
 ---
 
@@ -510,15 +513,15 @@ export async function POST(request: NextRequest) {
 
 **Check first:** Context7 `/tailwindlabs/tailwindcss.com`, then <https://tailwindcss.com/docs>.
 
-Tailwind 4 has no `tailwind.config.js`. Configuration is CSS: one `@import` and one
-`@theme` block.
+Tailwind 4 has no `tailwind.config.js`. Configure it in CSS with one `@import` and
+one `@theme` block.
 
 ### Setup
 
-Two blocks. `:root` holds the Anime.js kit's variables under **their original
-names**, copied from `context/Design/colors_and_type.css` so the kit remains the
-upstream source. `@theme inline` maps them to readable Tailwind utilities. These
-are the only two places in the codebase where a literal value may appear.
+Use two blocks. `:root` holds the Anime.js kit's variables under **their original
+names**, copied from `context/Design/colors_and_type.css`. The kit remains the
+upstream source. `@theme inline` maps those variables to readable Tailwind
+utilities. Literal values may appear only in these two blocks.
 
 ```css
 /* src/app/globals.css — reproduced in full. _verify.mjs compares this block,
@@ -813,7 +816,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 - The `:root` block mirrors `context/Design/colors_and_type.css`. To change a brand value, change it in the kit and re-copy — never hand-edit a hex here.
 - Every other file consumes utilities only: `bg-card`, `text-muted`, `border-line`, `ease-out-quint`. A raw colour anywhere else is a bug.
 - **Dark only.** There is no `dark:` variant, no `@custom-variant dark`, and no theme toggle — the kit ships no light palette.
-- Full-height regions use `h-dvh` or `min-h-dvh`, never `h-screen` — mobile Safari's `100vh` includes the collapsing browser chrome and clips the control bar off the bottom of a call.
+- Use `h-dvh` or `min-h-dvh` for full-height regions, never `h-screen`. Mobile Safari's `100vh` includes the collapsing browser chrome, which clips the call's control bar off the bottom.
 - Tailwind 4 has no `tailwind.config.js`. Everything above is the configuration.
 - `prettier-plugin-tailwindcss` owns class ordering. Do not reorder classes by hand.
 - Build mobile-first: unprefixed utilities target the phone, `sm:`/`md:`/`lg:` widen from there.
@@ -826,27 +829,28 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 `context/Design/preview/*.html` for specimens and `context/Design/ui_kits/` for
 working component code.
 
-This is a brand kit, not a runtime dependency. Nothing imports from
-`context/Design/` — assets are copied out and tokens are mirrored into
+The kit supplies the brand reference; it is not a runtime dependency. Nothing
+imports from `context/Design/`. Copy assets out and mirror its tokens into
 `globals.css`.
 
 ### The kit's code is a visual reference, not production source
 
-`preview/*.html` and `ui_kits/**/*.jsx` are prototypes. They use inline styles, raw
-hex, and raw pixel values — all of which this project forbids. **Translate them into
-tokens and Tailwind utilities; never paste them in.**
+`preview/*.html` and `ui_kits/**/*.jsx` are prototypes. Their inline styles, raw
+hex colours, and raw pixel values are forbidden in this project. **Translate them
+into tokens and Tailwind utilities instead of pasting them into the app.**
 
-They also contradict the kit's own rules in places. `ClockControls.jsx` sets
-`background: '#1a1a1a'`, a cool near-black, when non-negotiable #1 is warm
-`#252423`. Where a specimen and `README.md` disagree, **`README.md` wins** — it is
-the specification, the examples are sketches.
+Some prototypes also conflict with the kit's rules. For example,
+`ClockControls.jsx` uses `background: '#1a1a1a'`, a cool near-black, while
+non-negotiable #1 requires warm `#252423`. **When an example and `README.md`
+disagree, follow `README.md`.** It is the specification; the examples are sketches.
 
 Read them for layout, proportion, and interaction feel. Take values from
 `colors_and_type.css`.
 
 ### Where the design rules live
 
-These used to be restated here and drifted. Each now has exactly one home:
+The rules were previously repeated here and drifted apart. Each rule now has one
+home:
 
 | Looking for | Read |
 | ----------- | ---- |
@@ -865,8 +869,8 @@ npx shadcn@latest add button dialog sheet dropdown-menu tooltip sonner
 
 ### Aliasing shadcn's tokens to the brand
 
-shadcn components reference their own variable names. Alias them once in
-`globals.css` so a generated component is already on-brand before you touch it:
+shadcn components use their own variable names. Define aliases once in
+`globals.css` so generated components use the brand values from the start:
 
 ```css
 @theme inline {
@@ -888,18 +892,18 @@ shadcn components reference their own variable names. Alias them once in
 }
 ```
 
-Note `--color-primary` is **white, not red** — the kit's engaged state is an
-inverted white fill, and red is reserved for destructive actions.
+`--color-primary` is **white, not red**. An engaged control uses the kit's inverted
+white fill. Red is reserved for destructive actions.
 
 **Rules:**
 
 - Only add the primitives a feature actually needs. Each one pulls in Radix packages that ship to the browser.
-- Restyle generated components to match the design system, but keep their Radix behaviour — the focus traps, escape handling, and ARIA wiring are the reason they are here.
-- Strip drop shadows from every generated component. shadcn ships `shadow-md` and `shadow-lg` on dialogs, popovers, and dropdowns; the kit uses the background ladder plus a whisper border instead.
+- Restyle generated components to match the design system while preserving Radix's focus traps, escape handling, and ARIA behaviour. Those are the reasons for using Radix.
+- Remove drop shadows from every generated component. shadcn adds `shadow-md` and `shadow-lg` to dialogs, popovers, and dropdowns. Use the kit's background ladder and a whisper border instead.
 - Never edit a generated component to reach past the aliases for a raw value.
 - Record non-trivial edits to a generated component in `build-journal.md`, so re-running `add` later does not silently revert them.
 - Nothing in `src/components/ui/` may reference a meeting, participant, or room. Product logic belongs one level up.
-- The chat and participants panels use `Sheet` on mobile and an inline side panel on desktop; they are the same content rendered in two shells, not two implementations.
+- Chat and participants use `Sheet` on mobile and an inline side panel on desktop. Render the same content inside those two shells; do not build two separate implementations.
 
 ---
 
@@ -913,14 +917,14 @@ All usage is confined to `src/lib/crypto/`. The canonical implementations of
 
 **Rules:**
 
-- AES-GCM, 256-bit keys, 12-byte random IV per message. Never reuse an IV with the same key — with GCM that is a total break, not a weakness.
+- Use AES-GCM with 256-bit keys and a fresh random 12-byte IV for every message. Reusing an IV with the same key completely breaks GCM security.
 - The IV is generated fresh inside `encryptChatMessage` for every single message. Never hoist it to a module constant.
-- Bind the sender's LiveKit identity as `additionalData` so ciphertext cannot be replayed under a different name.
+- Pass the sender's LiveKit identity as `additionalData`. This prevents replaying ciphertext under a different name.
 - Keys are imported with `extractable: false` (the `false` argument to `importKey`) so a stray `exportKey` call cannot leak one.
 - `crypto.subtle` requires a secure context. It is `undefined` on plain HTTP, so local development must use `localhost` (which counts as secure) and production is HTTPS-only.
-- `decrypt` throws on any tampering or key mismatch. Catch it and render the "unreadable message" placeholder — never let it reach the render tree.
+- `decrypt` throws if the message is tampered with or the key is wrong. Catch the error and show the "unreadable message" placeholder. Never let the error reach the render tree.
 - The key comes from `window.location.hash` and stays there. Do not copy it into React state that could be serialized, into `localStorage`, or into any URL that gets shared as a "join without chat" link.
-- Anyone holding the link holds the key. This is the stated security model: it protects the conversation from the server and the network, not from someone the link was forwarded to.
+- Anyone with the link has the key. This is the stated security model: it protects the conversation from the server and network, but cannot protect it from someone who receives a forwarded link.
 
 ---
 
@@ -930,10 +934,11 @@ All usage is confined to `src/lib/crypto/`. The canonical implementations of
 
 ### Environment parsing
 
-Environment is parsed in **two** modules, split by secrecy. A single schema
-covering both would crash in the browser: Next replaces non-public `process.env`
-reads with `undefined` client-side, so `parse` would throw the moment any Client
-Component imported it — `src/lib/supabase/client.ts` among them.
+Environment variables are parsed in **two** modules, separated by secrecy. A
+single schema for public values and secrets would crash in the browser. Next
+replaces non-public `process.env` reads with `undefined` in client code, so `parse`
+would throw as soon as a Client Component imported it. That includes
+`src/lib/supabase/client.ts`.
 
 ```ts
 // src/lib/env.ts — NEXT_PUBLIC_* only. Safe to import anywhere.
@@ -991,22 +996,23 @@ export const livekitEnv = LiveKitEnvSchema.parse({
 });
 ```
 
-**One module per service, not one for all secrets.** Both parse at import so a
-misconfigured deploy fails at boot rather than at the first request — which is
-exactly why they must not share a schema. A single module makes every consumer
-fail on every *other* service's absent credential: these two keys lived in
-`env.server.ts` until feature 06, where they stopped `/api/meetings` building at
-all, an endpoint that never calls LiveKit.
+**Keep each service's secrets in its own module.** Both modules parse on import,
+so a misconfigured deployment fails at boot rather than on the first request. A
+shared schema would also make every consumer fail when an unrelated service's
+credential is missing.
+
+The two LiveKit keys lived in `env.server.ts` until feature 06. They prevented
+`/api/meetings` from building, even though that endpoint never calls LiveKit.
 
 **Rules:**
 
-- Every route handler validates its body with `safeParse` and returns `apiError('invalid_request', …, 400)` on failure. Never `parse` a request body — a throw there becomes a 500 for what is really a 400.
+- Validate every route handler's body with `safeParse`. On failure, return `apiError('invalid_request', …, 400)`. Never use `parse` on a request body: its throw would turn an invalid request into a 500 instead of a 400.
 - Never return Zod's error object to the client; it describes internal field names.
 - Zod 4 moved string formats to top-level functions: `z.url()`, `z.email()`, `z.uuid()`. `z.string().url()` is deprecated.
 - `z.url()` alone only checks that `new URL()` parses. Any URL that must be reachable over a particular scheme needs the `protocol` option.
 - These env modules are the only places `parse` (throwing) is correct — a misconfigured deploy should fail at boot, loudly.
 - Never add a secret to `env.ts`. It is compiled into the client bundle, so a secret there ships to every visitor.
-- Because both parse at import time, a unit test must `vi.stubEnv` then `vi.resetModules()` **before** `await import()`, or it gets the previous test's cached module.
+- Both modules parse at import time. In unit tests, call `vi.stubEnv` and then `vi.resetModules()` **before** `await import()` to avoid using the previous test's cached module.
 
 ---
 
@@ -1014,8 +1020,8 @@ all, an endpoint that never calls LiveKit.
 
 **Check first:** <https://vitest.dev> and <https://playwright.dev/docs/intro>.
 
-Vitest covers pure logic. Playwright covers the flows that only exist in a real
-browser with real media.
+Use Vitest for pure logic. Use Playwright for flows that need a real browser and
+real media.
 
 ### Faking camera and microphone in Playwright
 
@@ -1036,10 +1042,10 @@ export default defineConfig({
 
 **Rules:**
 
-- Unit-test `src/lib/crypto/`, `src/lib/room-code.ts`, and duration/format helpers. These are pure, fast, and the parts where a silent bug is most expensive.
+- Unit-test `src/lib/crypto/`, `src/lib/room-code.ts`, and duration/format helpers. They are pure and fast, and a silent bug in these areas has the highest cost.
 - Crypto tests must include a round trip, a wrong-key failure, a tampered-ciphertext failure, and a mismatched-sender-identity failure. All three failures must throw.
 - Room-code tests must assert alphabet membership, shape, and that a large sample has no collisions.
 - Playwright covers at minimum: guest joins via link, lobby toggles carry into the call, two participants see each other, and chat round-trips between two browser contexts.
-- Two-participant tests use two `browser.newContext()` instances, not two pages in one context — a shared context shares media permissions and storage in ways that hide real bugs.
-- Never mock LiveKit in E2E tests. Mocking the SFU means testing our mock, which is exactly the layer that does not break.
+- For two-participant tests, create two `browser.newContext()` instances. Two pages in the same context share media permissions and storage, which can hide real bugs.
+- Never mock LiveKit in E2E tests. A mocked SFU tests our mock rather than the layer that actually breaks.
 - Vitest runs in the `node` environment by default; crypto tests need Node's global `crypto`, which is available from Node 20 onward.
